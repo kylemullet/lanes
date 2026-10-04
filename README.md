@@ -35,8 +35,11 @@ claude plugin install lanes@lanes-marketplace
 ```
 
 A repo that adopts `lanes` commits `enabledPlugins` and `extraKnownMarketplaces` in its
-`.claude/settings.json` (`claude plugin marketplace add … --scope project` writes the entry) so
-the next person opening it is prompted to install. For hacking on the plugin itself, load a
+`.claude/settings.json` (`claude plugin marketplace add … --scope project` and `claude plugin
+install … --scope project` write the entries) so the next person opening it is prompted to
+install. **Run those from the main clone, never from a worktree** — a project-scope install records
+the absolute path it was run from. If the repo ignores `.claude/` wholesale, the rule has to become
+`.claude/*` with `!.claude/settings.json` and `!.claude/lanes/`. For hacking on the plugin itself, load a
 checkout directly: `claude --plugin-dir /path/to/lanes`.
 
 ## The hook

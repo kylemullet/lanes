@@ -73,7 +73,9 @@ def scaffold(root: Path, force: bool, projects: list, templates: Path | None = N
     if is_ignored(root, lc.CONFIG_REL):
         out["warnings"].append(
             f"{lc.CONFIG_REL} is gitignored in this repo. The config must be TRACKED: every operator "
-            f"and machine reads the same file from git. Add a negation rule or move the ignore."
+            f"and machine reads the same file from git. If the rule is `.claude/`, change it to `.claude/*` "
+            f"and add `!.claude/settings.json` and `!.claude/lanes/` -- git cannot re-include a file whose "
+            f"parent directory is excluded."
         )
     loaded = lc.load(root=root)
     for p in loaded.errors:

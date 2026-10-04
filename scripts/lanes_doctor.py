@@ -133,7 +133,9 @@ def check_tracked(root: Path, loaded: lc.Loaded) -> Check:
     ignored = subprocess.run(["git", "check-ignore", "-q", "--", lc.CONFIG_REL], cwd=root,
                              capture_output=True).returncode == 0
     why = "gitignored" if ignored else "untracked"
-    return Check(WARN, "tracked", f"{lc.CONFIG_REL} is {why} — the config only protects machines that can see it; commit it")
+    hint = (" (if the rule is `.claude/`, make it `.claude/*` with `!.claude/settings.json` and `!.claude/lanes/`)"
+            if ignored else "")
+    return Check(WARN, "tracked", f"{lc.CONFIG_REL} is {why} — the config only protects machines that can see it; commit it{hint}")
 
 
 def check_version(cfg: dict) -> Check:

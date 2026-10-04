@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 — second-adopter fixes, continued (2026-10-04)
+
+- `/lanes:init` and `/lanes:doctor` name the exact gitignore shape when `.claude/` is excluded
+  wholesale: `.claude/*` plus `!.claude/settings.json` and `!.claude/lanes/` — git cannot re-include a
+  file whose parent directory is excluded, which the first wording did not say.
+- README: install from the main clone, never from a worktree (a project-scope install records the
+  absolute path it was run from).
+
 ## 0.4.1 — second-adopter fixes (2026-10-04)
 
 - `git.main_direct_paths` defaults to `["docs/", ".claude/lanes/", "*.md"]`. Found on the second
