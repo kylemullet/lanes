@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 — the protocol skills (2026-10-04)
+
+- `skills/session-startup`, `skills/worktree-increment`, `skills/session-closeout` — the three
+  skills, layer-separated: protocol in `SKILL.md`, bindings read from the config
+  (`git.main_branch`, `backlog.dir`, `tests.command`, `tests.rebase_rerun_command`,
+  `worktrees.port_command`, `operators[]`, `lanes.*`), local facts delegated to the three
+  extension points (`preflight.md` after the pull, `lane-setup.md` after `git worktree add`,
+  `pre-land.md` before the landing OK). Every two-operator step says what solo mode does.
+- `skills/*/references/incidents.md` — every rule's incident, dated, operators anonymized to roles,
+  mechanics kept.
+- `tests/test_skills.py` — the portability gate: no name of the source project, its people, its
+  machines or its local tooling may appear in a skill; marker vocabulary agrees with the doctor.
+
 ## 0.2.0 — the tracker (2026-10-04)
 
 - `scripts/backlog_index.py` — the file-based backlog: local views (`INDEX.md` + sortable

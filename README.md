@@ -12,10 +12,11 @@ closed issues.
 
 ## Status
 
-**0.2.0 — the tracker.** The configuration schema, `/lanes:init`, `/lanes:doctor`, and the
-two backlog scripts (`backlog_index.py`, `backlog_new.py`) with their tables read from the
-config. The protocol skills and the position-guard hook are being extracted next (see
-Roadmap). Nothing here is stable yet.
+**0.3.0 — the protocol skills.** The configuration schema, `/lanes:init`, `/lanes:doctor`,
+the two backlog scripts, and the three protocol skills (`session-startup`,
+`worktree-increment`, `session-closeout`) with their incident references. The
+position-guard hook and the marketplace entry are next (see Roadmap). Nothing here is
+stable yet.
 
 ## What it will be
 
@@ -50,6 +51,19 @@ A marketplace entry is on the roadmap. A repo that adopts `lanes` commits `enabl
 
 Both are thin: the work is in `scripts/lanes_init.py` and `scripts/lanes_doctor.py`, which are
 stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualenv.
+
+## The three skills
+
+| Skill | When | What it does |
+| :-- | :-- | :-- |
+| `session-startup` | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the five-block report ending in a recommended slice; **stop** |
+| `worktree-increment` | "do CORE-7", "run the slice", "go" | claim the whole slice up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator, close the doc loop, push the branch freely, land only with the OK |
+| `session-closeout` | "let's wrap", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
+
+Each `SKILL.md` is protocol only; the project-specific steps live in the repo's
+`.claude/lanes/{preflight,lane-setup,pre-land}.md`, and the rules' history lives in
+`skills/<name>/references/incidents.md`. `tests/test_skills.py` fails if a skill names
+the project the protocol was extracted from.
 
 ## The backlog scripts
 
@@ -135,6 +149,7 @@ duplicated.
 lanes/
 ├── .claude-plugin/plugin.json
 ├── commands/           init.md, doctor.md
+├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
 ├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
@@ -144,9 +159,7 @@ lanes/
 ## Roadmap
 
 1. ~~Backlog scripts~~ — shipped in 0.2.0.
-2. **The three protocol skills** — `session-startup`, `worktree-increment`,
-   `session-closeout` — layer-separated: protocol in the skill, bindings from the config,
-   local facts in the extension points. Every incident citation kept, with its date.
+2. ~~The three protocol skills~~ — shipped in 0.3.0.
 3. **The position-guard hook** — a `PreToolUse` hook on the edit tools that refuses a write
    landing in the main clone *or* on the main branch, with the claim's shape as the only
    carve-out.
