@@ -6,9 +6,9 @@
 #             two component directories, so a warning the runtime tolerates
 #             (an unrecognized field, missing metadata) fails here instead.
 #
-# `validate` is run per target rather than once on `.`: given a directory the
-# validator picks ONE manifest to check (the marketplace), so a single call on
-# the repo root never looks at plugin.json, skills/ or commands/.
+# `validate` runs on the root AND on each manifest: on the author's machine a
+# run on `.` checked only the marketplace manifest, on this runner it descends
+# into the components -- same CLI version. Naming all three is what holds.
 name: ci
 
 on:
@@ -47,11 +47,14 @@ jobs:
         with:
           node-version: 20
       - run: npm install -g @anthropic-ai/claude-code
+      # Three targets, not one: which of them descends into skills/ and
+      # commands/ has differed between the author's machine and this runner on
+      # the SAME CLI version, and a bare `skills` directory is read here as a
+      # plugin root ("No manifest found"). The root run and the plugin
+      # manifest run each cover the components on at least one of them.
+      - name: plugin root
+        run: claude plugin validate --strict .
       - name: plugin manifest
         run: claude plugin validate --strict .claude-plugin/plugin.json
       - name: marketplace manifest
         run: claude plugin validate --strict .claude-plugin/marketplace.json
-      - name: skills
-        run: claude plugin validate --strict skills
-      - name: commands
-        run: claude plugin validate --strict commands

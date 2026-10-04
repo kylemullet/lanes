@@ -18,6 +18,9 @@ def test_ci_runs_on_every_push_and_pull_request():
 def test_ci_runs_the_suite_and_the_strict_validator_per_target():
     text = CI.read_text(encoding="utf-8")
     assert "python -m pytest -q tests/" in text
-    for target in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "skills", "commands"):
+    for target in (".", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
         assert f"claude plugin validate --strict {target}" in text, (
-            f"CI no longer validates {target} strictly -- a directory run checks only one manifest")
+            f"CI no longer validates {target} strictly -- which target descends into the "
+            "components differs by environment, so all three are named")
+    assert "validate --strict skills" not in text and "validate --strict commands" not in text, (
+        "a bare component directory is read as a plugin root in CI (No manifest found)")

@@ -9,6 +9,9 @@
 - `tests/test_skills.py::test_plugin_validates_strict` skipped on the wrong signal: a missing executable
   is a `FileNotFoundError`, not "command not found" on stderr. Now `shutil.which`. The pytest job installs
   the CLI so CI runs the test instead of skipping it.
+- The validator targets are the repo root and the two manifests. A bare `skills` / `commands`
+  directory is read as a plugin root on the runner ("No manifest found"), and which target descends
+  into the components differs between machines on the same CLI version; the three named cover it.
 
 ## 0.4.3 — CI (2026-10-04)
 

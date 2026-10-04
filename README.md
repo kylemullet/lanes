@@ -187,14 +187,13 @@ lanes/
 
 ```bash
 python3 -m pytest -q tests/
+claude plugin validate --strict .
 claude plugin validate --strict .claude-plugin/plugin.json
 claude plugin validate --strict .claude-plugin/marketplace.json
-claude plugin validate --strict skills
-claude plugin validate --strict commands
 ```
 
-CI (`.github/workflows/ci.yml`) runs exactly these on every push. The targets are spelled out
-because a run on the repo root has been seen to check only the marketplace manifest.
+CI (`.github/workflows/ci.yml`) runs exactly these on every push. All three are named because which
+target descends into `skills/` and `commands/` has differed between machines on the same CLI version.
 
 ## License
 
