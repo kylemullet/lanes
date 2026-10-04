@@ -35,7 +35,7 @@ EXTENSION_FILES = ("preflight.md", "lane-setup.md", "pre-land.md")
 
 # ---- protocol constants: read by name in the gate and the skills; never config ----
 STATUSES = ("in-progress", "open", "blocked", "paused", "verified", "closed")
-LIVE_STATUSES = ("in-progress", "open", "blocked", "paused", "verified")
+LIVE_STATUSES = ("in-progress", "open", "blocked", "paused")   # verified is landed, not live
 RESOLUTIONS = ("done", "duplicate", "superseded", "wont-do")
 CLAIM_AGE_FLOOR_MINUTES = 15
 SHARED_ASSIGNEE = "shared"

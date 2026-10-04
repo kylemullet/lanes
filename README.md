@@ -12,9 +12,10 @@ closed issues.
 
 ## Status
 
-**0.1.0 — skeleton.** This version ships the configuration schema, `/lanes:init` and
-`/lanes:doctor`. The protocol skills, the backlog scripts and the position-guard hook are
-being extracted next (see Roadmap). Nothing here is stable yet.
+**0.2.0 — the tracker.** The configuration schema, `/lanes:init`, `/lanes:doctor`, and the
+two backlog scripts (`backlog_index.py`, `backlog_new.py`) with their tables read from the
+config. The protocol skills and the position-guard hook are being extracted next (see
+Roadmap). Nothing here is stable yet.
 
 ## What it will be
 
@@ -49,6 +50,31 @@ A marketplace entry is on the roadmap. A repo that adopts `lanes` commits `enabl
 
 Both are thin: the work is in `scripts/lanes_init.py` and `scripts/lanes_doctor.py`, which are
 stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualenv.
+
+## The backlog scripts
+
+Stdlib-only, run from anywhere inside the repo (or with `--root <repo>`):
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py"              # (re)write INDEX.md + index.html (keep both gitignored)
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check      # exit 1 on any integrity problem
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --report     # aged view for this machine's operator (--who <short>|both)
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --serve      # the HTML view on backlog.view_port, re-parsed per request
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --backfill [--dry-run] [--commit]
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_new.py" CORE "a title" --type=bug --reported-by=<short>
+```
+
+One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
+`project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,
+`closed`, `commit`, `resolution`, `links`, optional `epic`) and three H2 sections: Context,
+Current status, Resolution. `--check` is the integrity gate: duplicate or misnamed IDs,
+out-of-vocabulary values, a `status: in-progress` without its body claim marker (or the
+reverse), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
+issue whose Resolution does not cite a commit subject on HEAD, a `verified` issue whose change
+reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, and a
+`resolution:` that disagrees with the status. `--backfill` closes verified issues by the exact
+commit subject their Resolution cites, and only on a machine whose operator row certifies (solo
+mode: every machine).
 
 ## Configuration
 
@@ -109,7 +135,7 @@ duplicated.
 lanes/
 ├── .claude-plugin/plugin.json
 ├── commands/           init.md, doctor.md
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md
@@ -117,8 +143,7 @@ lanes/
 
 ## Roadmap
 
-1. **Backlog scripts** — `backlog_index.py` (`--check`, index, `--report`, `--backfill`,
-   `--serve`) and `backlog_new.py`, with their tables read from the config.
+1. ~~Backlog scripts~~ — shipped in 0.2.0.
 2. **The three protocol skills** — `session-startup`, `worktree-increment`,
    `session-closeout` — layer-separated: protocol in the skill, bindings from the config,
    local facts in the extension points. Every incident citation kept, with its date.
