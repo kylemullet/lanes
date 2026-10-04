@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3 — CI (2026-10-04)
+
+- `.github/workflows/ci.yml`: pytest plus `claude plugin validate --strict` on every push and pull
+  request. The validator is run once per target (`plugin.json`, `marketplace.json`, `skills/`,
+  `commands/`): given the repo root it checks only the marketplace manifest, so a single call on `.`
+  never looked at the plugin manifest or the components. `tests/test_ci.py` pins both facts.
+- The first consumer retires its own copies of `backlog_index.py` / `backlog_new.py` the same day
+  (its INFRA-67); its CI checks this repo out and runs the plugin's `--check --root .`.
+
 ## 0.4.2 — second-adopter fixes, continued (2026-10-04)
 
 - `/lanes:init` and `/lanes:doctor` name the exact gitignore shape when `.claude/` is excluded

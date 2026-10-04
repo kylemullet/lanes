@@ -12,10 +12,11 @@ closed issues.
 
 ## Status
 
-**0.4.0 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
+**0.4.3 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
 two backlog scripts, the three protocol skills with their incident references, the
-position-guard hook, and a marketplace entry. Installed on its first consumer; a second adopter
-and CI validation are what remain (see Roadmap). Private until published.
+position-guard hook, a marketplace entry, and CI (pytest + `claude plugin validate --strict`).
+Installed on two consumers — the project it was extracted from, which runs its backlog gate on
+the plugin's scripts, and a solo-mode second adopter. Private until published.
 
 ## What it will be
 
@@ -180,14 +181,20 @@ lanes/
 3. ~~The position-guard hook~~ — shipped in 0.4.0.
 4. ~~First consumer cut over~~ (0.4.0), then a **second adopter** on a solo-mode config. One
    consumer is a fork with extra steps.
-5. ~~`marketplace.json`~~ (0.4.0); `claude plugin validate --strict` in CI.
+5. ~~`marketplace.json`~~ (0.4.0); ~~`claude plugin validate --strict` in CI~~ (0.4.3).
 
 ## Development
 
 ```bash
 python3 -m pytest -q tests/
-claude plugin validate --strict .
+claude plugin validate --strict .claude-plugin/plugin.json
+claude plugin validate --strict .claude-plugin/marketplace.json
+claude plugin validate --strict skills
+claude plugin validate --strict commands
 ```
+
+CI (`.github/workflows/ci.yml`) runs exactly these on every push. Given a directory the validator
+checks one manifest only, which is why the targets are spelled out.
 
 ## License
 

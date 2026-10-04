@@ -1,0 +1,51 @@
+# lanes CI — the plugin's own gate.
+#
+# Two jobs, both on every push and pull request:
+#   tests     the pytest suite (stdlib + pytest; builds throwaway repos)
+#   validate  `claude plugin validate --strict` on the two manifests and the
+#             two component directories, so a warning the runtime tolerates
+#             (an unrecognized field, missing metadata) fails here instead.
+#
+# `validate` is run per target rather than once on `.`: given a directory the
+# validator picks ONE manifest to check (the marketplace), so a single call on
+# the repo root never looks at plugin.json, skills/ or commands/.
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  tests:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet pytest
+      - run: python -m pytest -q tests/
+
+  validate:
+    name: claude plugin validate --strict
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: plugin manifest
+        run: claude plugin validate --strict .claude-plugin/plugin.json
+      - name: marketplace manifest
+        run: claude plugin validate --strict .claude-plugin/marketplace.json
+      - name: skills
+        run: claude plugin validate --strict skills
+      - name: commands
+        run: claude plugin validate --strict commands
