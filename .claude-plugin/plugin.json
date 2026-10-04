@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "lanes",
+  "version": "0.1.0",
+  "description": "Claim-gated worktree lanes and a file-based backlog for concurrent agent sessions on one repo",
+  "author": {
+    "name": "Kyle Mulle"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["worktree", "concurrency", "backlog", "multi-agent", "claims"],
+  "userConfig": {
+    "worktree_root": {
+      "type": "directory",
+      "title": "Worktree root",
+      "description": "Where lane worktrees are created. Defaults to the repo's parent directory."
+    }
+  }
+}

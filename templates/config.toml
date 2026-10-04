@@ -1,0 +1,68 @@
+# .claude/lanes/config.toml — lanes plugin configuration for THIS repo.
+#
+# Tracked and shared: every operator and every machine reads the same file from git.
+# EVERY key is optional. The defaults below are SOLO MODE: whoever is here certifies
+# and edits everything, and every two-operator rule degrades to a no-op.
+# Per-machine paths (where worktrees go) live in the plugin's userConfig, not here.
+
+# The plugin version this repo expects. `/lanes:doctor` compares it with the installed
+# plugin and warns on drift (two operators or two projects can otherwise run different
+# protocol versions without noticing).
+plugin_version = "{{PLUGIN_VERSION}}"
+
+[backlog]
+dir = "docs/backlog"                          # one file per issue, <PROJECT>/<ID>-<slug>.md
+projects = [{{PROJECTS}}]                     # issue ID prefixes; IDs look like INFRA-12
+types = ["story", "bug", "spike", "qa", "decision", "chore", "epic"]   # must include "epic"
+priorities = ["critical", "high", "normal", "low"]
+# docs_lane_prefixes = ["docs/", "*.md"]      # paths whose change can make a doc stale — the
+                                              # `Docs:`-line gate reads this. Default: git.main_direct_paths.
+claim_marker_exempt = []                      # issue IDs whose body legitimately quotes a claim marker
+# resolution_required_from = "2026-01-01"     # issues closed before this date need no `resolution:`;
+                                              # omit = always required (a fresh project has no history)
+view_port = 8099                              # the served backlog view
+
+[git]
+main_branch = "main"
+land_requires_ok = true                       # the operator-OK gate is on LANDING, never on a branch push
+main_direct_paths = ["docs/", "*.md"]         # may reach main_branch with no branch and no suite run;
+                                              # the position-guard hook's carve-out reads the same list
+
+[tests]
+command = "pytest -q"
+required_before_land = true
+# rebase_rerun_command = "python3 scripts/rebase_impact.py --argv-only"
+                                              # prints the pytest args for a scoped post-rebase re-run;
+                                              # omit = the full `command` after every rebase
+
+[worktrees]
+# port_command = "python3 scripts/lane_port.py"   # prints this lane's localhost port; omit if the
+                                                  # project has no server to verify on
+
+# Statuses (in-progress / open / blocked / paused / verified / closed), resolutions
+# (done / duplicate / superseded / wont-do) and the 15-minute claim-age floor are PROTOCOL,
+# not configuration — the gate reads them by name.
+
+# ---- Two or more operators: fill this in. Leave it empty for solo mode. ----
+# One row per (git user.name, platform) pair — a machine, not a person. `short` is the
+# assignee / reporter token used in issue frontmatter; `claude` is always a valid reporter.
+#
+# [[operators]]
+# name = "kylemullet"
+# platform = "darwin"           # sys.platform: darwin | win32 | linux
+# id = "kyle-mac"
+# short = "kyle"
+# certifies = true              # runs the test gate and lands on main_branch
+# may_edit_code = true
+#
+# [[operators]]
+# name = "Mike"
+# platform = "win32"
+# id = "mike-win"
+# short = "mike"
+# certifies = false
+# may_edit_code = false
+#
+# [lanes]                        # only meaningful with >1 operator
+# code = ["src/", "tests/", "scripts/"]
+# code_owner = "kyle-mac"        # an operators[].id
