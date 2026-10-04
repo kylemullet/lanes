@@ -29,6 +29,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # tests/test_skills.py::test_plugin_validates_strict shells out to the CLI
+      # and skips without it; CI installs it so the suite here is the suite at home.
+      - run: npm install -g @anthropic-ai/claude-code
       - run: python -m pip install --quiet pytest
       - run: python -m pytest -q tests/
 

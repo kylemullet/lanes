@@ -1,11 +1,22 @@
 # Changelog
 
+## 0.4.4 — CI green (2026-10-04)
+
+- Frontmatter is now strict YAML: `worktree-increment`'s description carried a `: ` ("the full
+  lifecycle: claim → …") and both commands' `argument-hint` began with `[`, which a strict parser reads
+  as a flow sequence. The runtime tolerated all three; `claude plugin validate --strict` in CI did not,
+  while the same CLI version on the author's machine never descended into the components. Values quoted.
+- `tests/test_skills.py::test_plugin_validates_strict` skipped on the wrong signal: a missing executable
+  is a `FileNotFoundError`, not "command not found" on stderr. Now `shutil.which`. The pytest job installs
+  the CLI so CI runs the test instead of skipping it.
+
 ## 0.4.3 — CI (2026-10-04)
 
 - `.github/workflows/ci.yml`: pytest plus `claude plugin validate --strict` on every push and pull
   request. The validator is run once per target (`plugin.json`, `marketplace.json`, `skills/`,
-  `commands/`): given the repo root it checks only the marketplace manifest, so a single call on `.`
-  never looked at the plugin manifest or the components. `tests/test_ci.py` pins both facts.
+  `commands/`): on the author's machine a run on the repo root checked only the marketplace manifest,
+  so each target is named rather than trusting how a given build resolves a directory. `tests/test_ci.py`
+  pins the shape.
 - The first consumer retires its own copies of `backlog_index.py` / `backlog_new.py` the same day
   (its INFRA-67); its CI checks this repo out and runs the plugin's `--check --root .`.
 

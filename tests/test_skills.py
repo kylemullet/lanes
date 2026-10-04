@@ -6,6 +6,7 @@ extra steps, so this gate greps for every such name. Incident references may des
 the mechanics of what happened, but operators are roles there too.
 """
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -85,8 +86,10 @@ def test_claim_marker_vocabulary_is_shared_with_the_doctor():
 
 
 def test_plugin_validates_strict():
+    """A missing executable is a FileNotFoundError from subprocess, never a
+    "command not found" on stderr -- the first CI run died on exactly that."""
+    if shutil.which("claude") is None:
+        pytest.skip("claude CLI not on PATH")
     done = subprocess.run(["claude", "plugin", "validate", "--strict", str(ROOT)],
                           capture_output=True, text=True, encoding="utf-8")
-    if done.returncode != 0 and "command not found" in (done.stderr or ""):
-        pytest.skip("claude CLI not on PATH")
     assert done.returncode == 0, done.stdout + done.stderr

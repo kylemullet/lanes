@@ -1,6 +1,6 @@
 ---
 description: Check the lanes setup — config valid, installed vs expected plugin version, extension-point files, backlog integrity, stale-claim candidates
-argument-hint: [--strict] [--json]
+argument-hint: "[--strict] [--json]"
 allowed-tools: Bash(python3:*), Read
 ---
 

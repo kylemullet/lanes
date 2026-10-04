@@ -1,6 +1,6 @@
 ---
 name: worktree-increment
-description: Use when the operator assigns ONE backlog issue (an ID like CORE-2 or INFRA-7) to be worked in an isolated git worktree — the standard flow for running one or more sessions, each targeting its own increment. ALSO the flow for a multi-issue slice — invoked once per issue, sequentially, never widened to cover several at once. Triggers include "work CORE-<N> in a worktree", "do this issue in a worktree", "run the slice", "go" after a startup brief, or any assignment naming backlog issues. Covers the full lifecycle: claim → worktree → build → self-verify → hold → operator verify → fix/log → commit → push → land (with OK) → clean up.
+description: "Use when the operator assigns ONE backlog issue (an ID like CORE-2 or INFRA-7) to be worked in an isolated git worktree — the standard flow for running one or more sessions, each targeting its own increment. ALSO the flow for a multi-issue slice — invoked once per issue, sequentially, never widened to cover several at once. Triggers include \"work CORE-<N> in a worktree\", \"do this issue in a worktree\", \"run the slice\", \"go\" after a startup brief, or any assignment naming backlog issues. Covers the full lifecycle: claim → worktree → build → self-verify → hold → operator verify → fix/log → commit → push → land (with OK) → clean up."
 ---
 
 # Worktree increment

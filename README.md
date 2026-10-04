@@ -12,7 +12,7 @@ closed issues.
 
 ## Status
 
-**0.4.3 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
+**0.4.4 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
 two backlog scripts, the three protocol skills with their incident references, the
 position-guard hook, a marketplace entry, and CI (pytest + `claude plugin validate --strict`).
 Installed on two consumers — the project it was extracted from, which runs its backlog gate on
@@ -193,8 +193,8 @@ claude plugin validate --strict skills
 claude plugin validate --strict commands
 ```
 
-CI (`.github/workflows/ci.yml`) runs exactly these on every push. Given a directory the validator
-checks one manifest only, which is why the targets are spelled out.
+CI (`.github/workflows/ci.yml`) runs exactly these on every push. The targets are spelled out
+because a run on the repo root has been seen to check only the marketplace manifest.
 
 ## License
 
