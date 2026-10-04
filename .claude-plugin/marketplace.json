@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "lanes-marketplace",
+  "owner": { "name": "Kyle Mulle" },
+  "description": "Claim-gated worktree lanes and a file-based backlog for concurrent agent sessions on one repo",
+  "plugins": [
+    {
+      "name": "lanes",
+      "source": ".",
+      "description": "Claim-gated worktree lanes and a file-based backlog for concurrent agent sessions on one repo",
+      "category": "productivity",
+      "keywords": ["worktree", "concurrency", "backlog", "multi-agent", "claims"]
+    }
+  ]
+}

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — the hook and the marketplace (2026-10-04)
+
+- `hooks/hooks.json` + `scripts/guard_position.py` — the position guard as a `PreToolUse` hook on
+  `Write|Edit|MultiEdit|NotebookEdit`: refuses a write that would land in the main clone OR on the
+  main branch, allows exactly the lane shape and the claim shape. `git.main_branch` and
+  `git.main_direct_paths` are read from the TARGET repo's `.claude/lanes/config.toml` (defaults
+  otherwise). **Scoped to the repo the session started in** (`$CLAUDE_PROJECT_DIR`): a write into a
+  different repository is allowed as foreign — the first consumer's copy refused every write into
+  this plugin's own repo while the plugin was being built from a session there.
+- `.claude-plugin/marketplace.json` — the repo doubles as its own marketplace (`"source": "."`):
+  `claude plugin marketplace add <owner>/lanes` then `claude plugin install lanes@lanes-marketplace`.
+- `tests/test_guard_position.py` — truth table through a fake environment, the hook contract,
+  config binding, the foreign-repo rule, and the real git path with a second repository.
+
 ## 0.3.0 — the protocol skills (2026-10-04)
 
 - `skills/session-startup`, `skills/worktree-increment`, `skills/session-closeout` — the three

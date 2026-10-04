@@ -12,11 +12,10 @@ closed issues.
 
 ## Status
 
-**0.3.0 — the protocol skills.** The configuration schema, `/lanes:init`, `/lanes:doctor`,
-the two backlog scripts, and the three protocol skills (`session-startup`,
-`worktree-increment`, `session-closeout`) with their incident references. The
-position-guard hook and the marketplace entry are next (see Roadmap). Nothing here is
-stable yet.
+**0.4.0 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
+two backlog scripts, the three protocol skills with their incident references, the
+position-guard hook, and a marketplace entry. Installed on its first consumer; a second adopter
+and CI validation are what remain (see Roadmap). Private until published.
 
 ## What it will be
 
@@ -28,14 +27,28 @@ stable yet.
 
 ## Install
 
-Local development, from a clone:
+The repo is its own marketplace:
 
 ```bash
-claude --plugin-dir /path/to/lanes
+claude plugin marketplace add kylemullet/lanes
+claude plugin install lanes@lanes-marketplace
 ```
 
-A marketplace entry is on the roadmap. A repo that adopts `lanes` commits `enabledPlugins` and
-`extraKnownMarketplaces` in `.claude/settings.json` so the next person is prompted to install.
+A repo that adopts `lanes` commits `enabledPlugins` and `extraKnownMarketplaces` in its
+`.claude/settings.json` (`claude plugin marketplace add … --scope project` writes the entry) so
+the next person opening it is prompted to install. For hacking on the plugin itself, load a
+checkout directly: `claude --plugin-dir /path/to/lanes`.
+
+## The hook
+
+`hooks/hooks.json` wires `scripts/guard_position.py` as a `PreToolUse` hook on the four edit
+tools. It refuses a write that would land in the **main clone OR on the main branch**, and allows
+exactly two shapes: a lane write (neither), and the claim's shape (both, AND a `git.main_direct_paths`
+path). The EITHER form matters: the incident behind the hook was a docs write made in the main
+clone while another lane's branch was checked out, which an AND form passes. It judges only the
+repository the session was started in; a target in another repository is allowed as foreign. It
+never sees a write made through Bash, so the skill's two-command position check stays the rule.
+`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/guard_position.py" --explain <path>` is the dry run.
 
 ## Commands
 
@@ -147,10 +160,11 @@ duplicated.
 
 ```
 lanes/
-├── .claude-plugin/plugin.json
+├── .claude-plugin/     plugin.json, marketplace.json
+├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, guard_position.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md
@@ -160,12 +174,10 @@ lanes/
 
 1. ~~Backlog scripts~~ — shipped in 0.2.0.
 2. ~~The three protocol skills~~ — shipped in 0.3.0.
-3. **The position-guard hook** — a `PreToolUse` hook on the edit tools that refuses a write
-   landing in the main clone *or* on the main branch, with the claim's shape as the only
-   carve-out.
-4. **First consumer cut over**, then a **second adopter** on a solo-mode config. One consumer
-   is a fork with extra steps.
-5. `marketplace.json` and `claude plugin validate --strict` in CI.
+3. ~~The position-guard hook~~ — shipped in 0.4.0.
+4. ~~First consumer cut over~~ (0.4.0), then a **second adopter** on a solo-mode config. One
+   consumer is a fork with extra steps.
+5. ~~`marketplace.json`~~ (0.4.0); `claude plugin validate --strict` in CI.
 
 ## Development
 

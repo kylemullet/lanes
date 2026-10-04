@@ -1,0 +1,17 @@
+{
+  "description": "lanes position guard: refuse an edit-tool write that would land in the main clone OR on the main branch, except the claim's shape (main clone AND main branch AND a main-direct path).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/guard_position.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
