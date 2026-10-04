@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.5 — first directory submission (2026-10-04)
+
+- `commands/doctor.md` and `commands/init.md` pre-approve exactly the script each runs
+  (`Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/<script>":*)`), not every `python3` command — the
+  directory's policy check held the broad form.
+- `userConfig.worktree_root` removed from the manifest: declared since 0.4.0, read by nothing, and the
+  directory's credential check reads a declared-but-unused option as a hand-off. A key returns the day
+  a script reads it.
+- `.claude-plugin/icon.png` (1024 px): the listing icon is fixed at the first submission, so it ships
+  before one. `tests/test_listing.py` pins all three.
+
 ## 0.4.4 — CI green (2026-10-04)
 
 - Frontmatter is now strict YAML: `worktree-increment`'s description carried a `: ` ("the full
