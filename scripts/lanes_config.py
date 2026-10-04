@@ -56,7 +56,7 @@ DEFAULTS: dict[str, Any] = {
     "git": {
         "main_branch": "main",
         "land_requires_ok": True,
-        "main_direct_paths": ["docs/", "*.md"],
+        "main_direct_paths": ["docs/", ".claude/lanes/", "*.md"],
     },
     "tests": {
         "command": "pytest -q",

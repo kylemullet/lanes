@@ -25,8 +25,9 @@ view_port = 8099                              # the served backlog view
 [git]
 main_branch = "main"
 land_requires_ok = true                       # the operator-OK gate is on LANDING, never on a branch push
-main_direct_paths = ["docs/", "*.md"]         # may reach main_branch with no branch and no suite run;
-                                              # the position-guard hook's carve-out reads the same list
+main_direct_paths = ["docs/", ".claude/lanes/", "*.md"]   # may reach main_branch with no branch and no suite run;
+                                              # the position-guard hook's carve-out reads the same list.
+                                              # .claude/lanes/ is in by default so adopting lanes is itself main-direct
 
 [tests]
 command = "pytest -q"

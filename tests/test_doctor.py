@@ -50,6 +50,16 @@ def test_version_drift_and_missing_pin(repo):
     assert v.status == ld.WARN and "pins none" in v.detail
 
 
+def test_views_must_be_gitignored(repo):
+    (repo / "docs" / "backlog" / "CORE").mkdir(parents=True)
+    cfg = lc.resolve({}, user_name="t", platform="linux")
+    checks = {c.label: c for c in ld.check_backlog(repo, cfg)}
+    assert checks["views"].status == ld.WARN and "INDEX.md" in checks["views"].detail
+    (repo / ".gitignore").write_text("docs/backlog/INDEX.md\ndocs/backlog/index.html\n", encoding="utf-8")
+    checks = {c.label: c for c in ld.check_backlog(repo, cfg)}
+    assert checks["views"].status == ld.OK
+
+
 def test_settings_pin_detected(repo):
     (repo / ".claude").mkdir(exist_ok=True)
     (repo / ".claude" / "settings.json").write_text('{"enabledPlugins": {"lanes@lanes-marketplace": true}}', encoding="utf-8")

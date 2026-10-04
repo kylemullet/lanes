@@ -10,6 +10,7 @@ Checks, in order:
   version    installed plugin version vs the `plugin_version` the repo expects
   stubs      the three extension-point files exist
   backlog    the backlog directory exists; `--check` runs when the tracker ships with the plugin
+  views      the generated INDEX.md / index.html are gitignored (a tracked copy conflicts at every rebase)
   claims     every `in-progress` issue classified: live / setting up / reserved / STALE CANDIDATE
   settings   `.claude/settings.json` pins the plugin for the next person
 
@@ -162,6 +163,14 @@ def check_backlog(root: Path, cfg: dict) -> list:
         return [Check(WARN, "backlog", f"{cfg['backlog_dir']} does not exist yet")]
     issues = [p for p in backlog.rglob("*.md") if p.name not in ("INDEX.md", "README.md")]
     out = [Check(OK, "backlog", f"{cfg['backlog_dir']}: {len(issues)} issue files")]
+    views = [f"{cfg['backlog_dir']}/INDEX.md", f"{cfg['backlog_dir']}/index.html"]
+    unignored = [v for v in views if subprocess.run(["git", "check-ignore", "-q", "--", v], cwd=root,
+                                                    capture_output=True).returncode != 0]
+    if unignored:
+        out.append(Check(WARN, "views", f"not gitignored: {', '.join(unignored)} — every worktree rewrites the "
+                                        f"generated views, so a tracked copy conflicts at every rebase; add them to .gitignore"))
+    else:
+        out.append(Check(OK, "views", "the generated views are gitignored"))
     checker = lc.plugin_root() / "scripts" / "backlog_index.py"
     if not checker.is_file():
         out.append(Check(SKIP, "backlog --check", "the tracker scripts are not in this plugin version yet"))

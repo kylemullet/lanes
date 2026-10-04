@@ -122,7 +122,7 @@ annotated reference; the short version:
 | `backlog.view_port` | `8099` | the served backlog view |
 | `git.main_branch` | `main` | |
 | `git.land_requires_ok` | `true` | the operator-OK gate is on landing, never on a branch push |
-| `git.main_direct_paths` | `["docs/", "*.md"]` | may reach the main branch with no branch and no suite run; the hook's carve-out |
+| `git.main_direct_paths` | `["docs/", ".claude/lanes/", "*.md"]` | may reach the main branch with no branch and no suite run; the hook's carve-out |
 | `tests.command` | `pytest -q` | |
 | `tests.required_before_land` | `true` | |
 | `tests.rebase_rerun_command` | — | prints the test args for a scoped post-rebase re-run; absent = full suite |

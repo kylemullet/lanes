@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1 — second-adopter fixes (2026-10-04)
+
+- `git.main_direct_paths` defaults to `["docs/", ".claude/lanes/", "*.md"]`. Found on the second
+  adopter: with the lanes directory outside the default list, adopting the plugin was itself a
+  write the position guard refuses in the main clone, so the first lane had to be the adoption.
+  The lanes files are process docs; they belong with `docs/`.
+- `/lanes:doctor` gains a `views` check: the generated `INDEX.md` / `index.html` must be gitignored
+  (the second adopter had no such rule).
+- `/lanes:init` keeps warning when `.claude/` is gitignored wholesale (the second adopter's case);
+  the fix it names is two negation rules (`!.claude/settings.json`, `!.claude/lanes/`).
+
 ## 0.4.0 — the hook and the marketplace (2026-10-04)
 
 - `hooks/hooks.json` + `scripts/guard_position.py` — the position guard as a `PreToolUse` hook on

@@ -9,7 +9,7 @@ def test_defaults_resolve_to_solo_mode():
     assert cfg["machine"]["short"] == "kyle-mullet"
     assert cfg["assignees"] == ["kyle-mullet", "shared"]
     assert cfg["reporters"] == ["claude", "kyle-mullet"]
-    assert cfg["docs_lane_prefixes"] == cfg["main_direct_paths"] == ["docs/", "*.md"]
+    assert cfg["docs_lane_prefixes"] == cfg["main_direct_paths"] == ["docs/", ".claude/lanes/", "*.md"]
     assert cfg["main_branch"] == "main" and cfg["test_command"] == "pytest -q"
     assert cfg["rebase_rerun_command"] is None and cfg["port_command"] is None
     assert cfg["statuses"] == list(lc.STATUSES) and cfg["claim_age_floor_minutes"] == 15

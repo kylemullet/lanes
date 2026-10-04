@@ -81,7 +81,8 @@ def _run(payload, env_overrides, stdin=None):
 
 # --- the main-direct set -------------------------------------------------------
 
-@pytest.mark.parametrize("rel", ["docs/backlog/INFRA/INFRA-60.md", "docs/STATE.md", "CLAUDE.md", "README.md", "./docs/x.md"])
+@pytest.mark.parametrize("rel", ["docs/backlog/INFRA/INFRA-60.md", "docs/STATE.md", "CLAUDE.md", "README.md", "./docs/x.md",
+                                 ".claude/lanes/config.toml", ".claude/lanes/preflight.md"])
 def test_default_main_direct_paths(rel):
     assert gp.is_main_direct(rel)
 
@@ -112,9 +113,9 @@ def test_rules_come_from_the_target_repos_config(tmp_path):
         '[git]\nmain_branch = "trunk"\nmain_direct_paths = ["docs/", "notes/", "*.md"]\n', encoding="utf-8")
     rules = gp.rules_for(str(tmp_path), env={})
     assert rules.main_branch == "trunk" and rules.main_direct == ("docs/", "notes/", "*.md")
-    assert gp.rules_for(str(tmp_path / "nowhere"), env={}) == gp.Rules("main", ("docs/", "*.md"))
+    assert gp.rules_for(str(tmp_path / "nowhere"), env={}) == gp.Rules("main", ("docs/", ".claude/lanes/", "*.md"))
     (tmp_path / ".claude" / "lanes" / "config.toml").write_text("not toml [", encoding="utf-8")
-    assert gp.rules_for(str(tmp_path), env={}) == gp.Rules("main", ("docs/", "*.md"))
+    assert gp.rules_for(str(tmp_path), env={}) == gp.Rules("main", ("docs/", ".claude/lanes/", "*.md"))
 
 
 # --- the truth table -----------------------------------------------------------
