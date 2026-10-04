@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.6 — the icon (2026-10-04)
+
+- `.claude-plugin/icon.png`: a trunk that becomes the arrow, two lanes that leave it and rejoin it at
+  different heights, and a third that ends in a square — drawn as outlines, amber on dark. The vector
+  source is `assets/icon.svg`; the PNG is rendered from it at 1024 px.
+
 ## 0.4.5 — first directory submission (2026-10-04)
 
 - `commands/doctor.md` and `commands/init.md` pre-approve exactly the script each runs
