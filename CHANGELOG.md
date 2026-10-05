@@ -3,7 +3,7 @@
 ## 0.4.7 — directory review, second pass (2026-10-04)
 
 - `guard_position.py` reads the eight variables it needs by name (`os.getenv`), never the whole
-  environment: the directory read an `os.environ` enumeration beside a runtime-assembled shell line in
+  environment: the directory read a whole-environment enumeration beside a runtime-assembled shell line in
   `session-closeout` as "a credential leaving the machine in two steps". Neither half ever did that; now
   neither half is there.
 - `session-closeout` 1b: the worktree sweep pipes `git worktree list` into `while read`, no `$(...)`.
