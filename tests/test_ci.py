@@ -12,7 +12,8 @@ def test_ci_workflow_exists():
 
 def test_ci_runs_on_every_push_and_pull_request():
     text = CI.read_text(encoding="utf-8")
-    assert "\n  push:\n" in text and "\n  pull_request:\n" in text
+    assert "\n  push:\n    branches: [main]" in text and "\n  pull_request:\n" in text, (
+        "CI runs on pushes to main and on PRs; a tag push re-runs a commit main already ran")
 
 
 def test_ci_runs_the_suite_and_the_strict_validator_per_target():
