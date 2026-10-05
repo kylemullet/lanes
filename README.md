@@ -1,7 +1,7 @@
 # lanes
 
 **Claim-gated worktree lanes and a file-based backlog for concurrent agent sessions on one repo.**
-A Claude Code plugin.
+A Claude Code plugin. Apache-2.0 · [Privacy policy](https://github.com/kylemullet/lanes/blob/main/README.md#privacy) · [Changelog](CHANGELOG.md)
 
 Several Claude Code sessions (and more than one person) can work one repository at the same
 time without colliding, if three things hold: every piece of work is **claimed** before it is
