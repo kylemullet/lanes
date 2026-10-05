@@ -2,8 +2,9 @@
 
 ## 0.4.9 — listing links (2026-10-04)
 
-- `plugin.json` carries `homepage`, `repository`, `documentationUrl` (the README) and `supportUrl`
-  (GitHub issues) so the directory listing has somewhere to point.
+- `plugin.json` carries `homepage` and `repository` so the directory listing has somewhere to point.
+  The form also suggests `documentationUrl` and `supportUrl`, but `claude plugin validate --strict`
+  (2.1.289) rejects both as unknown fields, so they stay out until the CLI's schema knows them.
 
 ## 0.4.8 — directory review, third pass (2026-10-04)
 
