@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "lanes",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "description": "Claim-gated worktree lanes and a file-based backlog for concurrent agent sessions on one repo",
   "author": {
     "name": "Kyle Mulle"
@@ -13,5 +13,9 @@
     "backlog",
     "multi-agent",
     "claims"
-  ]
+  ],
+  "homepage": "https://github.com/kylemullet/lanes",
+  "repository": "https://github.com/kylemullet/lanes",
+  "documentationUrl": "https://github.com/kylemullet/lanes#readme",
+  "supportUrl": "https://github.com/kylemullet/lanes/issues"
 }

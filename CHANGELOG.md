@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.9 — listing links (2026-10-04)
+
+- `plugin.json` carries `homepage`, `repository`, `documentationUrl` (the README) and `supportUrl`
+  (GitHub issues) so the directory listing has somewhere to point.
+
 ## 0.4.8 — directory review, third pass (2026-10-04)
 
 - `guard_position.py` reads each of its eight variables by literal name; the previous loop over a tuple
