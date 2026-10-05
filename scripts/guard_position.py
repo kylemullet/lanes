@@ -108,6 +108,16 @@ ENV_MAIN_BRANCH = "LANES_GUARD_MAIN_BRANCH"                 # fake config: git.m
 ENV_MAIN_DIRECT = "LANES_GUARD_MAIN_DIRECT"                 # fake config: git.main_direct_paths (os.pathsep)
 ENV_PROJECT_DIR = "CLAUDE_PROJECT_DIR"
 
+_ENV_KEYS = (ENV_TOPLEVEL, ENV_MAIN_CLONE, ENV_BRANCH, ENV_IGNORED, ENV_PROJECT_MAIN_CLONE,
+             ENV_MAIN_BRANCH, ENV_MAIN_DIRECT, ENV_PROJECT_DIR)
+
+
+def _process_env() -> dict:
+    """The named variables this guard reads, and nothing else -- never the whole
+    environment. The keys are the fake-environment test seams plus
+    CLAUDE_PROJECT_DIR; a credential in the installer's environment is not read."""
+    return {k: v for k in _ENV_KEYS if (v := os.getenv(k)) is not None}
+
 
 @dataclass(frozen=True)
 class Rules:
@@ -133,7 +143,7 @@ class Position:
 
 def rules_for(main_clone: str, env=None) -> Rules:
     """`git.main_branch` + `git.main_direct_paths` from the TARGET repo's config, or the defaults."""
-    env = os.environ if env is None else env
+    env = _process_env() if env is None else env
     if env.get(ENV_TOPLEVEL):   # fake environment: rules come from the fake too
         direct = tuple(p for p in env.get(ENV_MAIN_DIRECT, "").split(os.pathsep) if p) or DEFAULT_MAIN_DIRECT
         return Rules(env.get(ENV_MAIN_BRANCH) or DEFAULT_MAIN_BRANCH, direct)
@@ -204,7 +214,7 @@ def _nearest_existing_dir(path: str) -> str:
 
 def position_of(path: str, env=None) -> Optional[Position]:
     """Where would a write to `path` land? None when no repo is visible from it."""
-    env = os.environ if env is None else env
+    env = _process_env() if env is None else env
     if env.get(ENV_TOPLEVEL):
         main_clone = os.path.abspath(env.get(ENV_MAIN_CLONE) or env[ENV_TOPLEVEL])
         rules = rules_for(main_clone, env)
@@ -231,7 +241,7 @@ def position_of(path: str, env=None) -> Optional[Position]:
 
 def project_main_clone(env=None) -> Optional[str]:
     """Realpath of the main clone of the repo the SESSION started in, or None if unknown."""
-    env = os.environ if env is None else env
+    env = _process_env() if env is None else env
     if env.get(ENV_TOPLEVEL):
         fake = env.get(ENV_PROJECT_MAIN_CLONE)
         return os.path.realpath(fake) if fake else None
@@ -262,7 +272,7 @@ def relative_to_toplevel(path: str, toplevel: str) -> Optional[str]:
 
 
 def is_ignored(rel: str, toplevel: str, env=None) -> bool:
-    env = os.environ if env is None else env
+    env = _process_env() if env is None else env
     if env.get(ENV_TOPLEVEL):
         listed = [p.replace(os.sep, "/") for p in env.get(ENV_IGNORED, "").split(os.pathsep) if p]
         return rel in listed
@@ -316,7 +326,7 @@ def decide(rel: str, pos: Position) -> tuple[int, str]:
 
 def evaluate(payload: dict, env=None) -> tuple[int, str]:
     """Pure entry point over the parsed hook JSON: (exit code, reason)."""
-    env = os.environ if env is None else env
+    env = _process_env() if env is None else env
     tool = payload.get("tool_name")
     if tool not in EDIT_TOOLS:
         return ALLOW, f"not an edit tool: {tool!r}"

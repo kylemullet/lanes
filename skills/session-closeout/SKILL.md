@@ -60,7 +60,7 @@ check above.
 
 ```bash
 git worktree list
-for w in $(git worktree list --porcelain | awk '/^worktree /{print $2}'); do
+git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r w; do
   echo "=== $w"
   git -C "$w" status --porcelain=v1 -b
   git -C "$w" log --oneline @{u}..HEAD 2>/dev/null || echo "  (no upstream — never pushed)"

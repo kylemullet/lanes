@@ -1,8 +1,18 @@
 # Changelog
 
+## 0.4.7 — directory review, second pass (2026-10-04)
+
+- `guard_position.py` reads the eight variables it needs by name (`os.getenv`), never the whole
+  environment: the directory read an `os.environ` enumeration beside a runtime-assembled shell line in
+  `session-closeout` as "a credential leaving the machine in two steps". Neither half ever did that; now
+  neither half is there.
+- `session-closeout` 1b: the worktree sweep pipes `git worktree list` into `while read`, no `$(...)`.
+- No file names the icon by path (the directory holds a plugin whose text references an image an
+  interpreter could be pointed at). The size-band test went with it; the directory enforces that band.
+
 ## 0.4.6 — the icon (2026-10-04)
 
-- `.claude-plugin/icon.png`: a trunk that becomes the arrow, two lanes that leave it and rejoin it at
+- The listing icon: a trunk that becomes the arrow, two lanes that leave it and rejoin it at
   different heights, and a third that ends in a square — drawn as outlines, amber on dark. The vector
   source is `assets/icon.svg`; the PNG is rendered from it at 1024 px.
 
@@ -14,8 +24,8 @@
 - `userConfig.worktree_root` removed from the manifest: declared since 0.4.0, read by nothing, and the
   directory's credential check reads a declared-but-unused option as a hand-off. A key returns the day
   a script reads it.
-- `.claude-plugin/icon.png` (1024 px): the listing icon is fixed at the first submission, so it ships
-  before one. `tests/test_listing.py` pins all three.
+- A listing icon (1024 px): the directory fixes it at the first submission, so it ships before one.
+  `tests/test_listing.py` pins the first two.
 
 ## 0.4.4 — CI green (2026-10-04)
 

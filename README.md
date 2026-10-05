@@ -12,7 +12,7 @@ closed issues.
 
 ## Status
 
-**0.4.6 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
+**0.4.7 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
 two backlog scripts, the three protocol skills with their incident references, the
 position-guard hook, a marketplace entry, and CI (pytest + `claude plugin validate --strict`).
 Installed on two consumers — the project it was extracted from, which runs its backlog gate on
