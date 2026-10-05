@@ -195,6 +195,15 @@ claude plugin validate --strict .claude-plugin/marketplace.json
 CI (`.github/workflows/ci.yml`) runs exactly these on every push. All three are named because which
 target descends into `skills/` and `commands/` has differed between machines on the same CLI version.
 
+## Privacy
+
+lanes runs entirely on your machine, inside the repository it is installed in. It reads
+`git config user.name` and the platform to pick your row in `.claude/lanes/config.toml`, and the
+operator shorts you wrote into that config appear as `assignee` and `reported_by` in the issue files
+it creates. The hook reads `CLAUDE_PROJECT_DIR` to know which project it is guarding. Nothing is sent
+anywhere: no network calls, no telemetry, no service, no retention. The only outbound action is your
+own `git push`, which the skills ask you to authorize before it runs.
+
 ## License
 
 Apache-2.0. Copyright 2026 Kyle Mulle.

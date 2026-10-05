@@ -2,6 +2,8 @@
 
 ## 0.4.9 — listing links (2026-10-04)
 
+- README gains a Privacy section: what is read (`git config user.name`, the platform, the repo's own
+  lanes config, `CLAUDE_PROJECT_DIR`), and that nothing leaves the machine.
 - CI runs on pushes to `main` and on pull requests, not on tag pushes: a release tag points at a commit
   `main` has already run, so every `claude plugin tag --push` was buying a second identical run.
 - `plugin.json` carries `homepage` and `repository` so the directory listing has somewhere to point.
