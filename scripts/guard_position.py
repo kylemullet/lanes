@@ -108,15 +108,22 @@ ENV_MAIN_BRANCH = "LANES_GUARD_MAIN_BRANCH"                 # fake config: git.m
 ENV_MAIN_DIRECT = "LANES_GUARD_MAIN_DIRECT"                 # fake config: git.main_direct_paths (os.pathsep)
 ENV_PROJECT_DIR = "CLAUDE_PROJECT_DIR"
 
-_ENV_KEYS = (ENV_TOPLEVEL, ENV_MAIN_CLONE, ENV_BRANCH, ENV_IGNORED, ENV_PROJECT_MAIN_CLONE,
-             ENV_MAIN_BRANCH, ENV_MAIN_DIRECT, ENV_PROJECT_DIR)
-
-
 def _process_env() -> dict:
-    """The named variables this guard reads, and nothing else -- never the whole
-    environment. The keys are the fake-environment test seams plus
-    CLAUDE_PROJECT_DIR; a credential in the installer's environment is not read."""
-    return {k: v for k in _ENV_KEYS if (v := os.getenv(k)) is not None}
+    """The eight variables this guard reads, each by its literal name, and nothing
+    else -- never the whole environment and never a name chosen at run time. Seven
+    are the fake-environment test seams; the eighth is CLAUDE_PROJECT_DIR. A
+    credential in the installer's environment is not read."""
+    found = {
+        "LANES_GUARD_TOPLEVEL": os.getenv("LANES_GUARD_TOPLEVEL"),
+        "LANES_GUARD_MAIN_CLONE": os.getenv("LANES_GUARD_MAIN_CLONE"),
+        "LANES_GUARD_BRANCH": os.getenv("LANES_GUARD_BRANCH"),
+        "LANES_GUARD_IGNORED": os.getenv("LANES_GUARD_IGNORED"),
+        "LANES_GUARD_PROJECT_MAIN_CLONE": os.getenv("LANES_GUARD_PROJECT_MAIN_CLONE"),
+        "LANES_GUARD_MAIN_BRANCH": os.getenv("LANES_GUARD_MAIN_BRANCH"),
+        "LANES_GUARD_MAIN_DIRECT": os.getenv("LANES_GUARD_MAIN_DIRECT"),
+        "CLAUDE_PROJECT_DIR": os.getenv("CLAUDE_PROJECT_DIR"),
+    }
+    return {k: v for k, v in found.items() if v is not None}
 
 
 @dataclass(frozen=True)

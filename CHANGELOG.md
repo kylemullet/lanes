@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.8 — directory review, third pass (2026-10-04)
+
+- `guard_position.py` reads each of its eight variables by literal name; the previous loop over a tuple
+  read as "a variable named at run time".
+- `session-closeout` 1b: the per-worktree checks are written with the skills' `<placeholder>` convention,
+  no shell variables; the directory reads any `$` in a skill's command as a command assembled at run time.
+
 ## 0.4.7 — directory review, second pass (2026-10-04)
 
 - `guard_position.py` reads the eight variables it needs by name (`os.getenv`), never the whole

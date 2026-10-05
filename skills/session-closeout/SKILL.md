@@ -60,14 +60,17 @@ check above.
 
 ```bash
 git worktree list
-git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r w; do
-  echo "=== $w"
-  git -C "$w" status --porcelain=v1 -b
-  git -C "$w" log --oneline @{u}..HEAD 2>/dev/null || echo "  (no upstream — never pushed)"
-done
 git branch -r --no-merged origin/<main_branch>
 git stash list
 pgrep -fl "<tests.command>"
+```
+
+Then, for EACH worktree path the first command printed, the two checks that `git status` in
+this directory cannot answer for it:
+
+```bash
+git -C <worktree> status --porcelain=v1 -b
+git -C <worktree> log --oneline @{u}..HEAD     # fails with "no upstream" = never pushed
 ```
 
 Act on what it finds, in this order:
@@ -274,7 +277,7 @@ re-check.
 **Read every status check off its own line — never through a pipeline.** `git pull
 --rebase 2>&1 | tail -5` reports *`tail`'s* status, so a rebase that stopped on a conflict
 reads as success and whatever is chained next runs on top of it. Redirect to a log, echo
-`$?`, then read it. **A status check that cannot fail is worse than no check** — it reads
+the exit status on its own line, then read it. **A status check that cannot fail is worse than no check** — it reads
 as verification in the transcript while establishing nothing.
 
 Then **confirm explicitly before the landing push, enumerated by lane**: *"Land CORE-64,
