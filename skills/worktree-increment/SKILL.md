@@ -17,7 +17,7 @@ The failures behind each rule: [`references/incidents.md`](references/incidents.
 **Config keys this skill binds to:** `git.main_branch`, `git.main_direct_paths`,
 `git.land_requires_ok`, `backlog.dir`, `backlog.docs_lane_prefixes`, `tests.command`,
 `tests.required_before_land`, `tests.rebase_rerun_command`, `worktrees.port_command`,
-`operators[]`. Read them once via `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lanes_doctor.py"`
+`operators[]`. Read them once via `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_doctor.py`
 (the `config` line) or the file itself.
 
 Ground rules that apply the whole way through:
@@ -166,8 +166,8 @@ Work happens in the MAIN checkout before the worktree exists:
       expected-files list — the load-bearing part, what the other session reads once its
       frontmatter scan points it at your file. ⚠️ Not `ACTIVE LANE`, no worktree name yet.
 
-   Then `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check` and, for the
-   browsable view, `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --root
+   Then `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check` and, for the
+   browsable view, `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --root
    "$(git rev-parse --git-common-dir)/.."` — **the main clone's root is the point**: run
    from a worktree, the script indexes the WORKTREE and the operator's bookmark points at
    the main clone's files. (If the served view is up, it is already current.)
@@ -296,7 +296,7 @@ Findings come back informally; sort each one in step 8.
 - **Out-of-scope finding** → log it as a new backlog issue in the worktree:
 
   ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_new.py" <PROJECT> "<title>" --type=… --assignee=… --reported-by=…
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py <PROJECT> "<title>" --type=… --assignee=… --reported-by=…
   ```
 
   `--reported-by` is REQUIRED — the operator's short when their verification surfaced
@@ -375,7 +375,7 @@ step fails the push gate.
 4. **Backlog check — AFTER any rebase, immediately before the push:**
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check
    ```
 
    Structural problems, orphaned claims, `commit:` hashes that are not ancestors of HEAD,

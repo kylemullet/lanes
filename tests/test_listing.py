@@ -13,11 +13,14 @@ def test_commands_pre_approve_only_the_script_they_run():
         text = cmd.read_text(encoding="utf-8")
         m = re.search(r"^allowed-tools: (.*)$", text, re.M)
         assert m, f"{cmd.name}: no allowed-tools"
-        assert "Bash(python3:*)" not in m.group(1) and "Bash(*)" not in m.group(1), f"{cmd.name}: broad shell pre-approval"
-        scripts = re.findall(r'scripts/([a-z_]+\.py)', m.group(1))
-        assert scripts, f"{cmd.name}: allowed-tools names no script"
+        for broad in ("Bash(python3:*)", "Bash(python:*)", "Bash(sh:*)", "Bash(*)"):
+            assert broad not in m.group(1), f"{cmd.name}: broad shell pre-approval {broad}"
+        # Through the launcher (LANES-17): `sh ".../scripts/lanes.sh" <script>.py`, one script each.
+        scripts = re.findall(r'scripts/lanes\.sh" ([a-z_]+\.py):\*\)', m.group(1))
+        assert scripts, f"{cmd.name}: allowed-tools names no script behind the launcher"
         for s in scripts:
-            assert f"scripts/{s}" in text, f"{cmd.name}: allowed-tools pre-approves {s} but the body never runs it"
+            assert f'scripts/lanes.sh" {s} ' in text.split("---", 2)[2], (
+                f"{cmd.name}: allowed-tools pre-approves {s} but the body never runs it")
 
 
 def test_manifest_declares_no_unused_user_config():

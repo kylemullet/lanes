@@ -12,7 +12,7 @@ closed issues.
 
 ## Status
 
-**0.4.9 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
+**0.4.10 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
 two backlog scripts, the three protocol skills with their incident references, the
 position-guard hook, a marketplace entry, and CI (pytest + `claude plugin validate --strict`).
 Installed on two consumers — the project it was extracted from, which runs its backlog gate on
@@ -52,7 +52,14 @@ path). The EITHER form matters: the incident behind the hook was a docs write ma
 clone while another lane's branch was checked out, which an AND form passes. It judges only the
 repository the session was started in; a target in another repository is allowed as foreign. It
 never sees a write made through Bash, so the skill's two-command position check stays the rule.
-`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/guard_position.py" --explain <path>` is the dry run.
+`sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" guard_position.py --explain <path>` is the dry run.
+
+Every hook, command and skill runs its script through `scripts/lanes.sh`, never a bare `python3`. The
+launcher takes the first of `$LANES_PYTHON`, `python3`, `python` and `py` that proves it is a real
+Python 3.11+, and exits 2 when none does. That matters on Windows, where `python3` can be the Microsoft
+Store alias: it exits 49, and a `PreToolUse` hook that exits anything but 2 lets the write through, so a
+guard that cannot find Python would otherwise fail open. Set `LANES_PYTHON` to pin the interpreter on a
+machine; it is per machine, so it is an environment variable and not a config key.
 
 ## Commands
 
@@ -87,12 +94,12 @@ the project the protocol was extracted from.
 Stdlib-only, run from anywhere inside the repo (or with `--root <repo>`):
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py"              # (re)write INDEX.md + index.html (keep both gitignored)
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check      # exit 1 on any integrity problem
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --report     # aged view for this machine's operator (--who <short>|both)
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --serve      # the HTML view on backlog.view_port, re-parsed per request
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --backfill [--dry-run] [--commit]
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_new.py" CORE "a title" --type=bug --reported-by=<short>
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py              # (re)write INDEX.md + index.html (keep both gitignored)
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check      # exit 1 on any integrity problem
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # aged view for this machine's operator (--who <short>|both)
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # the HTML view on backlog.view_port, re-parsed per request
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short>
 ```
 
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,

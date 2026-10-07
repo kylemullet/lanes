@@ -351,7 +351,10 @@ def test_hooks_json_wires_the_hook():
     cmds = [h["command"] for h in entry["hooks"] if h.get("type") == "command"]
     assert len(cmds) == 1
     assert "${CLAUDE_PLUGIN_ROOT}" in cmds[0], "resolve the script from the plugin root"
-    assert cmds[0].rstrip('"').endswith("/scripts/guard_position.py")
+    assert cmds[0].startswith('sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" '), (
+        "run the guard through the launcher; a bare python3 fails OPEN on a Store alias (LANES-17)")
+    assert cmds[0].endswith(" guard_position.py || exit 2"), (
+        "any failure to run the guard -- no sh, a crash -- must BLOCK, never allow")
     assert SCRIPT.exists()
 
 

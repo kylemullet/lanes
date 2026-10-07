@@ -17,8 +17,8 @@ Every machine runs this same skill; some gates are operator-specific and some ar
 
 **Config keys this skill binds to:** `git.main_branch`, `git.main_direct_paths`,
 `git.land_requires_ok`, `backlog.dir`, `tests.command`, `tests.required_before_land`,
-`operators[]`, `lanes.code`. Read them via `python3
-"${CLAUDE_PLUGIN_ROOT}/scripts/lanes_doctor.py"` (the `config` line) at step 0.
+`operators[]`, `lanes.code`. Read them via `sh
+"${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_doctor.py` (the `config` line) at step 0.
 
 ## Procedure
 
@@ -127,7 +127,7 @@ current understanding. At every closeout, either operator:
 - **Queue what this session surfaced:** one issue per new item —
 
   ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_new.py" <PROJECT> "<title>" --type=… --priority=… --assignee=… --reported-by=…
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py <PROJECT> "<title>" --type=… --priority=… --assignee=… --reported-by=…
   ```
 
   then write its Context. `--reported-by` is REQUIRED and has no default: the operator's
@@ -159,7 +159,7 @@ current understanding. At every closeout, either operator:
 - **Run the backlog check:**
 
   ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check
   ```
 
   Structural problems, orphaned claims, orphaned `commit:` hashes, verified issues whose
@@ -266,7 +266,7 @@ own edits; merge both.
 **Then, AFTER the rebase, re-run the backlog check — required, not a nicety:**
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check
 ```
 
 Ordering is the whole point: a rebase rewrites every commit hash cited since the branch

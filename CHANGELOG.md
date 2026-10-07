@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.10 — fail closed without a working Python (2026-10-07)
+
+- Every hook, command and skill runs its script through the new `scripts/lanes.sh`, never a bare
+  `python3`. On Windows `python3` can be the Microsoft Store alias, which exits 49; for a `PreToolUse`
+  hook any exit but 2 allows the call, so the position guard failed **open** on such a machine, and a
+  missing `python3` (127 / 9009) failed open the same way. The launcher takes the first of
+  `$LANES_PYTHON`, `python3`, `python`, `py` that proves it is Python 3.11+ (the scripts need
+  `tomllib`), and exits **2** when none does. A set `LANES_PYTHON` that does not work is an error,
+  never silently replaced. It runs only a script in its own directory.
+- The hook command ends `|| exit 2`: if `sh` itself is missing, or the guard crashes, the write is
+  blocked rather than allowed.
+- `commands/doctor.md` and `commands/init.md` pre-approve the launcher form of their one script.
+- `tests/test_ci.py` follows `ci.yml`'s `branches: [main, next]`.
+
 ## 0.4.9 — listing links (2026-10-04)
 
 - README gains a Privacy section: what is read (`git config user.name`, the platform, the repo's own
@@ -35,6 +49,8 @@
 
 ## 0.4.5 — first directory submission (2026-10-04)
 
+- The hook command ends `|| exit 2`: if `sh` itself is missing, or the guard crashes, the write is
+  blocked rather than allowed.
 - `commands/doctor.md` and `commands/init.md` pre-approve exactly the script each runs
   (`Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/<script>":*)`), not every `python3` command — the
   directory's policy check held the broad form.

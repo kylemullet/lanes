@@ -1,7 +1,7 @@
 ---
 description: Check the lanes setup — config valid, installed vs expected plugin version, extension-point files, backlog integrity, stale-claim candidates
 argument-hint: "[--strict] [--json]"
-allowed-tools: 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lanes_doctor.py":*), Read'
+allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_doctor.py:*), Read'
 ---
 
 Diagnose the `lanes` setup for the repository the session is in.
@@ -9,7 +9,7 @@ Diagnose the `lanes` setup for the repository the session is in.
 1. Run, exactly:
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lanes_doctor.py" $ARGUMENTS
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_doctor.py $ARGUMENTS
    ```
 
    Every line is `OK`, `WARN`, `FAIL` or `SKIP` with a label and a detail. Exit status

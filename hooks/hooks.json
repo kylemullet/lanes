@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/guard_position.py\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh\" guard_position.py || exit 2",
             "timeout": 15
           }
         ]

@@ -1,7 +1,7 @@
 ---
 description: Scaffold .claude/lanes/config.toml (solo-mode defaults) and the three extension-point stubs in this repo
 argument-hint: "[--force] [--projects CORE,INFRA,DOC]"
-allowed-tools: 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lanes_init.py":*), Read'
+allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_init.py:*), Read'
 ---
 
 Initialize the `lanes` protocol for the repository the session is in.
@@ -9,7 +9,7 @@ Initialize the `lanes` protocol for the repository the session is in.
 1. Run, exactly:
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lanes_init.py" $ARGUMENTS
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_init.py $ARGUMENTS
    ```
 
    It writes `.claude/lanes/config.toml` with every key defaulted to solo mode, and the

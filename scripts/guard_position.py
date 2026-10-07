@@ -73,8 +73,11 @@ run the real git path.
 
 Usage::
 
-    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/guard_position.py"    < hook JSON on stdin
-    python3 scripts/guard_position.py --explain <path>             # dry run from a shell
+    sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" guard_position.py   < hook JSON on stdin
+    sh scripts/lanes.sh guard_position.py --explain <path>            # dry run from a shell
+
+The hook runs it through ``lanes.sh``, which fails CLOSED (exit 2) when no working
+Python 3.11+ resolves -- never through a bare ``python3`` (LANES-17).
 """
 from __future__ import annotations
 

@@ -24,7 +24,7 @@ The protocol is the same everywhere; what it points at comes from
 Read it once, up front:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lanes_doctor.py"
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_doctor.py
 ```
 
 The `config` line names the mode and THIS machine's operator row: id, `short`, whether it
@@ -96,8 +96,8 @@ and the pre-push rebase rewrites it). Startup, which has just pulled, is where t
 becomes knowable:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --backfill --dry-run    # what would close, and what can't
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --backfill --commit     # fill commit:, flip to closed, ONE commit by path
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --dry-run    # what would close, and what can't
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --commit     # fill commit:, flip to closed, ONE commit by path
 ```
 
 For every `verified` issue it finds the resolving commit on HEAD by the exact subject the
@@ -147,15 +147,15 @@ mechanics); the backlog (step 5 reads it mechanically); the latest dated file in
 ### 5. Build the queue — run the report
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py"              # rebuild the LOCAL, gitignored views
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --report     # this machine's operator; --who <short>|both
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py              # rebuild the LOCAL, gitignored views
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # this machine's operator; --who <short>|both
 ```
 
 **Also start the served view, detached, if it is not already up** (`run_in_background`),
 from the MAIN CHECKOUT:
 
 ```bash
-curl -s -m 2 http://127.0.0.1:<backlog.view_port>/ >/dev/null || python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --serve
+curl -s -m 2 http://127.0.0.1:<backlog.view_port>/ >/dev/null || sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve
 ```
 
 It re-parses the backlog on every request, so **refreshing the bookmark IS the
@@ -172,7 +172,7 @@ The report is the mechanical half. Yours: staleness judgment (step 6), the repor
 (step 7), the slice (step 8). Titles compress — **read the issue file body before acting
 on or recommending an item.**
 
-Also sanity-check the tooling: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py"
+Also sanity-check the tooling: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py
 --check`. A frontmatter problem, an orphaned claim, a `commit:` hash that is not an
 ancestor of HEAD, or a verified issue that is unresolvable or missing its `Docs:` line:
 fix that first, by hand, in the issue file.
@@ -382,8 +382,8 @@ after the brief, and it happens *before* the first worktree exists:
    Then both of:
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py" --check    # the integrity gate
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/backlog_index.py"            # rewrite the local views
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check    # the integrity gate
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py            # rewrite the local views
    ```
 
 3. **One commit, staged by explicit path** — the issue files only; the generated views are
