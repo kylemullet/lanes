@@ -218,8 +218,101 @@ def load_issues():
         meta.setdefault("epic", None)
         meta["_path"] = rel
         meta["_title"] = issue_title(body, iid)
+        if meta.get("status") == "in-progress":
+            meta["_marker"] = parse_marker(body)
         issues.append(meta)
     return issues, problems
+
+
+# --- lanes, read from the ⏳ claim markers (LANES-22, LANES-10's view half) ---
+#
+# A lane is a slice of one or more claimed issues: one ACTIVE or PENDING issue
+# and the RESERVED ones queued behind it. Until LANES-10 adds a recorded `lane:`
+# field, the grouping is read from the marker prose the skills already write:
+#   ⏳ IN-PROGRESS (<YYYY-MM-DD HH:MM>, <who>'s session[ on <machine>][, worktree <w>, branch <b>])
+#      — **ACTIVE LANE.** | **WORKTREE PENDING.** | **RESERVED, NOT STARTED — queued behind <ID>.**
+# A marker this cannot read still yields a lane of one, never a dropped issue.
+
+MARKER_RE = re.compile(r"⏳ IN-PROGRESS \(([^)]*)\)\s*[—–-]+\s*\*\*\s*"
+                       r"(ACTIVE LANE|WORKTREE PENDING|RESERVED, NOT STARTED)")
+MARKER_STATES = {"ACTIVE LANE": "active", "WORKTREE PENDING": "pending",
+                 "RESERVED, NOT STARTED": "reserved"}
+QUEUED_RE = re.compile(r"[Qq]ueued behind\s+(?:\[\[)?([A-Z][A-Z0-9]*-\d+)")
+
+
+def parse_marker(body):
+    """The claim marker's fields, or None when there is no readable marker."""
+    for line in body.split("\n"):
+        m = MARKER_RE.search(line)
+        if not m:
+            continue
+        info, state = m.group(1), MARKER_STATES[m.group(2)]
+        ts = re.match(r"\s*(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)", info)
+        mach = re.search(r"session on ([^,]+)", info)
+        who = re.search(r"(?:^|,\s*)([^,]+?)'s session", info)
+        wt = re.search(r"worktree ([^,]+)", info)
+        br = re.search(r"branch ([^,]+)", info)
+        q = QUEUED_RE.search(line)
+        return {"state": state,
+                "claimed": ts.group(1) if ts else None,
+                "who": who.group(1).strip() if who else None,
+                "machine": mach.group(1).strip() if mach else None,
+                "worktree": wt.group(1).strip() if wt else None,
+                "branch": br.group(1).strip() if br else None,
+                "behind": q.group(1) if q else None}
+    return None
+
+
+def lanes_in_flight(issues):
+    """Group the in-progress issues into lanes, each in slice order.
+
+    Returns a list of {"members": [issue, ...], "lead": issue, "claimed": str|None},
+    oldest claim first. A RESERVED issue joins the lane of the issue it is queued
+    behind when that issue is itself claimed; otherwise (it was released, or it
+    landed) it stands as its own lane rather than vanishing.
+    """
+    claimed = {i["id"]: i for i in issues if i.get("status") == "in-progress" and i.get("id")}
+
+    def parent(iid):
+        mk = claimed[iid].get("_marker") or {}
+        b = mk.get("behind")
+        return b if b in claimed and b != iid else None
+
+    def root(iid):
+        path = [iid]
+        while p := parent(path[-1]):
+            if p in path:     # a queued-behind cycle: break it at its lowest ID
+                return min(path[path.index(p):], key=_sort_id_str)
+            path.append(p)
+        return path[-1]
+
+    kids = {}
+    for iid in claimed:
+        if root(iid) != iid:
+            kids.setdefault(parent(iid), []).append(iid)
+    out = []
+    for iid in sorted(claimed, key=_sort_id_str):
+        if root(iid) != iid:
+            continue
+        order, todo = [], [iid]
+        while todo:
+            cur = todo.pop(0)
+            if cur in order:
+                continue
+            order.append(cur)
+            todo.extend(sorted(kids.get(cur, []), key=_sort_id_str))
+        members = [claimed[x] for x in order]
+        stamps = [(m.get("_marker") or {}).get("claimed") for m in members]
+        stamps = [s for s in stamps if s]
+        out.append({"members": members, "lead": members[0],
+                    "claimed": min(stamps) if stamps else None})
+    out.sort(key=lambda ln: (ln["claimed"] or "9999", _sort_id_str(ln["lead"]["id"])))
+    return out
+
+
+def _sort_id_str(iid):
+    proj, _, num = (iid or "").partition("-")
+    return f"{proj}-{int(num):04d}" if num.isdigit() else (iid or "")
 
 
 def sort_key(it):
@@ -948,99 +1041,180 @@ def _age(datestr):
 # it stays stdlib-only and runs on both operators' machines exactly as the rest
 # of this script does. Gitignored beside INDEX.md for the ADMIN-6 reason.
 
-# (label, dataset key to sort on, numeric?) — one list per section, because the
-# closed rows answer different questions (when/what commit) than the live ones.
-OPEN_COLS = (("ID", "id", 0), ("Pri", "priorityRank", 1), ("Status", "statusRank", 1),
-             ("Type", "type", 0), ("Assignee", "assignee", 0), ("Opened", "opened", 0),
-             ("Age", "age", 1), ("Epic", "epic", 0), ("Blocked on", "blocked", 0),
-             ("Title", "title", 0))
-CLOSED_COLS = (("ID", "id", 0), ("Pri", "priorityRank", 1), ("Type", "type", 0),
-               ("Assignee", "assignee", 0), ("Opened", "opened", 0), ("Closed", "closed", 0),
-               ("Resolution", "resolution", 0), ("Commit", "commit", 0), ("Title", "title", 0))
-VERIFIED_COLS = (("ID", "id", 0), ("Pri", "priorityRank", 1), ("Type", "type", 0),
-                 ("Assignee", "assignee", 0), ("Opened", "opened", 0), ("Age", "age", 1),
-                 ("Title", "title", 0))
+# Title sits right after the ID because it is the one field every row is read
+# for (LANES-22); blocked-on rides under it on one clamped line instead of
+# owning a column that wrapped rows to nine lines. `Opened` left the live
+# table: Age sorts identically and says it in fewer characters.
+OPEN_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank", 1),
+             ("Status", "statusRank", 1), ("Type", "type", 0), ("Assignee", "assignee", 0),
+             ("Epic", "epic", 0), ("Age", "age", 1))
+CLOSED_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank", 1),
+               ("Type", "type", 0), ("Assignee", "assignee", 0), ("Closed", "closed", 0),
+               ("Resolution", "resolution", 0), ("Commit", "commit", 0))
+VERIFIED_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank", 1),
+                 ("Type", "type", 0), ("Assignee", "assignee", 0), ("Age", "age", 1))
+# Dropped first on a narrow screen, so a phone still gets ID / title / pri / status.
+SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution")
 
 HTML_STYLE = """
-:root{color-scheme:light dark;--bg:#fff;--fg:#1c1c1e;--mut:#6b7280;--line:#e5e7eb;
-      --zebra:#fafafa;--hov:#f3f4f6;--chip:#f3f4f6;--accent:#2563eb}
-@media (prefers-color-scheme:dark){:root{--bg:#16181d;--fg:#e5e7eb;--mut:#9aa0a6;
-      --line:#2a2e36;--zebra:#1a1d23;--hov:#232830;--chip:#232830;--accent:#7aa2f7}}
+:root{color-scheme:light dark;
+  --bg:#f6f7f9;--surface:#fff;--fg:#17191c;--mut:#646b75;--faint:#9aa1ab;--line:#e4e7eb;
+  --hov:#f2f4f7;--chip:#eef0f3;--accent:#2f5bd3;--accent-soft:#e7edfb;
+  --warn-bg:#fff7e6;--warn-fg:#7a4b00;--warn-line:#f3d79b;
+  --ok:#1f8a4c;--act:#2f5bd3;--pend:#b7791f;--res:#8a94a3;
+  --shadow:0 1px 2px rgba(16,24,40,.05)}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1114;--surface:#16191e;--fg:#e6e8eb;--mut:#9aa1ab;--faint:#6b727c;--line:#262a31;
+  --hov:#1d2127;--chip:#20242b;--accent:#8aa9ff;--accent-soft:#1c2540;
+  --warn-bg:#2a2112;--warn-fg:#f3c776;--warn-line:#4a3a1a;
+  --ok:#4cc184;--act:#8aa9ff;--pend:#e0a948;--res:#79818d;
+  --shadow:none}}
 *{box-sizing:border-box}
-body{margin:0;padding:1.1rem 1.4rem 5rem;background:var(--bg);color:var(--fg);
-     font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
-h1{font-size:1.1rem;margin:0 0 .1rem}
-.sub{color:var(--mut);margin:0;font-size:11.5px;max-width:70ch}
-.counts{margin:.55rem 0 .9rem;font-size:12px;color:var(--mut)}
-.counts b{color:var(--fg)}
-.controls{border:1px solid var(--line);border-radius:7px;padding:.6rem .7rem;margin-bottom:1rem}
-#q{width:100%;max-width:34rem;padding:.42rem .6rem;font:inherit;color:var(--fg);
-   background:var(--bg);border:1px solid var(--line);border-radius:5px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);
+     font:13.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 24px 64px}
+a{color:inherit;text-decoration:none}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+h1{font-size:20px;letter-spacing:-.01em;margin:0;font-weight:650}
+h1 .repo{color:var(--mut);font-weight:450}
+.meta{color:var(--mut);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.pos::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+             background:var(--ok);margin-right:6px;vertical-align:1px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+      padding:7px 12px;box-shadow:var(--shadow);color:var(--mut);font-size:12px}
+.stat b{display:block;font-size:18px;line-height:1.2;color:var(--fg);font-weight:650;
+        font-variant-numeric:tabular-nums}
+.stat.crit b{color:#c0352b}
+@media (prefers-color-scheme:dark){.stat.crit b{color:#ff8a80}}
+.callout{background:var(--warn-bg);color:var(--warn-fg);border:1px solid var(--warn-line);
+         border-radius:10px;padding:9px 13px;margin:0 0 14px;font-size:12.5px}
+.callout summary{cursor:pointer;font-weight:600}
+.callout ul{margin:6px 0 0;padding-left:18px;max-height:14rem;overflow:auto}
+.callout li{margin:2px 0;word-break:break-word}
+h2{font-size:13px;font-weight:650;margin:0 0 10px;display:flex;align-items:baseline;gap:8px}
+h2 small{color:var(--mut);font-weight:450;font-size:12px}
+.lanes{margin-bottom:22px}
+.lane-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:12px;align-items:start}
+.lane{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+      box-shadow:var(--shadow);overflow:hidden}
+.lane>header{padding:10px 14px 9px;border-bottom:1px solid var(--line);font-size:12px;
+             color:var(--mut);display:flex;flex-direction:column;gap:2px}
+.lane>header .ln{color:var(--fg);font-weight:600;font-size:13px;display:flex;gap:8px;
+                 align-items:baseline;flex-wrap:wrap}
+.lane>header .ln code{color:var(--mut);font-weight:450}
+.lane ol{list-style:none;margin:0;padding:4px 0}
+.lane li{display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:baseline;
+         padding:6px 14px}
+.lane li:hover{background:var(--hov)}
+.lane li .t{min-width:0}
+.lane li.reserved .t{color:var(--mut)}
+.lane .after{display:block;font-size:11.5px;color:var(--faint)}
+.st{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+    display:inline-flex;align-items:center;gap:5px;color:var(--mut);min-width:5.6rem}
+.st::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--res)}
+.st-active{color:var(--act)}.st-active::before{background:var(--act);
+           box-shadow:0 0 0 3px var(--accent-soft)}
+.st-pending{color:var(--pend)}.st-pending::before{background:var(--pend)}
+.st-reserved::before{background:transparent;border:1.5px solid var(--res)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+#q{flex:1 1 260px;max-width:440px;padding:8px 12px;font:inherit;color:var(--fg);
+   background:var(--surface);border:1px solid var(--line);border-radius:8px}
 #q:focus{outline:2px solid var(--accent);outline-offset:-1px}
-.facets{margin:.6rem 0 .1rem}
-fieldset{border:0;margin:0 0 .3rem;padding:0;display:flex;flex-wrap:wrap;align-items:baseline;
-         gap:.3rem}
+button{font:inherit;font-size:12.5px;padding:7px 12px;border-radius:8px;cursor:pointer;
+       border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+button:hover{background:var(--hov)}
+button[aria-expanded="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+#fcount{display:inline-block;min-width:1.4em;margin-left:4px;padding:0 5px;border-radius:9px;
+        background:var(--accent);color:var(--surface);font-size:11px;font-weight:600}
+#fcount:empty{display:none}
+#showing{color:var(--mut);font-size:12px;margin:0 0 0 auto}
+.facets{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+        padding:10px 12px;margin-bottom:12px}
+.facets[hidden]{display:none}
+fieldset{border:0;margin:0 0 6px;padding:0;display:flex;flex-wrap:wrap;align-items:center;gap:5px}
 fieldset:last-child{margin-bottom:0}
-.flabel{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.04em;
-        flex:0 0 4.6rem;padding-top:.1rem}
-.allbtn{flex:0 0 auto;font-size:10.5px;padding:.1rem .5rem .13rem;border-radius:20px;
-        border:1px dashed var(--line);background:transparent;color:var(--mut);cursor:pointer}
-.allbtn:hover{color:var(--fg);border-style:solid;background:var(--chip)}
-label.chip{display:inline-flex;align-items:center;gap:.25rem;background:var(--chip);
-           border:1px solid transparent;border-radius:20px;padding:.1rem .5rem .13rem .35rem;
-           cursor:pointer;user-select:none;font-size:11.5px}
+.flabel{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+        flex:0 0 5.2rem;font-weight:600}
+.allbtn{font-size:11px;padding:2px 8px;border-radius:20px;border:1px dashed var(--line);
+        background:transparent;color:var(--mut)}
+.allbtn:hover{color:var(--fg);border-style:solid}
+label.chip{display:inline-flex;align-items:center;gap:5px;background:var(--chip);
+           border:1px solid transparent;border-radius:20px;padding:2px 9px 2px 6px;
+           cursor:pointer;user-select:none;font-size:12px}
 label.chip:hover{border-color:var(--line)}
 label.chip input{margin:0;accent-color:var(--accent)}
-label.chip.off{opacity:.42}
-.rowbtns{margin-top:.55rem;display:flex;gap:.5rem;align-items:center}
-button{font:inherit;font-size:11.5px;padding:.22rem .6rem;border-radius:5px;cursor:pointer;
-       border:1px solid var(--line);background:var(--chip);color:var(--fg)}
-button:hover{background:var(--hov)}
-#showing{color:var(--mut);font-size:11.5px;margin:0}
-details.sec{margin-bottom:1.1rem}
-details.sec>summary{cursor:pointer;font-weight:600;padding:.3rem 0;font-size:12.5px}
-details.sec>summary::marker{color:var(--mut)}
-table{border-collapse:collapse;width:100%;margin-top:.35rem}
-th,td{text-align:left;padding:.3rem .55rem;border-bottom:1px solid var(--line);
-      vertical-align:top}
-thead th{position:sticky;top:0;background:var(--bg);cursor:pointer;white-space:nowrap;
-         font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);
-         border-bottom:1.5px solid var(--line);user-select:none}
+label.chip .c{color:var(--faint);font-variant-numeric:tabular-nums}
+label.chip.off{opacity:.45}
+details.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+            box-shadow:var(--shadow);margin-bottom:14px}
+details.sec>summary{cursor:pointer;font-weight:650;padding:11px 14px;font-size:13px;
+                    list-style:none;display:flex;gap:6px;align-items:baseline}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:"\\25B8";color:var(--faint);font-size:11px;
+                            transition:transform .12s;display:inline-block}
+details.sec[open]>summary::before{transform:rotate(90deg)}
+details.sec>summary .n{color:var(--mut);font-weight:450}
+table{border-collapse:separate;border-spacing:0;width:100%}
+th,td{text-align:left;padding:8px 12px;border-top:1px solid var(--line);vertical-align:top}
+thead th{position:sticky;top:0;z-index:1;background:var(--surface);cursor:pointer;
+         white-space:nowrap;font-size:10.5px;font-weight:600;text-transform:uppercase;
+         letter-spacing:.05em;color:var(--mut);user-select:none}
 thead th:hover{color:var(--fg)}
-thead th::after{content:"";opacity:.45;font-size:9px}
-thead th.asc::after{content:" \\25B2"}
-thead th.desc::after{content:" \\25BC"}
-tbody tr:nth-child(even of :not([hidden])){background:var(--zebra)}
+thead th.asc::after{content:" \\25B2";font-size:8px}
+thead th.desc::after{content:" \\25BC";font-size:8px}
 tbody tr:hover{background:var(--hov)}
-td.id a{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
-        color:var(--accent);text-decoration:none;white-space:nowrap}
-td.id a:hover{text-decoration:underline}
-td.title{width:44%}
-td.blocked{color:var(--mut);max-width:24ch}
-td.num,td.date{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--mut)}
-td.commit{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--mut)}
-.pill{display:inline-block;border-radius:20px;padding:.03rem .45rem .07rem;font-size:10.5px;
-      white-space:nowrap;background:var(--chip);color:var(--mut)}
-.p-critical{background:#fee2e2;color:#991b1b}
-.p-high{background:#ffedd5;color:#9a3412}
-.s-in-progress{background:#dbeafe;color:#1e40af}
-.s-blocked{background:#fef3c7;color:#92400e}
-.s-paused{background:#ede9fe;color:#5b21b6}
-.s-verified{background:#dcfce7;color:#166534}
+td{color:var(--mut);font-size:12.5px}
+td.id{white-space:nowrap}
+td.id a,.lane a.id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                   font-size:12px;color:var(--accent)}
+td.id a:hover,.lane a.id:hover,td.title a:hover{text-decoration:underline}
+td.title{color:var(--fg);font-size:13.5px;width:52%;min-width:16rem}
+td.title a{display:block}
+.why{color:var(--mut);font-size:12px;margin-top:2px;overflow:hidden;max-width:62ch;
+     display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;line-clamp:1;
+     overflow-wrap:anywhere}
+.why::before{content:"blocked on ";color:var(--faint)}
+td.num,td.date{white-space:nowrap;font-variant-numeric:tabular-nums}
+td.commit{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+.pill{display:inline-block;border-radius:20px;padding:1px 8px 2px;font-size:11px;
+      white-space:nowrap;background:var(--chip);color:var(--mut);font-weight:500}
+.p-critical{background:#fde4e1;color:#a8261b}
+.p-high{background:#ffeedd;color:#9a4210}
+.s-in-progress{background:#e2eaff;color:#2445a8}
+.s-blocked{background:#fff1cc;color:#865300}
+.s-paused{background:#efe8ff;color:#5b3bb0}
+.s-verified{background:#dcf5e6;color:#17663a}
 @media (prefers-color-scheme:dark){
-  .p-critical{background:#4c1d1d;color:#fca5a5}
-  .p-high{background:#4a2c11;color:#fdba74}
-  .s-in-progress{background:#1b2f52;color:#93c5fd}
-  .s-blocked{background:#43330f;color:#fcd34d}
-  .s-paused{background:#2f2352;color:#c4b5fd}
-  .s-verified{background:#14352a;color:#86efac}}
-.empty{color:var(--mut);padding:.5rem .55rem}
+  .p-critical{background:#45201d;color:#ff9d93}
+  .p-high{background:#43291a;color:#ffb37a}
+  .s-in-progress{background:#1d2a4d;color:#9db7ff}
+  .s-blocked{background:#3d3015;color:#f5cf6e}
+  .s-paused{background:#2d2448;color:#c7b4ff}
+  .s-verified{background:#173526;color:#7fdba6}}
+.empty{color:var(--mut);padding:4px 14px 14px;margin:0}
+footer{color:var(--faint);font-size:11.5px;margin-top:26px;line-height:1.6}
+@media (max-width:720px){
+  .wrap{padding:16px 16px 48px}
+  .lane-grid{grid-template-columns:1fr}
+  .col-sec,.col-age{display:none}
+  th,td{padding:8px 6px}
+  td.title{min-width:0;width:auto;overflow-wrap:anywhere}
+  .lane li{grid-template-columns:auto 1fr;row-gap:2px}
+  .lane li .t{grid-column:1/-1}
+  .why{max-width:none}
+  #showing{flex-basis:100%;margin:0}
+  .flabel{flex-basis:100%}}
 """
 
 HTML_SCRIPT = """
 const norm = s => (s || '').toLowerCase();
 const tables = () => Array.from(document.querySelectorAll('table.issues'));
 const bodyRows = t => Array.from(t.tBodies[0].rows);
+const store = {get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+               set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }};
 
 function checked(field){
   const boxes = document.querySelectorAll('fieldset[data-field="' + field + '"] input');
@@ -1049,7 +1223,7 @@ function checked(field){
                        if (b.checked) on.add(b.value); });
   const btn = document.querySelector('.allbtn[data-all="' + field + '"]');
   if (btn) btn.textContent = on.size === boxes.length ? 'none' : 'all';
-  return on;
+  return {on, any: boxes.length > 0, narrowed: boxes.length > 0 && on.size < boxes.length};
 }
 
 function applyFilter(){
@@ -1057,6 +1231,7 @@ function applyFilter(){
   const f = {project: checked('project'), status: checked('status'),
              priority: checked('priority'), assignee: checked('assignee'),
              epic: checked('epic')};
+  const active = (q ? 1 : 0) + Object.values(f).filter(c => c.narrowed).length;
   let shown = 0, total = 0;
   tables().forEach(t => {
     let n = 0;
@@ -1064,10 +1239,11 @@ function applyFilter(){
       total++;
       const d = r.dataset;
       // An epic row lists itself AND its parent, a child lists its parent, so
-      // one chip shows the whole family (INFRA-52).
-      const ok = f.project.has(d.project) && f.status.has(d.status)
-              && f.priority.has(d.priority) && f.assignee.has(d.assignee)
-              && d.epics.split(' ').some(e => f.epic.has(e))
+      // one chip shows the whole family (INFRA-52). A repo with no epics has no
+      // epic row of chips, and then the epic test must pass, not hide every row.
+      const ok = f.project.on.has(d.project) && f.status.on.has(d.status)
+              && f.priority.on.has(d.priority) && f.assignee.on.has(d.assignee)
+              && (!f.epic.any || d.epics.split(' ').some(e => f.epic.on.has(e)))
               && (!q || d.haystack.includes(q));
       r.hidden = !ok;
       if (ok) { n++; shown++; }
@@ -1075,7 +1251,8 @@ function applyFilter(){
     t.closest('details').querySelector('.n').textContent = n;
   });
   document.getElementById('showing').textContent =
-    'showing ' + shown + ' of ' + total + ' issues';
+    shown === total ? total + ' issues' : 'showing ' + shown + ' of ' + total + ' issues';
+  document.getElementById('fcount').textContent = active ? active : '';
 }
 
 function sortBy(th){
@@ -1090,6 +1267,31 @@ function sortBy(th){
     return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
   }).forEach(r => body.appendChild(r));
 }
+
+// Claim times are written LOCAL ("YYYY-MM-DD HH:MM"); say how long ago, which
+// is the question a stale-claim glance actually asks.
+function ago(){
+  const now = Date.now();
+  document.querySelectorAll('time[data-ts]').forEach(t => {
+    const m = t.dataset.ts.match(/^(\\d{4})-(\\d{2})-(\\d{2})(?: (\\d{2}):(\\d{2}))?$/);
+    if (!m) return;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
+    const min = Math.max(0, Math.round((now - d) / 60000));
+    t.textContent = !m[4] ? t.dataset.ts
+      : min < 1 ? 'just now' : min < 60 ? min + 'm ago'
+      : min < 48 * 60 ? Math.round(min / 60) + 'h ago' : Math.round(min / 1440) + 'd ago';
+    t.title = t.dataset.ts;
+  });
+}
+
+const facets = document.getElementById('facets'), toggle = document.getElementById('ftoggle');
+function showFacets(open){
+  facets.hidden = !open;
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  store.set('lanes.backlog.filters', open ? '1' : '0');
+}
+toggle.addEventListener('click', () => showFacets(facets.hidden));
+showFacets(store.get('lanes.backlog.filters') === '1');
 
 document.querySelectorAll('thead th').forEach(th =>
   th.addEventListener('click', () => sortBy(th)));
@@ -1113,6 +1315,8 @@ document.getElementById('q').addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.target.value = ''; applyFilter(); }
 });
 applyFilter();
+ago();
+setInterval(ago, 60000);
 """
 
 
@@ -1126,16 +1330,22 @@ def _pill(kind, value):
     return f'<span class="pill {kind}-{_esc(value)}">{_esc(value)}</span>'
 
 
-def _facet(field, values):
+def _facet(field, values, counts=None):
+    counts = counts or {}
     chips = "".join(
-        f'<label class="chip"><input type="checkbox" value="{_esc(v)}" checked>{_esc(v)}</label>'
+        f'<label class="chip"><input type="checkbox" value="{_esc(v)}" checked>{_esc(v)}'
+        + (f' <span class="c">{counts[v]}</span>' if counts.get(v) else "") + '</label>'
         for v in values)
     return (f'<fieldset data-field="{field}"><span class="flabel">{field}</span>'
             f'<button type="button" class="allbtn" data-all="{field}">none</button>{chips}</fieldset>')
 
 
+def _href(i):
+    return i["_path"].as_posix().replace(BACKLOG_REL + "/", "")
+
+
 def _html_row(i, cols):
-    href = i["_path"].as_posix().replace(BACKLOG_REL + "/", "")
+    href = _href(i)
     title = i["_title"]
     age = i.get("_age")
     haystack = norm_join(i)
@@ -1154,23 +1364,31 @@ def _html_row(i, cols):
         "status-rank": str(STATUS_RANK.get(i.get("status"), 9)),
         "haystack": haystack,
     }
+    why = i.get("blocked_on")
+    why_html = (f'<div class="why" title="{_esc(why)}">{_esc(why)}</div>'
+                if why and i.get("status") in LIVE_STATUSES else "")
     cells = {
-        "id": f'<td class="id"><a href="{_esc(href)}">{_esc(i["id"])}</a></td>',
-        "priorityRank": f'<td>{_pill("p", i.get("priority"))}</td>',
-        "statusRank": f'<td>{_pill("s", i.get("status"))}</td>',
-        "type": f'<td>{_esc(i.get("type"))}</td>',
-        "assignee": f'<td>{_esc(i.get("assignee") or "—")}</td>',
-        "opened": f'<td class="date">{_esc(i.get("opened") or "—")}</td>',
-        "closed": f'<td class="date">{_esc(i.get("closed") or "—")}</td>',
-        "commit": f'<td class="commit">{_esc(i.get("commit") or "—")}</td>',
-        "resolution": f'<td>{_esc(i.get("resolution") or "—")}</td>',
-        "age": f'<td class="num">{age}d</td>' if age is not None else '<td class="num">—</td>',
-        "blocked": f'<td class="blocked">{_esc(i.get("blocked_on") or "")}</td>',
-        "epic": f'<td class="id">{_esc(i.get("epic") or "—")}</td>',
-        "title": f'<td class="title">{_esc(title)}</td>',
+        "id": ("id", f'<a href="{_esc(href)}">{_esc(i["id"])}</a>'),
+        "title": ("title", f'<a href="{_esc(href)}">{_esc(title)}</a>{why_html}'),
+        "priorityRank": ("", _pill("p", i.get("priority"))),
+        "statusRank": ("", _pill("s", i.get("status"))),
+        "type": ("", _esc(i.get("type"))),
+        "assignee": ("", _esc(i.get("assignee") or "—")),
+        "opened": ("date", _esc(i.get("opened") or "—")),
+        "closed": ("date", _esc(i.get("closed") or "—")),
+        "commit": ("commit", _esc(i.get("commit") or "—")),
+        "resolution": ("", _esc(i.get("resolution") or "—")),
+        "age": ("num", f"{age}d" if age is not None else "—"),
+        "epic": ("id", _esc(i.get("epic") or "—")),
     }
+
+    def td(key):
+        cls, inner = cells[key]
+        classes = " ".join(c for c in (cls, _col_class(key)) if c)
+        return f'<td class="{classes}">{inner}</td>' if classes else f"<td>{inner}</td>"
+
     attr_str = " ".join(f'data-{k}="{_esc(v)}"' for k, v in attrs.items())
-    return f"<tr {attr_str}>" + "".join(cells[key] for _, key, _n in cols) + "</tr>"
+    return f"<tr {attr_str}>" + "".join(td(key) for _, key, _n in cols) + "</tr>"
 
 
 def norm_join(i):
@@ -1196,16 +1414,21 @@ def _epic_family(i):
 
 def _sort_id(i):
     """`INFRA-9` must sort before `INFRA-14`, so zero-pad the numeric half."""
-    iid = i.get("id") or ""
-    proj, _, num = iid.partition("-")
-    return f"{proj}-{int(num):04d}" if num.isdigit() else iid
+    return _sort_id_str(i.get("id"))
+
+
+def _col_class(key):
+    """`col-sec` columns drop first on a narrow screen; `col-age` drops with them."""
+    return "col-sec" if key in SECONDARY_COLS else "col-age" if key == "age" else ""
 
 
 def _html_table(issues, cols, empty):
     if not issues:
         return f'<p class="empty">{empty}</p>'
-    head = "".join(f'<th data-key="{key}" data-num="{num}">{_esc(label)}</th>'
-                   for label, key, num in cols)
+    head = "".join(
+        f'<th data-key="{key}" data-num="{num}"'
+        + (f' class="{_col_class(key)}"' if _col_class(key) else "") + f'>{_esc(label)}</th>'
+        for label, key, num in cols)
     rows = "\n".join(_html_row(i, cols) for i in issues)
     return f'<table class="issues"><thead><tr>{head}</tr></thead><tbody>\n{rows}\n</tbody></table>'
 
@@ -1223,33 +1446,95 @@ def html_sort_key(it):
             it.get("id") or "")
 
 
-def render_html(issues):
+def _html_lanes(lanes):
+    """The In progress section: one card per lane, issues in slice order."""
+    if not lanes:
+        return ""
+    cards = []
+    for ln in lanes:
+        lead = ln["lead"].get("_marker") or {}
+        name = lead.get("worktree") or (f"{ln['lead']['id']} — worktree pending"
+                                        if lead.get("state") == "pending" else ln["lead"]["id"])
+        branch = f' <code>{_esc(lead["branch"])}</code>' if lead.get("branch") else ""
+        who = " · ".join(_esc(x) for x in (lead.get("machine") or lead.get("who"),) if x)
+        when = (f'claimed <time data-ts="{_esc(ln["claimed"])}">{_esc(ln["claimed"])}</time>'
+                if ln["claimed"] else "claim time unreadable")
+        items = []
+        for m in ln["members"]:
+            mk = m.get("_marker") or {}
+            state = mk.get("state") or "unknown"
+            pri = (" " + _pill("p", m.get("priority"))
+                   if m.get("priority") in ("critical", "high") else "")
+            # A reservation whose lead is no longer claimed (it landed, or was
+            # released) says so: that is the stale-reservation tell.
+            after = ""
+            if mk.get("behind") and m is ln["lead"]:
+                after = f'<span class="after">queued behind {_esc(mk["behind"])}, no longer claimed</span>'
+            items.append(
+                f'<li class="{state}"><span class="st st-{state}">{state}</span>'
+                f'<a class="id" href="{_esc(_href(m))}">{_esc(m["id"])}</a>'
+                f'<span class="t">{_esc(m["_title"])}{pri}{after}</span></li>')
+        cards.append(
+            f'<article class="lane"><header><span class="ln">{_esc(name)}{branch}</span>'
+            f'<span>{who + " · " if who else ""}{when}</span></header>'
+            f'<ol>{"".join(items)}</ol></article>')
+    n = sum(len(ln["members"]) for ln in lanes)
+    lanes_word = "lane" if len(lanes) == 1 else "lanes"
+    return (f'<section class="lanes"><h2>In progress <small>{n} claimed · {len(lanes)} '
+            f'{lanes_word}</small></h2><div class="lane-grid">{"".join(cards)}</div></section>')
+
+
+def _html_problems(problems):
+    if not problems:
+        return ""
+    items = "".join(f"<li>{html.escape(p)}</li>" for p in problems)
+    noun = "problem" if len(problems) == 1 else "problems"
+    return (f'<details class="callout"><summary>⚠️ {len(problems)} backlog {noun} — run '
+            f'<code>backlog_index.py --check</code></summary><ul>{items}</ul></details>')
+
+
+def render_html(issues, problems=(), position=None):
     for i in issues:
         i["_age"] = _age(i.get("opened"))
-    open_issues = sorted((i for i in issues if i.get("status") in LIVE_STATUSES), key=html_sort_key)
+    live = [i for i in issues if i.get("status") in LIVE_STATUSES]
+    lanes = lanes_in_flight(issues)
+    # A claimed issue is shown once, in its lane card, not again in the queue.
+    open_issues = sorted((i for i in live if i.get("status") != "in-progress"), key=html_sort_key)
     verified = sorted((i for i in issues if i.get("status") == "verified"), key=html_sort_key)
     closed = sorted((i for i in issues if i.get("status") == "closed"),
                     key=lambda x: (x.get("closed") or "", x.get("id") or ""), reverse=True)
+    tabled = open_issues + verified + closed
 
-    present = lambda field, vocab: [v for v in vocab if any(i.get(field) == v for i in issues)]
-    assignees = sorted({i.get("assignee") or "—" for i in issues})
+    present = lambda field, vocab: [v for v in vocab if any(i.get(field) == v for i in tabled)]
+    assignees = sorted({i.get("assignee") or "—" for i in tabled})
     epics = sorted({i["id"] for i in issues if i.get("type") == "epic" and i.get("id")}
                    | {i["epic"] for i in issues if i.get("epic")},
                    key=lambda e: _sort_id({"id": e}))
+    live_by_proj = {}
+    for i in live:
+        live_by_proj[i.get("project")] = live_by_proj.get(i.get("project"), 0) + 1
     facets = "".join((
-        _facet("project", present("project", PROJECTS)),
+        _facet("project", present("project", PROJECTS), live_by_proj),
         _facet("status", present("status", STATUSES)),
         _facet("priority", present("priority", PRIORITIES)),
         _facet("assignee", assignees),
         _facet("epic", epics + ["—"]) if epics else "",
     ))
 
-    by_proj = {}
-    for i in open_issues:
-        by_proj.setdefault(i.get("project"), []).append(i)
-    counts = " · ".join(f"{p} {len(by_proj[p])}" for p in PROJECTS if p in by_proj)
-    warn = ""
+    n_claimed = sum(len(ln["members"]) for ln in lanes)
+    n_crit = sum(1 for i in live if i.get("priority") == "critical")
+    stats = "".join((
+        f'<div class="stat"><b>{len(live)}</b> live</div>',
+        f'<div class="stat"><b>{n_claimed}</b> in progress</div>',
+        f'<div class="stat crit"><b>{n_crit}</b> critical</div>' if n_crit else "",
+        f'<div class="stat"><b>{len(verified)}</b> verified</div>',
+        f'<div class="stat"><b>{len(closed)}</b> closed</div>',
+    ))
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    pos_inline, banner = "", ""
+    if position:
+        b = _banner(*position)
+        pos_inline, banner = ("", b) if position[1] else (b, "")
 
     return f"""<!doctype html>
 <html lang="en">
@@ -1260,32 +1545,38 @@ def render_html(issues):
 <style>{HTML_STYLE}</style>
 </head>
 <body>
-<h1>Backlog</h1>
-<p class="sub">GENERATED by the lanes plugin's <code>backlog_index.py</code> — local, gitignored, never
-hand-edit. The issue files under <code>{_esc(BACKLOG_REL)}/&lt;PROJECT&gt;/</code> are the source of
-truth; click an ID to open one. Regenerated {stamp}.</p>
-<p class="counts"><b>{len(open_issues)}</b> live ({_esc(counts)}) · <b>{len(verified)}</b> verified
-(landed, awaiting close) · <b>{len(closed)}</b> closed</p>
-{warn}
-<div class="controls">
-  <input id="q" type="search" placeholder="Filter — id, title, assignee, reporter, resolution, type, blocked-on, links…"
+<div class="wrap">
+<header class="top">
+  <h1>Backlog <span class="repo">· {_esc(REPO_NAME)}</span></h1>
+  <div class="meta">{pos_inline}<span>generated {stamp}</span></div>
+</header>
+<div class="stats">{stats}</div>
+{banner}
+{_html_problems(problems)}
+{_html_lanes(lanes)}
+<div class="bar">
+  <input id="q" type="search" placeholder="Filter — id, title, assignee, reporter, resolution, blocked-on, links…"
          autocomplete="off" spellcheck="false">
-  <div class="facets">{facets}</div>
-  <div class="rowbtns"><button id="reset" type="button">Reset filters</button>
-    <p id="showing"></p></div>
+  <button id="ftoggle" type="button" aria-expanded="false" aria-controls="facets">Filters<span id="fcount"></span></button>
+  <button id="reset" type="button">Reset</button>
+  <p id="showing"></p>
 </div>
+<div id="facets" class="facets" hidden>{facets}</div>
 <details class="sec" open>
-  <summary>Open / in-progress / blocked / paused (<span class="n">{len(open_issues)}</span>)</summary>
-  {_html_table(open_issues, OPEN_COLS, "No live issues match.")}
+  <summary>Open queue <span class="n">{len(open_issues)}</span></summary>
+  {_html_table(open_issues, OPEN_COLS, "No open issues.")}
 </details>
 <details class="sec" {"open" if verified else ""}>
-  <summary>Verified — landed, awaiting {html.escape(CERTIFIER_LABEL, quote=False)} close (<span class="n">{len(verified)}</span>)</summary>
+  <summary>Verified — landed, awaiting {html.escape(CERTIFIER_LABEL, quote=False)} close <span class="n">{len(verified)}</span></summary>
   {_html_table(verified, VERIFIED_COLS, "Nothing awaiting close.")}
 </details>
 <details class="sec">
-  <summary>Closed (<span class="n">{len(closed)}</span>)</summary>
+  <summary>Closed <span class="n">{len(closed)}</span></summary>
   {_html_table(closed, CLOSED_COLS, "No closed issues yet.")}
 </details>
+<footer>Generated by the lanes plugin's <code>backlog_index.py</code> — a local, gitignored view; never
+hand-edit it. The issue files under <code>{_esc(BACKLOG_REL)}/&lt;PROJECT&gt;/</code> are the source of truth.</footer>
+</div>
 <script>{HTML_SCRIPT}</script>
 </body>
 </html>
@@ -1345,7 +1636,7 @@ def regenerate():
     issues, problems = load_issues()
     INDEX.parent.mkdir(parents=True, exist_ok=True)
     INDEX.write_text(render_index(issues), encoding="utf-8")
-    HTML_VIEW.write_text(render_html(issues), encoding="utf-8")
+    HTML_VIEW.write_text(render_html(issues, problems), encoding="utf-8")
     return issues, problems
 
 
@@ -1391,14 +1682,15 @@ def clone_position():
 
 
 def _banner(head, behind):
+    """The served view's clone position: an inline note when level, a callout when behind."""
     if head is None:
         return ""
     if behind:
-        return (f'<p class="sub"><strong>This clone is {behind} commit(s) behind '
+        return (f'<div class="callout"><strong>This clone is {behind} commit(s) behind '
                 f'<code>origin/{_esc(MAIN_BRANCH)}</code></strong> (HEAD <code>{head}</code>, as of its last '
-                f'fetch) — a lane that landed from a worktree will not appear until you pull.</p>')
-    return (f'<p class="sub">Clone at <code>{head}</code>, level with '
-            f'<code>origin/{_esc(MAIN_BRANCH)}</code> as of its last fetch. Rendered live at each request.</p>')
+                f'fetch) — a lane that landed from a worktree will not appear until you pull.</div>')
+    return (f'<span class="pos" title="Rendered live at each request">'
+            f'<code>{head}</code> · level with <code>origin/{_esc(MAIN_BRANCH)}</code></span>')
 
 
 def serve(port=None, host="127.0.0.1"):
@@ -1413,16 +1705,7 @@ def serve(port=None, host="127.0.0.1"):
                 self.send_error(404, "the backlog view lives at /")
                 return
             issues, problems = load_issues()
-            body = render_html(issues)
-            head, behind = clone_position()
-            banner = _banner(head, behind)
-            if banner:
-                # Right under the generated-file note, which is where the eye
-                # already goes for "is this current?".
-                body = body.replace("</p>", "</p>\n" + banner, 1)
-            if problems:
-                body = body.replace("</p>", "</p>\n<p class=\"sub\">⚠️ " +
-                                    html.escape("; ".join(problems)) + "</p>", 1)
+            body = render_html(issues, problems, position=clone_position())
             raw = body.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1566,7 +1849,7 @@ def main(argv=None):
 
     INDEX.parent.mkdir(parents=True, exist_ok=True)
     INDEX.write_text(render_index(issues), encoding="utf-8")
-    HTML_VIEW.write_text(render_html(issues), encoding="utf-8")
+    HTML_VIEW.write_text(render_html(issues, problems), encoding="utf-8")
     print(f"wrote {INDEX.relative_to(ROOT)} + {HTML_VIEW.relative_to(ROOT)} "
           f"(local, gitignored) — {len(issues)} issues"
           + (f", {len(problems)} problem(s) above" if problems else ""))

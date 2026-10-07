@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.4.17 — the backlog view, redesigned, with lanes on top (2026-10-07)
+
+- The view (`index.html` and `--serve`) is laid out again (LANES-22).
+  - **In progress, grouped by lane, at the top.** One card per lane: worktree, branch, machine,
+    how long ago it was claimed, then its issues in slice order as active / pending / reserved.
+    Lanes are read from the ⏳ claim markers (`queued behind <ID>` joins a reservation to its lead).
+    A reservation whose lead is no longer claimed says so. A claimed issue appears once, in its
+    card, not again in the queue. This is LANES-10's view half; its `lane:` field follows LANES-9.
+  - **Title is the second column**, and blocked-on sits under it on one clamped line with the full
+    text on hover. It no longer gets a column that wrapped rows to nine lines. `Opened` left the
+    live table; `Age` sorts the same way.
+  - **The filters fold behind a `Filters` button** with a count of active filters, and the chosen
+    open/closed state is remembered per browser. Project chips show live counts.
+  - **A one-line header** with stat tiles (live, in progress, critical, verified, closed). The
+    generated-file note moves to a footer. On `--serve`, the clone position sits in the header when
+    level and becomes a callout when behind.
+  - **Backlog problems are a collapsed callout**, one per line, in the file view too. Before, they
+    were one paragraph, and only on `--serve`.
+  - Designed for light and dark, and for a phone: secondary columns drop below 720px and the page
+    never scrolls sideways.
+- Fix: a repo with no epics no longer hides every row. The epic filter now passes when no epic
+  row of chips exists.
+
+## 0.4.15 — a lane's issue closes when it lands (2026-10-07)
+
+- `lanes_land.py` closes the issue it just landed (LANES-21). After the landing reads back and the
+  clean-up, it runs `backlog_index.py --backfill --push` in the main clone. The resolving hash is
+  final at that point, so `verified` no longer waits a whole session for the next startup. The
+  backfill's own guards hold: it fast-forwards first, refuses off the main branch, and pushes only
+  backlog-only commits. A close that cannot push exits 2 and is left to startup. `--no-close` skips
+  it, and nothing runs for `--onto` another branch.
+- `session-closeout` step 2 sweeps `--backfill --push` (or `--commit`, where a backlog-only push
+  needs an OK) for lanes landed by hand or by another session. `session-startup` step 2d is the
+  backstop.
+- All three skills: housekeeping that needs no OK (the backfill, branch and claim pushes) is done and
+  reported, never offered as a question.
+
+## 0.4.14 — land, verify, then clean up (2026-10-07)
+
+- New `scripts/lanes_land.py`: `worktree-increment` step 9.7's landing and step 10's clean-up as
+  one operation (LANES-20). It refuses, touching nothing, from the main clone, on the main branch,
+  with a dirty tree or on a machine that does not certify. It checks the fast-forward, pushes
+  `<branch>:<main>`, re-fetches and requires HEAD on `origin/<main>`, and only then removes the
+  worktree and deletes the branch, locally and on origin. The remote branch is kept if it carries
+  commits that did not land. Exit 1 = not landed, nothing changed; 2 = landed, a named clean-up
+  step left. `--keep`, `--dry-run`, and `--onto <branch>` for a repo that integrates on a branch
+  other than `git.main_branch`.
+- A session had run the landing and the clean-up on one line joined by `;`. The fast-forward lost a
+  race with another session's push, nothing landed, and the clean-up deleted the worktree and the
+  branch on both sides anyway.
+- `worktree-increment` step 10: a branch, local or remote, is deleted only after it has **landed**,
+  never because it was pushed. The landing and the clean-up are never one command line. The
+  recovery path (`git fsck --unreachable --no-reflogs`) is in the incident.
+- `session-closeout` step 3 carries the same branch rule.
+
 ## 0.4.16 — claim the slice mechanically (2026-10-07)
 
 - New `scripts/lanes_claim.py` and `/lanes:claim`: `session-startup` 8b and `worktree-increment`

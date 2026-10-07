@@ -318,6 +318,125 @@ def test_each_facet_row_has_a_select_all_toggle():
         assert f'class="allbtn" data-all="{field}"' in page, f"{field} row has no select-all"
 
 
+# --- the In progress section: lanes read from the claim markers (LANES-22) ---
+
+ACTIVE_MK = ("⏳ IN-PROGRESS (2026-10-07 02:40, Kyle's session on kyle-mac@Air, worktree "
+             "lanes-lanes-20, branch lanes-20-work) — **ACTIVE LANE.** Expected files: `x`.")
+PENDING_MK = "⏳ IN-PROGRESS (2026-10-07 02:45, Kyle's session on kyle-mac@Air) — **WORKTREE PENDING.** Claim pushed."
+
+
+def _reserved(behind, ts="2026-10-07 02:40"):
+    return (f"⏳ IN-PROGRESS ({ts}, Kyle's session on kyle-mac@Air) — "
+            f"**RESERVED, NOT STARTED — queued behind {behind}.**")
+
+
+def _claimed(iid, marker, **kw):
+    return _issue(iid, status="in-progress", _marker=bidx.parse_marker(marker), **kw)
+
+
+def test_parse_marker_reads_every_field_the_skills_write():
+    mk = bidx.parse_marker("## Current status\n\n" + ACTIVE_MK)
+    assert mk == {"state": "active", "claimed": "2026-10-07 02:40", "who": "Kyle",
+                  "machine": "kyle-mac@Air", "worktree": "lanes-lanes-20",
+                  "branch": "lanes-20-work", "behind": None}
+    assert bidx.parse_marker(PENDING_MK)["state"] == "pending"
+    res = bidx.parse_marker(_reserved("LANES-20"))
+    assert res["state"] == "reserved" and res["behind"] == "LANES-20" and res["worktree"] is None
+    # The older long form and a wiki-linked ID both name the lane they sit behind.
+    old = ("⏳ IN-PROGRESS (2026-09-20 10:00, Kyle's session) — **RESERVED, NOT STARTED.** "
+           "Claimed as part of the 2026-09-20 slice, queued behind [[CORE-64]]. No worktree yet.")
+    assert bidx.parse_marker(old)["behind"] == "CORE-64"
+    capital = ("⏳ IN-PROGRESS (2026-10-07 02:53, Kyle's session) — **RESERVED, NOT STARTED.** "
+               "Queued behind INFRA-100 (same file, same gate).")
+    assert bidx.parse_marker(capital)["behind"] == "INFRA-100"
+    assert bidx.parse_marker("no marker here") is None
+
+
+def test_load_issues_parses_the_marker_only_on_claimed_issues(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "BACKLOG", tmp_path / "docs" / "backlog")
+    put(tmp_path, "UI-1", status="in-progress", status_body=ACTIVE_MK)
+    put(tmp_path, "UI-2")
+    issues = {i["id"]: i for i in bidx.load_issues()[0]}
+    assert issues["UI-1"]["_marker"]["worktree"] == "lanes-lanes-20"
+    assert "_marker" not in issues["UI-2"]
+
+
+def test_lanes_group_a_slice_in_order_and_keep_strays_as_their_own_lane():
+    issues = [_claimed("LANES-9", _reserved("LANES-21")),
+              _claimed("LANES-20", ACTIVE_MK),
+              _claimed("LANES-21", _reserved("LANES-20")),
+              _claimed("LANES-22", PENDING_MK),
+              # queued behind an issue that already landed: stands alone, never dropped
+              _claimed("INFRA-5", _reserved("INFRA-4", ts="2026-10-07 01:00")),
+              _claimed("UI-3", "no readable marker"),
+              _issue("INFRA-4", status="verified")]
+    lanes = bidx.lanes_in_flight(issues)
+    ids = [[m["id"] for m in ln["members"]] for ln in lanes]
+    assert ["LANES-20", "LANES-21", "LANES-9"] in ids
+    assert ["LANES-22"] in ids and ["INFRA-5"] in ids and ["UI-3"] in ids
+    assert sum(len(x) for x in ids) == 6
+    # oldest claim first; an unreadable claim time sorts last
+    assert ids[0] == ["INFRA-5"] and ids[-1] == ["UI-3"]
+
+
+def test_lanes_survive_a_queued_behind_cycle():
+    a = _claimed("X-1", _reserved("X-2"))
+    b = _claimed("X-2", _reserved("X-1"))
+    lanes = bidx.lanes_in_flight([a, b])
+    assert sorted(m["id"] for ln in lanes for m in ln["members"]) == ["X-1", "X-2"]
+
+
+def test_render_html_shows_lanes_on_top_and_each_claim_once():
+    issues = [_claimed("LANES-20", ACTIVE_MK, priority="high"),
+              _claimed("LANES-21", _reserved("LANES-20")),
+              _issue("UI-1", blocked_on="a long reason"),
+              _issue("UI-2", status="closed", closed="2026-09-01")]
+    page = bidx.render_html(issues)
+    assert page.index("In progress") < page.index("Open queue")
+    assert "lanes-lanes-20" in page and "lanes-20-work" in page and "kyle-mac@Air" in page
+    assert '<time data-ts="2026-10-07 02:40">' in page
+    assert page.index(">LANES-20</a>") < page.index(">LANES-21</a>")
+    for iid in ("LANES-20", "LANES-21", "UI-1", "UI-2"):
+        assert page.count(f">{iid}</a>") == 1, iid
+    assert 'class="st st-active"' in page and 'class="st st-reserved"' in page
+    # blocked-on rides under the title, full text on hover
+    assert '<div class="why" title="a long reason">a long reason</div>' in page
+    assert "<b>3</b> live" in page and "<b>2</b> in progress" in page
+    assert "no longer claimed" not in page
+
+
+def test_a_reservation_whose_lead_landed_says_so():
+    page = bidx.render_html([_claimed("LANES-9", _reserved("LANES-21")),
+                             _issue("LANES-21", status="verified")])
+    assert "queued behind LANES-21, no longer claimed" in page
+
+
+def test_render_html_omits_the_section_with_nothing_in_flight():
+    page = bidx.render_html([_issue("UI-1")])
+    assert 'class="lanes"' not in page and "<b>0</b> in progress" in page
+
+
+def test_title_is_the_second_column_everywhere():
+    for cols in (bidx.OPEN_COLS, bidx.VERIFIED_COLS, bidx.CLOSED_COLS):
+        assert [c[1] for c in cols[:2]] == ["id", "title"]
+
+
+def test_render_html_lists_problems_in_a_collapsed_callout():
+    page = bidx.render_html([_issue("UI-1")], problems=["a.md: <bad>", "b.md: worse"])
+    assert '<details class="callout"><summary>⚠️ 2 backlog problems' in page
+    assert "<li>a.md: &lt;bad&gt;</li>" in page
+    assert 'class="callout"' not in bidx.render_html([_issue("UI-1")])
+
+
+def test_render_html_puts_the_clone_position_inline_or_in_a_callout():
+    level = bidx.render_html([_issue("UI-1")], position=("abc1234", 0))
+    assert '<span class="pos"' in level and "level with" in level
+    behind = bidx.render_html([_issue("UI-1")], position=("abc1234", 3))
+    assert '<div class="callout"><strong>This clone is 3 commit(s) behind' in behind
+    assert '<span class="pos"' not in behind
+
+
 # --- the verified status + backfill ----------------------------------------
 
 RESOLVED_BODY = """# X-1 — thing
@@ -732,7 +851,7 @@ def test_views_bucket_verified_between_live_and_closed():
     assert md.index("UI-1") < md.index("## Verified") < md.index("UI-2") < md.index("## Closed") < md.index("UI-3")
     page = bidx.render_html(issues)
     assert "<b>1</b> live" in page and "<b>1</b> verified" in page and "<b>1</b> closed" in page
-    assert page.index("awaiting kyle's close") < page.index(">UI-2</a>") < page.index("Closed (")
+    assert page.index("awaiting kyle's close") < page.index(">UI-2</a>") < page.index("<summary>Closed ")
     assert 'data-status="verified"' in page and ".s-verified" in page
 
 
