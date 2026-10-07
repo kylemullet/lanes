@@ -13,7 +13,7 @@ name: ci
 
 on:
   push:
-    branches: [main]      # not tags: a release tag points at a commit main already ran
+    branches: [main, next]   # next: development while a directory review pins main. Not tags: a release tag points at a commit main already ran
   pull_request:
   workflow_dispatch:
 
