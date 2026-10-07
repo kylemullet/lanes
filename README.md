@@ -104,6 +104,17 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-r
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short>
 ```
 
+One for the start of a slice, run in the main clone on the operator's directive (also
+`/lanes:claim`):
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py CORE-64 UI-40 --files "api/x.py, tests/test_x.py"
+```
+
+Every ID or none: each must have a file on the main branch and be unclaimed. The first gets
+`WORKTREE PENDING`, the rest `RESERVED, NOT STARTED` behind it, in one commit that is checked
+and pushed (`--behind <ID>` extends a lane, `--dry-run` prints the markers).
+
 And one for the end of a lane, run from its worktree after the operator's landing OK:
 
 ```bash
@@ -187,9 +198,9 @@ duplicated.
 lanes/
 ├── .claude-plugin/     plugin.json, marketplace.json
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
-├── commands/           init.md, doctor.md
+├── commands/           init.md, doctor.md, claim.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_land.py, guard_position.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, guard_position.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md

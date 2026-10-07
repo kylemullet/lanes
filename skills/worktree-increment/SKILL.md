@@ -155,32 +155,27 @@ Work happens in the MAIN checkout before the worktree exists:
    legitimately quote one.
 3. **Claim** — unless it is already made (`session-startup` 8b: frontmatter `in-progress`,
    the ⏳ marker names this session, the claim commit is on `origin/<main_branch>`). If so,
-   confirm the expected-files list and skip to step 2. Otherwise, in the item's issue file,
-   do BOTH halves — they are read by different things and one without the other is the
-   bug:
-
-   a. **Frontmatter:** `status: in-progress`. This is what the views and `--report` render
-      — what the other operator sees. Note the prior status; if the item was `paused` or
-      `blocked`, restore that rather than `open` if the increment is abandoned.
-   b. **Body:** overwrite **Current status** with the `WORKTREE PENDING` marker plus the
-      expected-files list — the load-bearing part, what the other session reads once its
-      frontmatter scan points it at your file. ⚠️ Not `ACTIVE LANE`, no worktree name yet.
-
-   Then `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check` and, for the
-   browsable view, `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --root
-   "$(git rev-parse --git-common-dir)/.."` — **the main clone's root is the point**: run
-   from a worktree, the script indexes the WORKTREE and the operator's bookmark points at
-   the main clone's files. (If the served view is up, it is already current.)
-4. **Commit the claim (explicit path: the issue files) AND push it to
-   `origin/<main_branch>`.** The main-direct guard first, every time:
+   confirm the expected-files list and skip to step 2. Otherwise claim it — from the MAIN
+   CHECKOUT, on the main branch — with the same script startup uses:
 
    ```bash
-   git log origin/<main_branch>..<main_branch> --name-only --format= | sort -u
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py <ID> --files "<expected files>"
    ```
 
-   Every path must match `git.main_direct_paths`. Anything else on the local main branch
-   means code was committed there, which the branch policy forbids: stop and surface it.
-   Otherwise push. **The directive that started this work is the OK for this push.**
+   It writes BOTH halves, which are read by different things — one without the other is
+   the bug: **frontmatter** `status: in-progress` (what the views and `--report` render)
+   and the **body** `WORKTREE PENDING` marker with the expected files at the top of
+   **Current status** (what another session reads once its frontmatter scan points it at
+   the file). It notes a prior `paused` / `blocked` status in the marker, so an abandoned
+   increment restores that rather than `open`. Then it runs `--check`, commits by
+   explicit path, runs the main-direct guard and pushes. **The directive that started this
+   work is the OK for this push.** Exit `1` means nothing was written — report the line and
+   stop; exit `2` means the claim is committed on local main behind work that is not
+   main-direct, which is the finding to surface.
+4. Refresh the browsable view: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py
+   --root "$(git rev-parse --git-common-dir)/.."` — **the main clone's root is the point**:
+   run from a worktree, the script indexes the WORKTREE and the operator's bookmark points
+   at the main clone's files. (If the served view is up, it is already current.)
 
    ⚠️ **Run the conflict scan (1.2) in the MAIN CHECKOUT, never in a worktree.** A worktree
    created off the main branch before the claim push does not contain the claim.

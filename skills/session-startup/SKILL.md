@@ -389,35 +389,42 @@ after the brief, and it happens *before* the first worktree exists:
 1. **Resolve the directive to an ordered ID list.** Re-run the step-5b grep: if any named
    ID is already `in-progress`, stop and say so — it may be another session's lane. 🚫 Do
    not release, re-date or edit that claim to clear the way, however stale it looks.
-2. **Claim every ID now, up front**: the first gets the `WORKTREE PENDING` marker with its
-   expected-files list, the rest get `RESERVED, NOT STARTED — queued behind <ID>`.
-   Frontmatter `status: in-progress` **and** the body marker, both.
-
-   ⚠️ **`WORKTREE PENDING`, not `ACTIVE LANE`, and no worktree name** — the worktree does
-   not exist yet; `worktree-increment` step 2 flips it the moment `git worktree add`
-   returns. Every marker's timestamp is LOCAL with minutes: `date "+%Y-%m-%d %H:%M"`.
-
-   Then both of:
+2. **Claim every ID now, up front, in one call** — from the main checkout, on the main
+   branch:
 
    ```bash
-   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check    # the integrity gate
-   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py            # rewrite the local views
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py <ID> [<ID> …] --files "<first ID's expected files>"
    ```
 
-3. **One commit, staged by explicit path** — the issue files only; the generated views are
-   gitignored and never part of it.
-4. **Main-direct guard, then push to `origin/<main_branch>`:**
+   It is steps 2–4 of the old hand procedure as one all-or-nothing operation (LANES-9). It
+   fetches and fast-forwards; refuses unless **every** ID has a file on
+   `origin/<main_branch>` (a missing one is named with the refs where it does exist, so a
+   re-scope is the operator's decision, said out loud — never a silent swap); refuses an
+   ID that is `in-progress`, `verified` or `closed`; writes frontmatter `status:
+   in-progress` **and** the body marker on every ID — the first `WORKTREE PENDING` with its
+   expected files, each later one `RESERVED, NOT STARTED` queued behind the one before it,
+   LOCAL timestamps with minutes, spelled exactly as the doctor reads them; runs
+   `backlog_index.py --check`; commits the issue files by explicit path; checks that
+   everything ahead of origin matches `git.main_direct_paths`; and pushes, rebasing on a
+   rejection and withdrawing the claim if another session changed one of those issues in
+   the meantime. Exit `0` claimed and pushed · `1` nothing written · `2` committed but not
+   pushed (the reason is printed — usually non-main-direct work on local main, which is
+   to be surfaced, not pushed). `--dry-run` prints the markers; `--behind <ID>` adds IDs
+   to a lane already claimed instead of starting a new one.
 
-   ```bash
-   git log origin/<main_branch>..<main_branch> --name-only --format= | sort -u
-   ```
-
-   Every path must match `git.main_direct_paths`. Anything else on local main means code
-   was committed on the main branch — stop and surface it, do not push. Otherwise push.
    **The directive IS the operator's OK for this push** — a claim exists to be seen, by a
    second session, the other operator, a second machine; a local-only claim protects
    only this machine. Other main-direct commits startup already made (the backfill, a
-   staleness fix) ride along; the guard has just checked every one of them.
+   staleness fix) ride along; the script's guard has checked every one of them.
+
+   ⚠️ The marker says `WORKTREE PENDING`, not `ACTIVE LANE`, and names no worktree — it
+   does not exist yet; `worktree-increment` step 2 flips it the moment `git worktree add`
+   returns. Never hand-write a claim marker while the script is reachable: a hand-written
+   one drifts from the spelling the doctor reads (`incidents.md` → "The slice claimed by
+   hand").
+3. Refresh the local views: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py`
+   (the served view, if up, is already current).
+4. If the script refused, report its line to the operator and stop; do not work around it.
 5. **Hand off to `worktree-increment`** for the first ID.
 
 ## Lanes — who touches what (multi-operator only)

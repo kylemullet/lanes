@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.16 — claim the slice mechanically (2026-10-07)
+
+- New `scripts/lanes_claim.py` and `/lanes:claim`: `session-startup` 8b and `worktree-increment`
+  step 1's claim as one all-or-nothing operation (LANES-9). It fetches and fast-forwards the main
+  clone, then refuses unless every named ID has a file on `origin/<main>`. A missing ID is named
+  with the refs where it does exist. It also refuses any ID that is `in-progress`, `verified`,
+  `closed` or has uncommitted changes. It writes `status: in-progress` and the marker on every ID:
+  the first `WORKTREE PENDING` with `--files`, each later one `RESERVED, NOT STARTED` behind the
+  one before. Timestamps are local, the spelling is exactly what the doctor reads, and a prior
+  `blocked`/`paused` status is noted. Then it runs `--check`, makes one commit by explicit path,
+  applies the main-direct guard and pushes. A rejected push rebases; a concurrent change to one of
+  the claimed issues withdraws the claim. `--behind <ID>` extends a lane, `--dry-run` prints the
+  markers. Exit 1 = nothing written, 2 = committed but not pushed.
+- `session-startup` 8b and `worktree-increment` step 1 call it instead of describing the edit. The
+  startup skill's own example of the RESERVED marker misspelled it for the doctor, and a session
+  copied it; that example is gone.
+
 ## 0.4.15 — a lane's issue closes when it lands (2026-10-07)
 
 - `lanes_land.py` closes the issue it just landed (LANES-21). After the landing reads back and the

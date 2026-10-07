@@ -3,6 +3,18 @@
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
 
+## The slice claimed by hand (2026-10-06, 2026-10-07)
+
+A directive named four issues. The claim commit covered one; the second was reserved 35
+minutes later, after the operator noticed only one showed in progress. Another named ID
+had no file on the main branch at all — it existed only on a branch nobody had absorbed —
+and the session swapped in a different issue mid-claim without saying so. The next day a
+session hand-wrote `**RESERVED, NOT STARTED — queued behind <ID>.**`, copying this skill's
+own example, and the doctor's marker regex (which needs the bold to close after the kind)
+never recognized it. Writing N markers by hand is a cost enforced only by discipline, so
+the claim is now one script: every ID or none, every marker from one spelling, a missing
+ID named with where it lives.
+
 ## The stale artifact on the branch (2026-09-09)
 
 A startup brief reported an old branch as an undecided merge awaiting the operator, on

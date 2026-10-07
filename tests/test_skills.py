@@ -105,6 +105,17 @@ def test_the_landed_issue_closes_on_landing_and_closeout_sweeps():
     assert "**The backstop.**" in start
 
 
+def test_claims_run_through_the_claim_script():
+    """LANES-9: a hand-made claim skipped an ID and copied a marker the doctor cannot read."""
+    import lanes_doctor as ld
+    for name in ("session-startup", "worktree-increment"):
+        text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        assert 'scripts/lanes.sh" lanes_claim.py' in text, name
+        # every bold claim kind a skill spells out must be one the doctor recognizes
+        for m in re.finditer(r"\*\*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LANE)[^*]*\*\*", text):
+            assert ld.KIND_RE.fullmatch(m.group(0)), f"{name}: {m.group(0)}"
+
+
 def test_plugin_validates_strict():
     """A missing executable is a FileNotFoundError from subprocess, never a
     "command not found" on stderr -- the first CI run died on exactly that."""
