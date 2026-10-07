@@ -272,3 +272,36 @@ def test_cli_root_mints_into_another_repo(tmp_path, monkeypatch, capsys):
     assert out.startswith("created docs/backlog/UI/UI-1-from-the-cli.md")
     text = (repo / "docs/backlog/UI/UI-1-from-the-cli.md").read_text(encoding="utf-8")
     assert "assignee: tester\n" in text   # solo mode in THAT repo: the git user, slugged
+
+
+# --- --reported-by=me, what /lanes:new passes (LANES-2) ----------------------
+
+def _mint_me(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _point_at(monkeypatch, repo)
+    monkeypatch.setattr(bidx, "regenerate", lambda: None)
+    return repo
+
+
+def test_reported_by_me_is_this_machines_operator(tmp_path, monkeypatch, capsys):
+    repo = _mint_me(tmp_path, monkeypatch)
+    assert bn.main(["INFRA", "raised by hand", "--reported-by=me"]) == 0
+    (minted,) = (repo / "docs/backlog/INFRA").glob("*-raised-by-hand.md")
+    text = minted.read_text(encoding="utf-8")
+    assert "\nreported_by: kyle\n" in text
+
+
+def test_reported_by_me_is_refused_on_a_machine_with_no_row(tmp_path, monkeypatch, capsys):
+    _mint_me(tmp_path, monkeypatch)
+    monkeypatch.setattr(bidx, "MACHINE", {"id": "Stranger+linux", "short": "stranger", "known": False})
+    with pytest.raises(SystemExit) as e:
+        bn.main(["INFRA", "who said this", "--reported-by=me"])
+    assert e.value.code == 2
+    assert "has no operator row" in capsys.readouterr().err
+
+
+def test_the_new_command_passes_me_and_fills_the_context():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
+    assert "--reported-by=me" in text and "--reported-by=claude" in text
+    assert "Context" in text and "$ARGUMENTS" in text

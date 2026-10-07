@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.21 — /lanes:new mints an issue the operator raises (2026-10-07)
+
+- **`/lanes:new`** (LANES-2). It runs `backlog_new.py` through the launcher, then reads the
+  minted file back and writes its Context from what the operator said, so it ends as a filled
+  issue rather than a stub. It takes the script's form (`<PROJECT> "<title>" [options]`) or plain
+  prose; for prose it picks the project and title, says which, and asks when no project fits.
+  It never commits or pushes. `allowed-tools` pre-approves exactly that one script.
+- **`backlog_new.py --reported-by=me`** resolves to this machine's operator short. It is
+  explicit, not a default, so the "no default reporter" rule holds. A machine with no
+  operator row in a multi-operator repo is refused rather than guessed. `/lanes:new` passes
+  it; a session raising an issue on its own still passes `--reported-by=claude`.
+
 ## 0.4.20 — the doctor reads a paraphrased claim kind, and warns on a missing one at once (2026-10-07)
 
 - **The kind opens the bold span** (LANES-19). `lanes_doctor.py` read a claim's kind only when

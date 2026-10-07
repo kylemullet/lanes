@@ -6,10 +6,13 @@ Usage:
   python3 backlog_new.py CORE "modify_endpoint inference gaps" --type=bug --priority=high --reported-by=<short>
   python3 backlog_new.py INFRA "add fixtures" --type=story --assignee=<short> --reported-by=claude
   python3 backlog_new.py CORE "invite-only registration" --epic=CORE-14 --reported-by=<short>
+  python3 backlog_new.py CORE "a title" --reported-by=me     # this machine's operator (/lanes:new)
 
 Projects, types, priorities, assignees and reporters come from the lanes config
 (`backlog_index` resolves it once at import). `--reported-by` is REQUIRED: a default
-would silently mis-attribute, and `claude` is always a valid reporter.
+would silently mis-attribute, and `claude` is always a valid reporter. `--reported-by=me`
+names this machine's operator row; it is refused on a machine with no row in a
+multi-operator repo.
 
 ID assignment is scan-based -- next number = max(seen) + 1, computed at creation
 time. No counter file: a counter could silently hand out the same ID twice, whereas
@@ -46,6 +49,7 @@ from _console import use_utf8_console  # noqa: E402
 import backlog_index as bidx           # noqa: E402
 
 ROOT = bidx.ROOT
+ME = "me"   # --reported-by=me: this machine's operator short (LANES-2, /lanes:new)
 BACKLOG = bidx.BACKLOG
 BACKLOG_REL = bidx.BACKLOG_REL
 
@@ -261,8 +265,9 @@ def main(argv=None):
     ap.add_argument("--priority", choices=bidx.PRIORITIES, default="normal")
     ap.add_argument("--assignee", choices=bidx.ASSIGNEES, default=bidx.DEFAULT_ASSIGNEE,
                     help="who works it")
-    ap.add_argument("--reported-by", dest="reported_by", choices=bidx.REPORTERS, required=True,
-                    help="who raised it — required, no default (a default would mis-attribute)")
+    ap.add_argument("--reported-by", dest="reported_by", choices=(*bidx.REPORTERS, ME), required=True,
+                    help="who raised it — required, no default (a default would mis-attribute); "
+                         f"`{ME}` is this machine's operator (what /lanes:new passes)")
     ap.add_argument("--resolution", choices=bidx.RESOLUTIONS, default=None,
                     help="how it closed; only with --status=closed")
     ap.add_argument("--status", choices=bidx.STATUSES, default="open")
@@ -272,6 +277,14 @@ def main(argv=None):
     ap.add_argument("--epic", default=None, metavar="ID",
                     help="parent epic (an existing issue with type: epic)")
     args = ap.parse_args(argv)
+    if args.reported_by == ME:
+        # Explicit, never a default: the operator typed /lanes:new, so the reporter is the
+        # operator row this machine resolves to. An unknown machine in a multi-operator
+        # repo has no row to name, and guessing is the mis-attribution the rule exists for.
+        if not (bidx.SOLO or bidx.MACHINE.get("known")):
+            ap.error(f"--reported-by={ME}: this machine ({bidx.MACHINE['id']}) has no operator row "
+                     f"to name — pass the reporter's short ({'|'.join(bidx.REPORTERS)})")
+        args.reported_by = bidx.MACHINE["short"]
 
     path = create_issue(args.project, args.title, type_=args.type_,
                         priority=args.priority, assignee=args.assignee, status=args.status,

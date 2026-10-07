@@ -77,7 +77,14 @@ machine; it is per machine, so it is an environment variable and not a config ke
   A marker's kind is read from the start of its bold span, so a paraphrase like
   `**ACTIVE LANE — readlines leg.**` classifies as written. A marker with no kind warns at any age.
 
-Both are thin: the work is in `scripts/lanes_init.py` and `scripts/lanes_doctor.py`, which are
+- **`/lanes:new <PROJECT> "<title>" [--type=…] [--priority=…] [--assignee=…] [--epic=ID]`** — mints
+  an issue the operator is raising: the next free ID, `--reported-by=me` (this machine's operator),
+  then the Context written from what they said, so it ends as a filled issue, not a stub. Plain
+  prose works too; the command picks the project and title and says so. Session-raised issues
+  keep calling `backlog_new.py` directly with `--reported-by=claude`.
+- **`/lanes:claim <ID> [<ID> …]`** — claims a slice in one pushed commit (see below).
+
+All are thin: the work is in `scripts/lanes_init.py`, `scripts/lanes_doctor.py`, `scripts/backlog_new.py` and `scripts/lanes_claim.py`, which are
 stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualenv.
 
 ## The three skills
@@ -207,7 +214,7 @@ duplicated.
 lanes/
 ├── .claude-plugin/     plugin.json, marketplace.json
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
-├── commands/           init.md, doctor.md, claim.md
+├── commands/           init.md, doctor.md, claim.md, new.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
 ├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, guard_position.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
