@@ -622,6 +622,107 @@ def test_backfill_commit_stages_by_path_and_never_pushes(repo, monkeypatch):
     assert not problems and bidx.check_problems(issues, problems) == []
 
 
+
+# --- concurrent certifying machines (LANES-6) -------------------------------
+
+def _point(monkeypatch, root):
+    """Aim the module at `root` (a solo-mode clone, so it certifies)."""
+    for k, v in bidx.settings(root, {"backlog": {"projects": ["UI"]}}).items():
+        if k in ("ROOT", "BACKLOG", "BACKLOG_REL", "INDEX", "HTML_VIEW", "PROJECTS", "MAIN_BRANCH"):
+            monkeypatch.setattr(bidx, k, v)
+
+
+def _two_clones(tmp_path, monkeypatch):
+    """A bare `origin` holding one verified issue whose resolving commit is dated
+    2026-09-01, and two clones of it — two certifying machines."""
+    origin = tmp_path / "origin.git"
+    git("init", "-q", "--bare", "-b", "main", str(origin), cwd=tmp_path)
+    seed = tmp_path / "seed"
+    git("clone", "-q", str(origin), str(seed), cwd=tmp_path)
+    git("config", "user.email", "t@example.com", cwd=seed)
+    git("config", "user.name", "Tester", cwd=seed)
+    bl = seed / "docs" / "backlog" / "UI"
+    bl.mkdir(parents=True)
+    (bl / "UI-1-x.md").write_text(_fm(id="UI-1", project="UI") + DOCUMENTED_BODY, encoding="utf-8")
+    git("add", "-A", cwd=seed)
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-09-01T12:00:00+00:00")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-09-01T12:00:00+00:00")
+    git("commit", "-q", "-m", "feat(ui): two-tier viewer tabs (UI-1)", cwd=seed)
+    monkeypatch.delenv("GIT_COMMITTER_DATE")
+    monkeypatch.delenv("GIT_AUTHOR_DATE")
+    git("push", "-q", "origin", "main", cwd=seed)
+    clones = []
+    for name in ("mac", "win"):
+        c = tmp_path / name
+        git("clone", "-q", str(origin), str(c), cwd=tmp_path)
+        git("config", "user.email", f"{name}@example.com", cwd=c)
+        git("config", "user.name", "Tester", cwd=c)
+        clones.append(c)
+    return origin, clones
+
+
+def test_backfill_closed_date_is_the_resolving_commits_date_not_today(tmp_path, monkeypatch):
+    _, (mac, _) = _two_clones(tmp_path, monkeypatch)
+    _point(monkeypatch, mac)
+    issues, _ = bidx.load_issues()
+    closed, _ = bidx.backfill_verified(issues, today="2099-01-01")
+    meta, _ = bidx.parse_frontmatter((mac / "docs/backlog/UI/UI-1-x.md").read_text(encoding="utf-8"))
+    assert meta["closed"] == "2026-09-01"
+    assert len(meta["commit"]) == 7
+
+
+def test_backfill_push_on_two_machines_converges_without_a_conflict(tmp_path, monkeypatch):
+    origin, (mac, win) = _two_clones(tmp_path, monkeypatch)
+    # Both machines start up from the same tip. win closes and commits first, but has
+    # not pushed when mac's --push lands — the race a single-writer gate existed for.
+    _point(monkeypatch, win)
+    assert bidx.main(["--backfill", "--commit"]) == 0
+    _point(monkeypatch, mac)
+    assert bidx.main(["--backfill", "--push"]) == 0
+    _point(monkeypatch, win)
+    ok, msg = bidx.push_backfill()
+    assert ok, msg
+    tip = git("rev-parse", "main", cwd=origin)
+    for c in (mac, win):
+        assert git("rev-parse", "HEAD", cwd=c) == tip
+        assert git("status", "--porcelain", "--untracked-files=no", cwd=c) == ""
+    log = git("log", "--format=%s", "main", cwd=origin).splitlines()
+    assert log.count("docs(backlog): close UI-1 — backfill resolving commit hash") == 1
+    meta, _ = bidx.parse_frontmatter(git("show", "main:docs/backlog/UI/UI-1-x.md", cwd=origin))
+    assert meta["status"] == "closed" and meta["closed"] == "2026-09-01"
+
+
+def test_backfill_push_on_a_stale_clone_fast_forwards_and_closes_nothing_twice(tmp_path, monkeypatch):
+    origin, (mac, win) = _two_clones(tmp_path, monkeypatch)
+    _point(monkeypatch, mac)
+    assert bidx.main(["--backfill", "--push"]) == 0
+    _point(monkeypatch, win)                      # never pulled
+    assert bidx.main(["--backfill", "--push"]) == 0
+    assert git("rev-parse", "HEAD", cwd=win) == git("rev-parse", "main", cwd=origin)
+    assert git("rev-list", "--count", "main", cwd=origin) == "2"
+
+
+def test_backfill_push_keeps_the_commit_local_when_main_carries_other_work(tmp_path, monkeypatch, capsys):
+    origin, (mac, _) = _two_clones(tmp_path, monkeypatch)
+    (mac / "src.py").write_text("x = 1\n", encoding="utf-8")
+    git("add", "src.py", cwd=mac)
+    git("commit", "-q", "-m", "feat: code on local main", cwd=mac)
+    _point(monkeypatch, mac)
+    before = git("rev-parse", "main", cwd=origin)
+    assert bidx.main(["--backfill", "--push"]) == 1
+    assert "not pushed" in capsys.readouterr().err
+    assert git("rev-parse", "main", cwd=origin) == before
+    assert git("log", "-1", "--format=%s", cwd=mac).startswith("docs(backlog): close UI-1")
+
+
+def test_backfill_push_refuses_off_the_main_branch_and_with_dry_run(tmp_path, monkeypatch, capsys):
+    _, (mac, _) = _two_clones(tmp_path, monkeypatch)
+    _point(monkeypatch, mac)
+    assert bidx.main(["--backfill", "--push", "--dry-run"]) == 2
+    git("checkout", "-q", "-b", "topic", cwd=mac)
+    assert bidx.main(["--backfill", "--push"]) == 1
+    assert "topic" in capsys.readouterr().err
+
 def test_views_bucket_verified_between_live_and_closed():
     issues = [_issue("UI-1"), _issue("UI-2", status="verified"),
               _issue("UI-3", status="closed", closed="2026-09-01", commit="abc1234")]

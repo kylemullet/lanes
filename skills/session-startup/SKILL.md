@@ -88,7 +88,7 @@ steps live — data mirrors to sweep, a server to start, a long-running measurem
 launch, a scheduled check to offer — and they run here, right after the pull, so that
 anything slow overlaps with the rest of startup. The protocol skill never carries them.
 
-### 2d. Close verified issues — the certifying machine only
+### 2d. Close verified issues — certifying machines only
 
 A worktree lane ends with its issue at `status: verified`, Resolution filled, `commit:`
 null — the lane cannot know its resolving commit's hash (the close rides in that commit,
@@ -98,20 +98,32 @@ becomes knowable:
 ```bash
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --dry-run    # what would close, and what can't
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --commit     # fill commit:, flip to closed, ONE commit by path
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --push       # the same, fetched first and pushed (see below)
 ```
 
 For every `verified` issue it finds the resolving commit on HEAD by the exact subject the
-Resolution cites in backticks, fills `commit:`, sets `status: closed` (+ `closed:` today
-if the lane left it null), and — with `--commit` — stages ONLY those issue files and
-commits `docs(backlog): close <IDs> — backfill resolving commit hash`. **No push.** The
-commit rides to origin with the next push; mention it in the Brief.
+Resolution cites in backticks, fills `commit:`, sets `status: closed` (+ `closed:` = the
+resolving commit's date if the lane left it null), and — with `--commit` — stages ONLY
+those issue files and commits `docs(backlog): close <IDs> — backfill resolving commit
+hash`. `--commit` does not push: the commit rides to origin with the next push. Mention
+it in the Brief.
+
+**`--push`** is `--commit` made safe for several certifying machines at once. It fetches and
+fast-forwards first, so it closes only what origin still shows as verified. It pushes only
+when everything ahead of origin is under the backlog dir; otherwise the commit stays local
+for the operator's OK. On a rejected push it rebases and retries, never forces. The close is
+deterministic (commit date, fixed 7-character hash), so two machines closing one issue
+write identical files, and the second one's commit merges cleanly or drops out. Use it where
+the project lets a backlog-only push go to the main branch without an OK; elsewhere use
+`--commit`.
 
 Rules:
 
 - **Gate: this machine's row `certifies`.** The script enforces it itself and refuses
   elsewhere. A non-certifying machine's brief lists verified issues as *awaiting the
-  certifying operator's close* and leaves the files alone. One writer, no two-clone race
-  on the same issue files.
+  certifying operator's close* and leaves the files alone. Several certifying machines
+  may each run it, concurrently included (LANES-6). The convergence above replaces the
+  old single-writer rule.
 - A verified issue the script SKIPS (exit 1, listed on stderr) is a real finding: its
   Resolution is the stub, or its cited subject is not on HEAD (the subject drifted from
   the actual commit, or the lane never pushed), or its resolving commit reached outside

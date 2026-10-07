@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.12 — backfill on concurrent certifying machines (2026-10-07)
+
+- `--backfill` closes deterministically. `closed:` is the resolving commit's committer date
+  (it used to be the day the backfill ran), and `commit:` is a fixed 7-character abbreviation
+  (git's default length scales with each clone's object count). Two machines closing the same
+  issue now write byte-identical files (LANES-6).
+- New `--backfill --push`. It fetches and fast-forwards the main branch before scanning, commits,
+  and pushes, but only when every commit ahead of origin touches the backlog dir alone. On a
+  rejected push it re-fetches and rebases: an identical close merges cleanly or drops out, a real
+  conflict aborts the rebase and leaves the commit local. It never forces. Several certifying
+  machines may run it at once, so no machine has to be named the single writer.
+
 ## 0.4.11 — one person, two machines (2026-10-07)
 
 - Operator rows may share a `short`. A row is a machine (`id` and the `(name, platform)` pair stay

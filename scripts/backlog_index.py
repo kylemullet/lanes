@@ -13,7 +13,7 @@ Usage (from anywhere inside the repo; `--root` overrides):
   python3 backlog_index.py --report    # aged operator view to stdout
   python3 backlog_index.py --report --who <short>|both
   python3 backlog_index.py --serve     # serve the view, re-parsing on every request
-  python3 backlog_index.py --backfill [--dry-run] [--commit]   # the certifying machine only
+  python3 backlog_index.py --backfill [--dry-run] [--commit] [--push]   # certifying machines only
 
 Configuration comes from `.claude/lanes/config.toml` (see lanes_config.py), resolved
 ONCE at import into module globals -- PROJECTS, TYPES, PRIORITIES, ASSIGNEES, REPORTERS,
@@ -49,9 +49,14 @@ commit's hash: the close rides IN that commit, and the pre-push rebase rewrites 
 anyway. So the lane marks the issue `verified` (Resolution filled, the SUBJECT cited
 in backticks, `commit:` null) and pushes. The certifying machine's session startup --
 after the pull -- runs --backfill, which finds each verified issue's resolving commit
-on HEAD by the exact subject it cites, fills `commit:`, and flips it to `closed`. One
-writer, one mechanical pass. The script refuses to backfill on a machine whose
-operator row does not certify; in solo mode every machine certifies.
+on HEAD by the exact subject it cites, fills `commit:`, and flips it to `closed`. The
+script refuses to backfill on a machine whose operator row does not certify; in solo
+mode every machine certifies. Several certifying machines may backfill at once
+(LANES-6): the close is deterministic (`closed:` is the resolving commit's committer
+date, the hash a fixed 7-character abbreviation), so two machines closing the same
+issue write byte-identical files, and `--push` fetches first, then converges on a
+rejected push by rebasing -- identical closes merge cleanly or drop out. No machine is
+named the single writer, and nothing is ever force-pushed.
 """
 import argparse, datetime, html, re, subprocess, sys, webbrowser
 from pathlib import Path
@@ -341,7 +346,9 @@ def head_subjects():
     """{subject: (full hash, abbreviated hash)} for every commit reachable from HEAD,
     newest wins on a duplicate subject. None if git can't answer."""
     try:
-        proc = subprocess.run(["git", "log", "--format=%H%x00%h%x00%s", "HEAD"], cwd=ROOT,
+        # A FIXED abbreviation (LANES-6): git's default length scales with each clone's
+        # object count, so two machines could otherwise cite one commit two ways.
+        proc = subprocess.run(["git", "log", "--abbrev=7", "--format=%H%x00%h%x00%s", "HEAD"], cwd=ROOT,
                               capture_output=True, text=True, encoding="utf-8", timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -705,12 +712,26 @@ def _rewrite_frontmatter(text, updates):
     return "\n".join(lines)
 
 
+def commit_date(full_hash):
+    """The commit's committer date as YYYY-MM-DD (in the committer's own zone, so every
+    clone reads the same string), or None if git can't answer."""
+    try:
+        proc = subprocess.run(["git", "log", "-1", "--format=%cs", full_hash], cwd=ROOT,
+                              capture_output=True, text=True, encoding="utf-8", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = proc.stdout.strip()
+    return out if proc.returncode == 0 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", out) else None
+
+
 def backfill_verified(issues, subjects=None, today=None, dry_run=False):
     """Close every `verified` issue whose cited subject is on HEAD.
 
     For each: `commit:` <- the resolving commit's abbreviated hash, `status:` <-
-    closed, `closed:` <- today if it was null (a lane that dated it keeps its
-    date). Nothing else in the file changes. Verified issues with no resolvable
+    closed, `closed:` <- the resolving commit's committer date if it was null (a
+    lane that dated it keeps its date; `today` only when git cannot date the
+    commit). The commit date, not the day the backfill ran, is what makes two
+    machines' closes of one issue byte-identical (LANES-6). Nothing else in the file changes. Verified issues with no resolvable
     subject are left alone and returned as `skipped` (they are what --check
     flags), and so is one whose resolving commit reached outside the docs lane
     without a `Docs:` line in the Resolution (INFRA-41) — the backfill runs at
@@ -752,7 +773,7 @@ def backfill_verified(issues, subjects=None, today=None, dry_run=False):
                 continue
         updates = {"status": "closed", "commit": short}
         if not it.get("closed"):
-            updates["closed"] = today
+            updates["closed"] = commit_date(full) or today
         if not dry_run:
             path.write_text(_rewrite_frontmatter(body, updates), encoding="utf-8")
         closed.append((it, short))
@@ -767,6 +788,81 @@ def commit_backfill(closed):
     subprocess.run(["git", "commit", "-q", "-m", BACKFILL_SUBJECT.format(ids=ids)],
                    cwd=ROOT, check=True)
     return BACKFILL_SUBJECT.format(ids=ids)
+
+
+def _git_run(*args):
+    """(returncode, stdout, stderr) of a git command in ROOT; never raises."""
+    try:
+        proc = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
+                              encoding="utf-8", timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+
+def _ancestor(a, b):
+    return _git_run("merge-base", "--is-ancestor", a, b)[0] == 0
+
+
+def sync_main():
+    """Before a --push backfill: fetch, and fast-forward the main branch if it is behind,
+    so the scan only closes what origin still shows as verified. Returns an error string,
+    or None when HEAD now contains `origin/<main>`."""
+    branch = _git_run("rev-parse", "--abbrev-ref", "HEAD")[1]
+    if branch != MAIN_BRANCH:
+        return f"--push runs on `{MAIN_BRANCH}`; this checkout is on `{branch}`"
+    rc, _, err = _git_run("fetch", "-q", "origin", MAIN_BRANCH)
+    if rc:
+        return f"git fetch origin {MAIN_BRANCH} failed: {err}"
+    upstream = f"origin/{MAIN_BRANCH}"
+    if _ancestor(upstream, "HEAD"):
+        return None
+    if _ancestor("HEAD", upstream):
+        rc, _, err = _git_run("merge", "-q", "--ff-only", upstream)
+        return f"fast-forward to {upstream} failed: {err}" if rc else None
+    return (f"local `{MAIN_BRANCH}` and {upstream} have diverged — pull with --rebase first, "
+            "then re-run the backfill")
+
+
+def unpushed_non_backlog_paths():
+    """Paths in commits ahead of origin/<main> that are NOT under the backlog dir."""
+    rc, out, _ = _git_run("log", f"origin/{MAIN_BRANCH}..HEAD", "--name-only", "--format=")
+    if rc:
+        return ["(git log failed)"]
+    prefix = BACKLOG_REL.rstrip("/") + "/"
+    return sorted({p for p in out.splitlines() if p and not p.startswith(prefix)})
+
+
+def push_backfill(attempts=3):
+    """Push the main branch after a backfill commit, converging on a rejected push.
+
+    Pushes only when every commit ahead of origin touches the backlog dir alone (the
+    claim push's guard): anything else on local main is work that needs the operator's
+    OK, so the backfill commit stays local. On a rejection -- another certifying
+    machine pushed first -- fetch and rebase: an identical close merges cleanly or
+    drops out as already upstream. A real conflict aborts the rebase and leaves the
+    commit local. Never forces. Returns (ok, message)."""
+    upstream = f"origin/{MAIN_BRANCH}"
+    for _ in range(attempts):
+        stray = unpushed_non_backlog_paths()
+        if stray:
+            return False, (f"not pushed — local `{MAIN_BRANCH}` carries commits outside "
+                           f"{BACKLOG_REL}/ ({stray[0]}" + (f" +{len(stray) - 1} more" if len(stray) > 1 else "")
+                           + "); push them with the operator's OK")
+        if _ancestor("HEAD", upstream):
+            return True, f"nothing to push — {upstream} already has these closes"
+        rc, _, err = _git_run("push", "-q", "origin", f"HEAD:{MAIN_BRANCH}")
+        if rc == 0:
+            return True, f"pushed to {upstream}"
+        rc, _, ferr = _git_run("fetch", "-q", "origin", MAIN_BRANCH)
+        if rc:
+            return False, f"push rejected and the re-fetch failed: {ferr or err}"
+        rc, _, rerr = _git_run("rebase", "-q", "--autostash", upstream)
+        if rc:
+            _git_run("rebase", "--abort")
+            return False, (f"push rejected; rebasing onto {upstream} conflicted ({rerr.splitlines()[0] if rerr else 'conflict'}) "
+                           "— rebase aborted, the backfill commit is local")
+    return False, f"push rejected {attempts} times — the backfill commit is local; pull and re-run"
 
 
 def _cell(v):
@@ -1373,7 +1469,10 @@ def main(argv=None):
                     help="certifying machine only: fill commit: on every verified issue whose cited subject is on HEAD and close it")
     ap.add_argument("--dry-run", action="store_true", help="with --backfill: report, write nothing")
     ap.add_argument("--commit", action="store_true", dest="do_commit",
-                    help="with --backfill: git add the closed issue files by path and commit (never pushes)")
+                    help="with --backfill: git add the closed issue files by path and commit")
+    ap.add_argument("--push", action="store_true",
+                    help="with --backfill: fetch and fast-forward first, then commit and push; on a "
+                         "rejected push, rebase and retry (several certifying machines may run it at once)")
     args = ap.parse_args(argv)
     if args.root:
         configure(Path(args.root).resolve())
@@ -1421,10 +1520,25 @@ def main(argv=None):
         if not certifies():
             print(f"backfill refused — this clone is {machine_id()!r} "
                   f"(git user.name {git_user_name()!r} + platform {sys.platform!r}), and its "
-                  "operator row does not certify. The backfill is a backlog write that runs "
-                  "on ONE machine only: two clones writing the same issue files is the race "
-                  "the gate exists to prevent. Verified issues are read-only here.", file=sys.stderr)
+                  "operator row does not certify. The backfill closes issues on the operator's "
+                  "behalf, so only a certifying machine runs it. Verified issues are read-only "
+                  "here.", file=sys.stderr)
             return 2
+        if args.push:
+            if args.dry_run:
+                print("--push and --dry-run do not combine — --dry-run writes nothing", file=sys.stderr)
+                return 2
+            args.do_commit = True
+            err = sync_main()
+            if err:
+                print(f"backfill refused — {err}", file=sys.stderr)
+                return 1
+            issues, problems = load_issues()
+            if problems:
+                for p in problems:
+                    print(f"⚠️  {p}", file=sys.stderr)
+                print("backfill refused — fix the structural problems above first", file=sys.stderr)
+                return 1
         closed, skipped = backfill_verified(issues, dry_run=args.dry_run)
         verb = "would close" if args.dry_run else "closed"
         for it, short in closed:
@@ -1438,7 +1552,13 @@ def main(argv=None):
             regenerate()
             if args.do_commit:
                 subject = commit_backfill(closed)
-                print(f"committed: {subject}  (not pushed)")
+                if args.push:
+                    ok, msg = push_backfill()
+                    print(f"committed: {subject}  ({msg})", file=None if ok else sys.stderr)
+                    if not ok:
+                        return 1
+                else:
+                    print(f"committed: {subject}  (not pushed)")
             else:
                 paths = " ".join(str(it["_path"]) for it, _ in closed)
                 print(f"not committed — stage by path: git add -- {paths}")

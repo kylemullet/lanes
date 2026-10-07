@@ -98,7 +98,7 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py              # (re)
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check      # exit 1 on any integrity problem
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # aged view for this machine's operator (--who <short>|both)
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # the HTML view on backlog.view_port, re-parsed per request
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit | --push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short>
 ```
 
@@ -112,7 +112,8 @@ issue whose Resolution does not cite a commit subject on HEAD, a `verified` issu
 reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, and a
 `resolution:` that disagrees with the status. `--backfill` closes verified issues by the exact
 commit subject their Resolution cites, and only on a machine whose operator row certifies (solo
-mode: every machine).
+mode: every machine). The close is deterministic, so several certifying machines may run it at once; `--push`
+fetches first, pushes a backlog-only result, and converges on a rejected push by rebasing.
 
 ## Configuration
 
