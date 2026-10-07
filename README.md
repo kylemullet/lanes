@@ -122,9 +122,11 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py   # land, verify it la
 ```
 
 It never cleans up after a landing it cannot read back from the remote: exit 1 means nothing
-was pushed, removed or deleted. Once landed it runs `backlog_index.py --backfill --push` in the
-main clone, so the lane's `verified` issue closes on landing rather than at the next startup
-(`--no-close` skips it; `--keep`, `--dry-run`, `--onto <branch>`).
+was pushed, removed or deleted. Once landed it runs `backlog_index.py --backfill --push --isolated`,
+so the lane's `verified` issue closes on landing rather than at the next startup. `--isolated`
+closes and pushes from a throwaway worktree at a freshly fetched `origin/<main>`, so another
+session's unpushed claim in the shared main clone cannot block it, and the main clone itself is
+never touched (`--no-close` skips the close; `--keep`, `--dry-run`, `--onto <branch>`).
 
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,

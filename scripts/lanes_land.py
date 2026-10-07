@@ -31,14 +31,18 @@ The sequence, each step gating the next:
      local branch, and delete the remote branch when its tip has landed too (another
      machine may have pushed to it since).
 
-  6. Close the issue that just landed (LANES-21): in the main clone, run
-     `backlog_index.py --backfill --push`. The resolving commit's hash became final at
-     step 4, so `verified` has nothing left to wait for. The backfill fetches and
-     fast-forwards the main clone itself, refuses off the main branch, and pushes only
-     when everything ahead of origin is under the backlog dir; it also closes any other
-     verified issue whose subject is on HEAD. Skipped when landing `--onto` another
-     branch or when the repo has no backlog dir. The operator's landing OK covers it:
-     it is the landed lane's own bookkeeping.
+  6. Close the issue that just landed (LANES-21): run
+     `backlog_index.py --backfill --push --isolated`. The resolving commit's hash became
+     final at step 4, so `verified` has nothing left to wait for. `--isolated` closes from
+     a throwaway worktree detached at a freshly fetched `origin/<main>` and pushes from
+     there (LANES-23): the main clone is shared by every session on the machine, and the
+     first real landing met another session's claim, committed there and not yet pushed,
+     which made an in-place close refuse on the divergence. The main clone's branch,
+     index and files are never touched, so it does not show the close until its next
+     pull. The backfill also closes any other verified issue whose subject is on
+     `origin/<main>`. Skipped when landing `--onto` another branch or when the repo has
+     no backlog dir. The operator's landing OK covers it: it is the landed lane's own
+     bookkeeping.
 
 Exit status: 0 landed (and cleaned, unless --keep); 1 NOT landed -- nothing was
 pushed, removed or deleted; 2 landed, but a clean-up step was skipped or failed (each
@@ -167,13 +171,14 @@ def clean_up(p):
 
 
 def close_landed(p):
-    """Run the backfill in the main clone. Returns (lines, ok); ([], True) when skipped."""
+    """Run the backfill off origin/<main> (`--isolated`, LANES-23), never in the main
+    clone's own checkout. Returns (lines, ok); ([], True) when skipped."""
     if not p["lands_on_main"] or not p["has_backlog"]:   # judged on the landed tree; the main clone has not pulled yet
         return [], True
     script = Path(__file__).resolve().parent / "backlog_index.py"
     try:
         proc = subprocess.run([sys.executable, str(script), "--root", str(p["main_clone"]),
-                               "--backfill", "--push"], cwd=p["main_clone"], capture_output=True,
+                               "--backfill", "--push", "--isolated"], cwd=p["main_clone"], capture_output=True,
                               text=True, encoding="utf-8", timeout=300)
     except (OSError, subprocess.SubprocessError) as e:
         return [f"backfill did not run: {e}"], False

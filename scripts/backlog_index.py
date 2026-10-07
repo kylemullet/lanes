@@ -14,6 +14,7 @@ Usage (from anywhere inside the repo; `--root` overrides):
   python3 backlog_index.py --report --who <short>|both
   python3 backlog_index.py --serve     # serve the view, re-parsing on every request
   python3 backlog_index.py --backfill [--dry-run] [--commit] [--push]   # certifying machines only
+  python3 backlog_index.py --backfill --push --isolated   # the same, off a throwaway worktree at origin/<main>
 
 Configuration comes from `.claude/lanes/config.toml` (see lanes_config.py), resolved
 ONCE at import into module globals -- PROJECTS, TYPES, PRIORITIES, ASSIGNEES, REPORTERS,
@@ -58,7 +59,7 @@ issue write byte-identical files, and `--push` fetches first, then converges on 
 rejected push by rebasing -- identical closes merge cleanly or drop out. No machine is
 named the single writer, and nothing is ever force-pushed.
 """
-import argparse, datetime, html, re, subprocess, sys, webbrowser
+import argparse, datetime, html, re, shutil, subprocess, sys, tempfile, webbrowser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -1070,6 +1071,40 @@ def push_backfill(attempts=3):
     return False, f"push rejected {attempts} times — the backfill commit is local; pull and re-run"
 
 
+def isolated(fn):
+    """Run fn() with this module pointed at a throwaway worktree, detached at a freshly
+    fetched `origin/<main>`; remove the worktree afterwards, whatever fn() did (LANES-23).
+
+    The main clone is shared by every session on the machine, and a claim is committed
+    there before it is pushed. A close that runs in it can meet another session's
+    half-made commit: refusing on the divergence is correct, but it fails exactly when
+    sessions are busy. The throwaway worktree starts from what origin has, so nothing
+    local is in its way, and it never touches the main clone's branch, index or files.
+    A close that could not push is discarded with the worktree: it is deterministic, so
+    the next backfill redoes it byte for byte. Returns fn()'s result, or an error string
+    when the worktree could not be made."""
+    paths = ("ROOT", "BACKLOG", "INDEX", "HTML_VIEW")
+    home = {k: globals()[k] for k in paths}
+    rc, _, err = _git_run("fetch", "-q", "origin", MAIN_BRANCH)
+    if rc:
+        return f"git fetch origin {MAIN_BRANCH} failed: {err}"
+    tmp = Path(tempfile.mkdtemp(prefix="lanes-backfill-"))
+    wt = tmp / ROOT.name
+    rc, _, err = _git_run("worktree", "add", "-q", "--detach", str(wt), f"origin/{MAIN_BRANCH}")
+    if rc:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return f"could not make a worktree at origin/{MAIN_BRANCH}: {err}"
+    try:
+        apply({"ROOT": wt, "BACKLOG": wt / BACKLOG_REL, "INDEX": wt / BACKLOG_REL / "INDEX.md",
+               "HTML_VIEW": wt / BACKLOG_REL / "index.html"})   # same config, the worktree's files
+        return fn()
+    finally:
+        apply(home)                                   # _git_run runs in ROOT: the caller's clone again
+        _git_run("worktree", "remove", "--force", str(wt))
+        shutil.rmtree(tmp, ignore_errors=True)
+        _git_run("worktree", "prune")
+
+
 def _cell(v):
     return (v if v not in (None, "", []) else "—")
 
@@ -1882,6 +1917,47 @@ def serve(port=None, host="127.0.0.1"):
     return 0
 
 
+def run_backfill(args, issues=None, isolated=False):
+    """Close, report, and (per args) commit and push. `isolated`: running inside
+    isolated(), where the views are not regenerated -- they would be written into the
+    throwaway worktree and deleted with it."""
+    if issues is None:
+        issues, problems = load_issues()
+        for p in problems:
+            print(f"⚠️  {p}", file=sys.stderr)
+        if problems:
+            print("backfill refused — fix the structural problems above first", file=sys.stderr)
+            return 1
+    closed, skipped = backfill_verified(issues, dry_run=args.dry_run)
+    verb = "would close" if args.dry_run else "closed"
+    for it, short in closed:
+        print(f"  {verb} {it['id']:>10}  commit: {short}  {it['_path']}")
+    for it, why in skipped:
+        print(f"  SKIPPED {it['id']:>10}  {why}  {it['_path']}", file=sys.stderr)
+    if not closed and not skipped:
+        print("nothing to backfill — no verified issues.")
+        return 0
+    if closed and not args.dry_run:
+        if not isolated:
+            regenerate()
+        if args.do_commit:
+            subject = commit_backfill(closed)
+            if args.push:
+                ok, msg = push_backfill()
+                print(f"committed: {subject}  ({msg})", file=None if ok else sys.stderr)
+                if not ok:
+                    if isolated:
+                        print("  the close was discarded with the throwaway worktree; it is "
+                              "deterministic, so the next backfill redoes it", file=sys.stderr)
+                    return 1
+            else:
+                print(f"committed: {subject}  (not pushed)")
+        else:
+            paths = " ".join(str(it["_path"]) for it, _ in closed)
+            print(f"not committed — stage by path: git add -- {paths}")
+    return 1 if skipped else 0
+
+
 def main(argv=None):
     use_utf8_console()
     ap = argparse.ArgumentParser(description="lanes backlog: views, report, integrity check, backfill")
@@ -1909,6 +1985,9 @@ def main(argv=None):
     ap.add_argument("--push", action="store_true",
                     help="with --backfill: fetch and fast-forward first, then commit and push; on a "
                          "rejected push, rebase and retry (several certifying machines may run it at once)")
+    ap.add_argument("--isolated", action="store_true",
+                    help="with --backfill --push: close and push from a throwaway worktree at a freshly "
+                         "fetched origin/<main>, never touching this checkout (what lanes_land.py runs)")
     args = ap.parse_args(argv)
     if args.root:
         configure(Path(args.root).resolve())
@@ -1960,11 +2039,21 @@ def main(argv=None):
                   "behalf, so only a certifying machine runs it. Verified issues are read-only "
                   "here.", file=sys.stderr)
             return 2
+        if args.isolated and not args.push:
+            print("--isolated needs --push — it exists to push a close past a busy checkout",
+                  file=sys.stderr)
+            return 2
         if args.push:
             if args.dry_run:
                 print("--push and --dry-run do not combine — --dry-run writes nothing", file=sys.stderr)
                 return 2
             args.do_commit = True
+            if args.isolated:
+                out = isolated(lambda: run_backfill(args, isolated=True))
+                if isinstance(out, str):
+                    print(f"backfill refused — {out}", file=sys.stderr)
+                    return 1
+                return out
             err = sync_main()
             if err:
                 print(f"backfill refused — {err}", file=sys.stderr)
@@ -1975,30 +2064,7 @@ def main(argv=None):
                     print(f"⚠️  {p}", file=sys.stderr)
                 print("backfill refused — fix the structural problems above first", file=sys.stderr)
                 return 1
-        closed, skipped = backfill_verified(issues, dry_run=args.dry_run)
-        verb = "would close" if args.dry_run else "closed"
-        for it, short in closed:
-            print(f"  {verb} {it['id']:>10}  commit: {short}  {it['_path']}")
-        for it, why in skipped:
-            print(f"  SKIPPED {it['id']:>10}  {why}  {it['_path']}", file=sys.stderr)
-        if not closed and not skipped:
-            print("nothing to backfill — no verified issues.")
-            return 0
-        if closed and not args.dry_run:
-            regenerate()
-            if args.do_commit:
-                subject = commit_backfill(closed)
-                if args.push:
-                    ok, msg = push_backfill()
-                    print(f"committed: {subject}  ({msg})", file=None if ok else sys.stderr)
-                    if not ok:
-                        return 1
-                else:
-                    print(f"committed: {subject}  (not pushed)")
-            else:
-                paths = " ".join(str(it["_path"]) for it, _ in closed)
-                print(f"not committed — stage by path: git add -- {paths}")
-        return 1 if skipped else 0
+        return run_backfill(args, issues)
 
     INDEX.parent.mkdir(parents=True, exist_ok=True)
     INDEX.write_text(render_index(issues), encoding="utf-8")

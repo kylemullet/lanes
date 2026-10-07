@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.19 — the landing's close runs off origin, past a busy main clone (2026-10-07)
+
+- **`backlog_index.py --backfill --push --isolated`** (LANES-23). Closes and pushes from a
+  throwaway worktree detached at a freshly fetched `origin/<main>`, then removes it. The main
+  clone's branch, index and files are never touched, so another session's claim, committed
+  there and not yet pushed, no longer makes the close refuse on the divergence. That refusal is
+  what the first real `lanes_land.py` landing hit. A close that cannot push is discarded with
+  the worktree; it is deterministic, so the next backfill redoes it. `--isolated` without
+  `--push` is refused.
+- **`lanes_land.py` closes with `--isolated`.** The main clone no longer fast-forwards to the
+  close as part of the landing; it shows the close at its next pull. `worktree-increment` 9.7
+  (and its by-hand form) and the README say so.
+- Startup and closeout keep the in-place `--backfill --push`. Startup runs it right after its
+  own pull so everything downstream reads the closed state, and closeout runs it in a clone
+  it has just reconciled.
+
 ## 0.4.18 — lanes are recorded, named after their slice, and checked (2026-10-07)
 
 - **`lane:` frontmatter** (LANES-10). `lanes_claim.py` writes `lane: <lead-ID>@<YYYY-MM-DD>` on

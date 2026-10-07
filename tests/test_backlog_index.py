@@ -1255,3 +1255,60 @@ def test_one_person_on_two_certifying_machines_appears_once(tmp_path):
     s = bidx.settings(root=tmp_path, raw=raw)
     assert s["CERTIFIER_LABEL"] == "kyle's" and s["DEFAULT_ASSIGNEE"] == "kyle"
     assert s["ASSIGNEES"] == ("kyle", "mike", "shared") and s["REPORTERS"] == ("claude", "kyle", "mike")
+
+
+# --- --isolated: close from a throwaway worktree at origin/<main> (LANES-23) ---
+
+def _worktrees(c):
+    return [l for l in git("worktree", "list", "--porcelain", cwd=c).splitlines() if l.startswith("worktree ")]
+
+
+def test_isolated_push_closes_past_another_sessions_unpushed_claim(tmp_path, monkeypatch):
+    """The shared main clone carries another session's claim, committed and not yet
+    pushed, plus an edit in progress: the in-place --push refuses on the divergence once
+    origin moves; --isolated closes on origin and leaves every byte of the clone alone."""
+    origin, (mac, win) = _two_clones(tmp_path, monkeypatch)
+    (win / "note.md").write_text("origin moved\n", encoding="utf-8")   # origin moves on
+    git("add", "note.md", cwd=win)
+    git("commit", "-q", "-m", "docs: elsewhere", cwd=win)
+    git("push", "-q", "origin", "main", cwd=win)
+    claim = mac / "docs/backlog/UI/UI-2-y.md"
+    claim.write_text(_fm(id="UI-2", project="UI", status="open", resolution=None) + "# UI-2 — y\n",
+                     encoding="utf-8")
+    git("add", str(claim), cwd=mac)
+    git("commit", "-q", "-m", "docs(backlog): claim UI-2", cwd=mac)
+    (mac / "wip.txt").write_text("mid-edit\n", encoding="utf-8")
+    head = git("rev-parse", "HEAD", cwd=mac)
+    _point(monkeypatch, mac)
+    assert bidx.main(["--backfill", "--push"]) == 1                     # the LANES-23 refusal
+    assert bidx.main(["--backfill", "--push", "--isolated"]) == 0
+    meta, _ = bidx.parse_frontmatter(git("show", "main:docs/backlog/UI/UI-1-x.md", cwd=origin))
+    assert meta["status"] == "closed" and meta["closed"] == "2026-09-01"
+    assert git("log", "-1", "--format=%s", "main", cwd=origin).startswith("docs(backlog): close UI-1")
+    assert git("rev-parse", "HEAD", cwd=mac) == head                    # the claim, untouched
+    assert git("rev-parse", "--abbrev-ref", "HEAD", cwd=mac) == "main"
+    assert "status: verified" in (mac / "docs/backlog/UI/UI-1-x.md").read_text(encoding="utf-8")
+    assert (mac / "wip.txt").read_text(encoding="utf-8") == "mid-edit\n"
+    assert git("status", "--porcelain", cwd=mac) == "?? wip.txt"
+    assert len(_worktrees(mac)) == 1                                    # the throwaway is gone
+    assert bidx.ROOT == mac                                             # and the module points home
+
+
+def test_isolated_push_works_off_the_main_branch_and_converges_with_an_in_place_close(tmp_path, monkeypatch):
+    origin, (mac, win) = _two_clones(tmp_path, monkeypatch)
+    git("checkout", "-q", "-b", "some-lane", cwd=mac)
+    _point(monkeypatch, win)
+    assert bidx.main(["--backfill", "--push"]) == 0                     # win closed it first
+    _point(monkeypatch, mac)
+    assert bidx.main(["--backfill", "--push", "--isolated"]) == 0      # nothing left to close
+    log = git("log", "--format=%s", "main", cwd=origin).splitlines()
+    assert log.count("docs(backlog): close UI-1 — backfill resolving commit hash") == 1
+    assert git("rev-parse", "--abbrev-ref", "HEAD", cwd=mac) == "some-lane"
+    assert len(_worktrees(mac)) == 1
+
+
+def test_isolated_needs_push(tmp_path, monkeypatch, capsys):
+    _, (mac, _) = _two_clones(tmp_path, monkeypatch)
+    _point(monkeypatch, mac)
+    assert bidx.main(["--backfill", "--commit", "--isolated"]) == 2
+    assert "--isolated needs --push" in capsys.readouterr().err

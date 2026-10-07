@@ -206,8 +206,12 @@ def test_landing_closes_the_landed_issue_on_origin(lane, tmp_path, capsys):
     assert "status: closed" in text and f"commit: {tip}" in text
     assert git("--git-dir", str(origin), "log", "-1", "--format=%s", "main", cwd=tmp_path).startswith(
         "docs(backlog): close CORE-1")
-    assert git("rev-parse", "HEAD", cwd=clone) == git("--git-dir", str(origin), "rev-parse", "main", cwd=tmp_path)
     assert "close:" in capsys.readouterr().out
+    # The close ran off origin/main (LANES-23): the main clone has not pulled it yet,
+    # and the throwaway worktree it ran in is gone.
+    assert git("log", "-1", "--format=%s", cwd=clone) == "init"
+    assert len([l for l in git("worktree", "list", "--porcelain", cwd=clone).splitlines()
+                if l.startswith("worktree ")]) == 1
 
 
 def test_no_close_leaves_the_issue_verified(lane, tmp_path):
@@ -224,14 +228,40 @@ def test_keep_still_closes_the_landed_issue(lane, tmp_path):
     assert "status: closed" in _origin_issue(origin, tmp_path) and wt.is_dir()
 
 
-def test_a_close_that_cannot_push_is_reported_not_fatal(lane, tmp_path, capsys):
-    """The main clone carries a local non-backlog commit: the backfill keeps its close
-    local (it needs the operator's OK), so the landing reports exit 2, not a failure."""
+def test_the_close_lands_past_unpushed_commits_in_the_main_clone(lane, tmp_path):
+    """LANES-23: the shared main clone carries another session's claim, committed and not
+    yet pushed (and, for good measure, a local non-backlog commit). The close used to
+    refuse on the divergence; it now lands on origin and leaves the clone's commits alone."""
     origin, clone, wt = lane
     _verify_in_the_resolving_commit(wt)
+    d = clone / "docs" / "backlog" / "CORE"
+    d.mkdir(parents=True)
+    (d / "CORE-2-next.md").write_text(ISSUE.replace("CORE-1", "CORE-2").replace("status: verified", "status: open")
+                                      .replace("resolution: done", "resolution: null"), encoding="utf-8")
+    git("add", "docs/backlog/CORE/CORE-2-next.md", cwd=clone)
+    git("commit", "-q", "-m", "docs(backlog): another session's claim", cwd=clone)
     (clone / "local.txt").write_text("unpushed\n", encoding="utf-8")
     git("add", "local.txt", cwd=clone)
     git("commit", "-q", "-m", "local work", cwd=clone)
+    head = git("rev-parse", "HEAD", cwd=clone)
+    assert ll.main([]) == 0
+    assert "status: closed" in _origin_issue(origin, tmp_path)
+    assert git("rev-parse", "HEAD", cwd=clone) == head
+    assert git("status", "--porcelain", cwd=clone) == ""
+    pushed = git("--git-dir", str(origin), "log", "--format=%s", "main", cwd=tmp_path)
+    assert "local work" not in pushed and "another session's claim" not in pushed
+
+
+def test_a_close_that_cannot_push_is_reported_not_fatal(lane, tmp_path, capsys):
+    """Origin refuses the close commit: the landing stands, exit 2 names the backstop."""
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    hook = origin / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\nwhile read old new ref; do\n"
+                    "  git log --format=%s \"$new\" -1 | grep -q '^docs(backlog): close' && exit 1\n"
+                    "done\nexit 0\n", encoding="utf-8")
+    hook.chmod(0o755)
     assert ll.main([]) == ll.CLEANUP_INCOMPLETE
     assert "status: verified" in _origin_issue(origin, tmp_path)
-    assert "backstop" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "backstop" in err and "discarded with the throwaway worktree" in err
