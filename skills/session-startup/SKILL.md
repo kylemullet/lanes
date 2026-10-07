@@ -90,6 +90,12 @@ anything slow overlaps with the rest of startup. The protocol skill never carrie
 
 ### 2d. Close verified issues — certifying machines only
 
+**The backstop.** A lane landed through `lanes_land.py` closes its own issue on landing,
+and `session-closeout` sweeps the rest, so on a healthy day this finds nothing. It runs
+anyway: a lane landed by hand, a close that could not push, a session that ended early.
+Run it and report the result; it needs no OK where the project lets a backlog-only push
+through, so it is never offered as a question.
+
 A worktree lane ends with its issue at `status: verified`, Resolution filled, `commit:`
 null — the lane cannot know its resolving commit's hash (the close rides in that commit,
 and the pre-push rebase rewrites it). Startup, which has just pulled, is where the hash

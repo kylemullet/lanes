@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.15 — a lane's issue closes when it lands (2026-10-07)
+
+- `lanes_land.py` closes the issue it just landed (LANES-21). After the landing reads back and the
+  clean-up, it runs `backlog_index.py --backfill --push` in the main clone. The resolving hash is
+  final at that point, so `verified` no longer waits a whole session for the next startup. The
+  backfill's own guards hold: it fast-forwards first, refuses off the main branch, and pushes only
+  backlog-only commits. A close that cannot push exits 2 and is left to startup. `--no-close` skips
+  it, and nothing runs for `--onto` another branch.
+- `session-closeout` step 2 sweeps `--backfill --push` (or `--commit`, where a backlog-only push
+  needs an OK) for lanes landed by hand or by another session. `session-startup` step 2d is the
+  backstop.
+- All three skills: housekeeping that needs no OK (the backfill, branch and claim pushes) is done and
+  reported, never offered as a question.
+
 ## 0.4.14 — land, verify, then clean up (2026-10-07)
 
 - New `scripts/lanes_land.py`: `worktree-increment` step 9.7's landing and step 10's clean-up as

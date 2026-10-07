@@ -355,9 +355,10 @@ step fails the push gate.
    stopped. Either way the ⏳ marker goes too. **Both halves, again.**
 
    **`verified` means landed, awaiting close.** The lane never writes `closed` or a
-   `commit:` hash: the hash is unknowable here. The certifying machine's next
-   `session-startup` runs `--backfill`, which finds the resolving commit on HEAD by the
-   subject the Resolution cites and closes the issue mechanically. `wont-do` is not a
+   `commit:` hash: the hash is unknowable here. The landing (9.7) closes it the moment
+   the hash is final: `--backfill` finds the resolving commit on HEAD by the subject the
+   Resolution cites and closes the issue mechanically. `session-closeout` sweeps whatever
+   that missed, and `session-startup` is the backstop. `wont-do` is not a
    lane outcome: an issue closed without a change goes straight to `closed` with
    `resolution: wont-do` and `commit: null`.
 
@@ -416,6 +417,16 @@ step fails the push gate.
    and branch (a server still up on this lane's port, say); `--dry-run` runs every check;
    `--onto <branch>` lands on an integration branch other than `git.main_branch`.
 
+   **Then it closes the issue that just landed** — in the main clone,
+   `backlog_index.py --backfill --push`. The hash became final when the landing read
+   back, so `verified` has nothing left to wait for. The backfill fast-forwards the main
+   clone first, refuses off the main branch, pushes only when everything ahead of origin
+   is under `backlog.dir`, and closes every other verified issue whose subject is on HEAD
+   too. The operator's landing OK covers this close: it is the landed lane's own
+   bookkeeping. Its lines print as `close: …`; a close that could not push exits `2` and the
+   next startup closes it. `--no-close` skips it. Not run for `--onto` another branch.
+   (`incidents.md` → "Six verified issues and a question".)
+
    On exit `1` because origin moved: rebase + retest (6.1), then run it again. Never
    force. `<branch>:<main_branch>` publishes exactly this branch's commits and cannot
    sweep another session's unpushed work.
@@ -430,6 +441,9 @@ step fails the push gate.
    git -C <worktree> fetch origin
    git -C <worktree> merge-base --is-ancestor HEAD origin/<main_branch>   # landed
    ```
+
+   and then, in the main clone, once `landed` has printed success:
+   `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --push`.
 
    🚫 **Never join the landing and the clean-up in one command line** — not with `;`, not
    with `&&` after a pipe. A failed fast-forward is routine once sessions run
@@ -467,6 +481,10 @@ step fails the push gate.
    restores it (`incidents.md` → "The clean-up that ran after a failed landing").
 3. Optionally `git pull --ff-only` the main checkout so it is not left stale (skip if
    another session is active in it — theirs pulls at startup).
+
+**Housekeeping that needs no OK is done and reported, never offered.** The post-landing
+close, the branch push, the claim pushes: run them, then say what they did. Asking
+"shall I run the backfill?" hands the operator a decision the protocol already made.
 
 ## What this skill does NOT cover
 

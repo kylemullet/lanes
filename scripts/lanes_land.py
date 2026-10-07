@@ -7,6 +7,7 @@ Usage (from inside the lane's worktree, after the operator's landing OK):
   python3 lanes_land.py --keep       # land and verify; leave the worktree and the branch
   python3 lanes_land.py --dry-run    # every check, no push, no clean-up
   python3 lanes_land.py --onto next  # land on another integration branch than git.main_branch
+  python3 lanes_land.py --no-close   # land and clean up; leave the backfill to closeout/startup
 
 `worktree-increment` step 9.7 and step 10 as one operation whose order cannot be
 broken (LANES-20). The skill used to describe them as separate prose steps, and a
@@ -30,9 +31,19 @@ The sequence, each step gating the next:
      local branch, and delete the remote branch when its tip has landed too (another
      machine may have pushed to it since).
 
+  6. Close the issue that just landed (LANES-21): in the main clone, run
+     `backlog_index.py --backfill --push`. The resolving commit's hash became final at
+     step 4, so `verified` has nothing left to wait for. The backfill fetches and
+     fast-forwards the main clone itself, refuses off the main branch, and pushes only
+     when everything ahead of origin is under the backlog dir; it also closes any other
+     verified issue whose subject is on HEAD. Skipped when landing `--onto` another
+     branch or when the repo has no backlog dir. The operator's landing OK covers it:
+     it is the landed lane's own bookkeeping.
+
 Exit status: 0 landed (and cleaned, unless --keep); 1 NOT landed -- nothing was
 pushed, removed or deleted; 2 landed, but a clean-up step was skipped or failed (each
-is named: the work is on the main branch, so what is left is litter, not loss).
+is named: the work is on the main branch, so what is left is litter, not loss), or the
+close did not complete (the startup backfill is the backstop).
 
 The operator's OK is the skill's gate, not this script's: run it after the OK.
 """
@@ -109,7 +120,8 @@ def plan(cwd, onto=None):
                       "re-verify, then run this again (never force)")
     _, head, _ = git("rev-parse", "HEAD", cwd=top)
     return {"top": top, "main_clone": main_clone, "branch": branch, "main": main,
-            "upstream": upstream, "head": head}
+            "upstream": upstream, "head": head,
+            "lands_on_main": main == cfg["main_branch"], "has_backlog": (top / cfg["backlog_dir"]).is_dir()}
 
 
 def land(p):
@@ -154,11 +166,28 @@ def clean_up(p):
     return left
 
 
+def close_landed(p):
+    """Run the backfill in the main clone. Returns (lines, ok); ([], True) when skipped."""
+    if not p["lands_on_main"] or not p["has_backlog"]:   # judged on the landed tree; the main clone has not pulled yet
+        return [], True
+    script = Path(__file__).resolve().parent / "backlog_index.py"
+    try:
+        proc = subprocess.run([sys.executable, str(script), "--root", str(p["main_clone"]),
+                               "--backfill", "--push"], cwd=p["main_clone"], capture_output=True,
+                              text=True, encoding="utf-8", timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        return [f"backfill did not run: {e}"], False
+    lines = [l for l in (proc.stdout + proc.stderr).splitlines() if l.strip()]
+    return lines, proc.returncode == 0
+
+
 def main(argv=None):
     use_utf8_console()
     ap = argparse.ArgumentParser(description="lanes: land a lane's branch, verify, then clean up")
     ap.add_argument("--keep", action="store_true", help="land and verify; leave the worktree and the branch")
     ap.add_argument("--dry-run", action="store_true", help="run every check; push nothing, remove nothing")
+    ap.add_argument("--no-close", action="store_true",
+                    help="skip the post-landing backfill that closes the landed issue")
     ap.add_argument("--onto", default=None, metavar="BRANCH",
                     help="land on BRANCH instead of git.main_branch (a repo whose work integrates on another branch)")
     args = ap.parse_args(argv)
@@ -177,16 +206,25 @@ def main(argv=None):
         print(f"NOT LANDED — {reason}. Nothing was removed or deleted.", file=sys.stderr)
         return NOT_LANDED
     print(f"landed: {p['branch']} @ {short} is on {p['upstream']}")
+    status = 0
     if args.keep:
         print("kept: the worktree and the branch (--keep)")
-        return 0
-    left = clean_up(p)
-    for line in left:
-        print(f"clean-up: {line}", file=sys.stderr)
-    if left:
-        return CLEANUP_INCOMPLETE
-    print(f"cleaned: worktree {p['top']} removed, branch {p['branch']} deleted")
-    return 0
+    else:
+        left = clean_up(p)
+        for line in left:
+            print(f"clean-up: {line}", file=sys.stderr)
+        if left:
+            status = CLEANUP_INCOMPLETE
+        else:
+            print(f"cleaned: worktree {p['top']} removed, branch {p['branch']} deleted")
+    if not args.no_close:
+        lines, ok = close_landed(p)
+        for line in lines:
+            print(f"close: {line}", file=sys.stdout if ok else sys.stderr)
+        if not ok:
+            print("close: not completed — the next startup's backfill is the backstop", file=sys.stderr)
+            status = CLEANUP_INCOMPLETE
+    return status
 
 
 if __name__ == "__main__":

@@ -146,3 +146,92 @@ def test_a_remote_branch_with_unlanded_commits_is_kept(lane, tmp_path, capsys):
     assert ll.main([]) == ll.CLEANUP_INCOMPLETE
     assert "core-1-work" in _remote_heads(origin, tmp_path)
     assert "carries commits not on origin/main" in capsys.readouterr().err
+
+
+# --- close the landed issue (LANES-21) --------------------------------------
+
+ISSUE = """---
+id: CORE-1
+project: CORE
+type: story
+status: verified
+priority: normal
+blocked_on: null
+assignee: tester
+opened: 2026-10-07
+closed: null
+commit: null
+resolution: done
+links: []
+---
+
+# CORE-1 — the lane
+
+## Context
+
+x
+
+## Current status
+
+Verified.
+
+## Resolution
+
+Shipped by `feat: the lane (CORE-1)`.
+
+Docs: nothing — this increment changed no documented behavior.
+"""
+
+
+def _verify_in_the_resolving_commit(wt):
+    """The lane's verify rides in its resolving commit, as worktree-increment step 9 says."""
+    d = wt / "docs" / "backlog" / "CORE"
+    d.mkdir(parents=True)
+    (d / "CORE-1-the-lane.md").write_text(ISSUE, encoding="utf-8")
+    git("add", "docs/backlog/CORE/CORE-1-the-lane.md", cwd=wt)
+    git("commit", "-q", "--amend", "--no-edit", cwd=wt)
+    git("push", "-q", "-f", "origin", "core-1-work", cwd=wt)
+
+
+def _origin_issue(origin, tmp_path):
+    return git("--git-dir", str(origin), "show", "main:docs/backlog/CORE/CORE-1-the-lane.md", cwd=tmp_path)
+
+
+def test_landing_closes_the_landed_issue_on_origin(lane, tmp_path, capsys):
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    tip = git("rev-parse", "--short=7", "HEAD", cwd=wt)
+    assert ll.main([]) == 0
+    text = _origin_issue(origin, tmp_path)
+    assert "status: closed" in text and f"commit: {tip}" in text
+    assert git("--git-dir", str(origin), "log", "-1", "--format=%s", "main", cwd=tmp_path).startswith(
+        "docs(backlog): close CORE-1")
+    assert git("rev-parse", "HEAD", cwd=clone) == git("--git-dir", str(origin), "rev-parse", "main", cwd=tmp_path)
+    assert "close:" in capsys.readouterr().out
+
+
+def test_no_close_leaves_the_issue_verified(lane, tmp_path):
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    assert ll.main(["--no-close"]) == 0
+    assert "status: verified" in _origin_issue(origin, tmp_path)
+
+
+def test_keep_still_closes_the_landed_issue(lane, tmp_path):
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    assert ll.main(["--keep"]) == 0
+    assert "status: closed" in _origin_issue(origin, tmp_path) and wt.is_dir()
+
+
+def test_a_close_that_cannot_push_is_reported_not_fatal(lane, tmp_path, capsys):
+    """The main clone carries a local non-backlog commit: the backfill keeps its close
+    local (it needs the operator's OK), so the landing reports exit 2, not a failure."""
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    (clone / "local.txt").write_text("unpushed\n", encoding="utf-8")
+    git("add", "local.txt", cwd=clone)
+    git("commit", "-q", "-m", "local work", cwd=clone)
+    assert ll.main([]) == ll.CLEANUP_INCOMPLETE
+    assert "status: verified" in _origin_issue(origin, tmp_path)
+    assert "backstop" in capsys.readouterr().err

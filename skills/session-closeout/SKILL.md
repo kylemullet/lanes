@@ -127,6 +127,17 @@ current understanding. At every closeout, either operator:
   before push is rewritten by the step-7 rebase and is a dead link elsewhere. An issue
   closed without a change is `resolution: wont-do`, `commit: null`. Each operator's
   closures of their own issues are authoritative.
+- **Sweep the verified issues — certifying machines, done and reported, never offered:**
+
+  ```bash
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill --push
+  ```
+
+  A lane landed through `lanes_land.py` closed its own issue; this catches the rest — a
+  lane landed by hand, or by another session — so `verified` rows do not sit until the
+  next startup. Use `--commit` instead where the project does not let a backlog-only
+  push reach the main branch without an OK. A SKIPPED issue is a finding: fix its
+  Resolution (session-startup step 2d) rather than leaving it for the next session.
 - **Queue what this session surfaced:** one issue per new item —
 
   ```bash

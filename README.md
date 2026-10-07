@@ -107,11 +107,13 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type
 And one for the end of a lane, run from its worktree after the operator's landing OK:
 
 ```bash
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py   # land, verify it landed, THEN remove the worktree + branch (--keep, --dry-run)
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py   # land, verify it landed, THEN remove the worktree + branch and close the issue
 ```
 
 It never cleans up after a landing it cannot read back from the remote: exit 1 means nothing
-was pushed, removed or deleted.
+was pushed, removed or deleted. Once landed it runs `backlog_index.py --backfill --push` in the
+main clone, so the lane's `verified` issue closes on landing rather than at the next startup
+(`--no-close` skips it; `--keep`, `--dry-run`, `--onto <branch>`).
 
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,

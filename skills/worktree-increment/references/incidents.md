@@ -120,6 +120,16 @@ sessions a lost fast-forward is routine. The fix is mechanical, because the pros
 had just been broken: `lanes_land.py` gates every clean-up step on a landing it reads
 back from the remote, and the branch is deleted only once it has landed.
 
+## Six verified issues and a question (2026-10-07)
+
+A session landed two lanes, then ended by asking the operator whether to run the backfill
+for six verified issues. The backfill needed no OK, and nothing in the protocol would
+run it before the next startup, a whole session later. It lived at startup because a
+lane cannot know its resolving hash: the pre-push rebase rewrites it. That reason ends
+the moment the landing reads back from the remote. So the landing closes its own issue,
+closeout sweeps what is left, and startup is the backstop. Housekeeping the protocol has
+already authorized is run and reported, never put to the operator as a question.
+
 ## The `cd &&` that was refused (2026-09-01)
 
 A permission allow-rule for `git *` is a PREFIX match over the command string, so `cd

@@ -94,6 +94,17 @@ def test_landing_runs_through_the_land_script_and_never_shares_a_line_with_clean
     assert (ROOT / "scripts" / "lanes_land.py").is_file()
 
 
+def test_the_landed_issue_closes_on_landing_and_closeout_sweeps():
+    """LANES-21: verified issues waited a whole session for the next startup."""
+    inc = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    assert "closes the issue that just landed" in inc
+    assert "done and reported, never offered" in inc
+    close = (ROOT / "skills/session-closeout/SKILL.md").read_text(encoding="utf-8")
+    assert "backlog_index.py --backfill --push" in close and "never offered" in close
+    start = (ROOT / "skills/session-startup/SKILL.md").read_text(encoding="utf-8")
+    assert "**The backstop.**" in start
+
+
 def test_plugin_validates_strict():
     """A missing executable is a FileNotFoundError from subprocess, never a
     "command not found" on stderr -- the first CI run died on exactly that."""
