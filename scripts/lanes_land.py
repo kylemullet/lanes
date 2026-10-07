@@ -1,0 +1,193 @@
+"""Land a lane's branch on the main branch, verify it landed, and only then clean up.
+
+Part of the `lanes` plugin. Stdlib-only; runs on any machine with no virtualenv.
+
+Usage (from inside the lane's worktree, after the operator's landing OK):
+  python3 lanes_land.py              # land, verify, remove the worktree, delete the branch
+  python3 lanes_land.py --keep       # land and verify; leave the worktree and the branch
+  python3 lanes_land.py --dry-run    # every check, no push, no clean-up
+  python3 lanes_land.py --onto next  # land on another integration branch than git.main_branch
+
+`worktree-increment` step 9.7 and step 10 as one operation whose order cannot be
+broken (LANES-20). The skill used to describe them as separate prose steps, and a
+session ran them as one shell line joined by `;`: the fast-forward check failed
+because another session had pushed seconds earlier, nothing landed, and the
+clean-up ran anyway -- the worktree removed and the branch deleted locally AND on
+origin. The commit survived only as an unreachable object.
+
+The sequence, each step gating the next:
+
+  1. Refuse, touching nothing, when this is the main clone or the main branch, the
+     tree has uncommitted or untracked changes, or this machine's operator row does
+     not certify.
+  2. Fetch, and refuse unless `origin/<main>` is an ancestor of HEAD (a fast-forward).
+     Losing that race is routine with concurrent sessions; the answer is rebase and
+     re-verify, never force.
+  3. Push `<branch>:<main>` -- exactly this branch's commits.
+  4. Re-fetch and require HEAD to be an ancestor of `origin/<main>`: "landed" is a
+     fact read back from the remote, not inferred from a push exit status.
+  5. Only then, from the main clone: remove the worktree (never `--force`), delete the
+     local branch, and delete the remote branch when its tip has landed too (another
+     machine may have pushed to it since).
+
+Exit status: 0 landed (and cleaned, unless --keep); 1 NOT landed -- nothing was
+pushed, removed or deleted; 2 landed, but a clean-up step was skipped or failed (each
+is named: the work is on the main branch, so what is left is litter, not loss).
+
+The operator's OK is the skill's gate, not this script's: run it after the OK.
+"""
+import argparse, subprocess, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import use_utf8_console  # noqa: E402
+import lanes_config as lc              # noqa: E402
+
+NOT_LANDED, CLEANUP_INCOMPLETE = 1, 2
+
+
+def git(*args, cwd):
+    """(returncode, stdout, stderr); never raises."""
+    try:
+        proc = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                              encoding="utf-8", timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+
+def ancestor(a, b, cwd):
+    return git("merge-base", "--is-ancestor", a, b, cwd=cwd)[0] == 0
+
+
+class Refused(Exception):
+    """A pre-landing check failed; nothing has been changed."""
+
+
+def position(cwd):
+    """(worktree root, main clone root, branch) -- or Refused."""
+    rc, top, err = git("rev-parse", "--show-toplevel", cwd=cwd)
+    if rc:
+        raise Refused(f"not inside a git worktree: {err}")
+    top = Path(top).resolve()
+    _, git_dir, _ = git("rev-parse", "--absolute-git-dir", cwd=top)
+    _, common, _ = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=top)
+    if Path(git_dir).resolve() == Path(common).resolve():
+        raise Refused(f"{top} is the main clone — run this from the lane's worktree")
+    rc, branch, _ = git("symbolic-ref", "--quiet", "--short", "HEAD", cwd=top)
+    if rc:
+        raise Refused("HEAD is detached — check out the lane's branch")
+    return top, Path(common).resolve().parent, branch
+
+
+def plan(cwd, onto=None):
+    """Run every pre-landing check. Returns a dict for land(); raises Refused."""
+    top, main_clone, branch = position(cwd)
+    loaded = lc.load(top)
+    if loaded.parse_error:
+        raise Refused(f"lanes config does not parse: {loaded.parse_error}")
+    cfg = lc.resolve(loaded.raw, user_name=lc.git_user_name(top))
+    main = onto or cfg["main_branch"]
+    if branch == main:
+        raise Refused(f"on `{main}` — a lane lands from its topic branch")
+    if not cfg["machine"].get("certifies"):
+        raise Refused(f"this machine ({cfg['machine']['id']}) does not certify — push the branch "
+                      "and leave the landing to a certifying machine")
+    rc, dirty, err = git("status", "--porcelain", "--untracked-files=all", cwd=top)
+    if rc or dirty:
+        raise Refused("the worktree has uncommitted or untracked changes — commit or remove them first"
+                      + (f" ({dirty.splitlines()[0]}" + (f" +{len(dirty.splitlines()) - 1} more)" if len(dirty.splitlines()) > 1 else ")")
+                         if dirty else f": {err}"))
+    rc, _, err = git("fetch", "-q", "origin", cwd=top)
+    if rc:
+        raise Refused(f"git fetch origin failed: {err}")
+    upstream = f"origin/{main}"
+    if git("rev-parse", "--verify", "--quiet", upstream, cwd=top)[0]:
+        raise Refused(f"{upstream} does not exist")
+    if not ancestor(upstream, "HEAD", top):
+        raise Refused(f"{upstream} moved and is not an ancestor of HEAD — rebase onto it and "
+                      "re-verify, then run this again (never force)")
+    _, head, _ = git("rev-parse", "HEAD", cwd=top)
+    return {"top": top, "main_clone": main_clone, "branch": branch, "main": main,
+            "upstream": upstream, "head": head}
+
+
+def land(p):
+    """Push and read the result back. Returns None when landed, else the reason."""
+    top, upstream = p["top"], p["upstream"]
+    if not ancestor("HEAD", upstream, top):
+        rc, _, err = git("push", "-q", "origin", f"{p['branch']}:{p['main']}", cwd=top)
+        if rc:
+            return f"push to {upstream} failed: {err.splitlines()[0] if err else rc}"
+    rc, _, err = git("fetch", "-q", "origin", p["main"], cwd=top)
+    if rc:
+        return f"pushed, but the re-fetch failed ({err}) — landing unverified; check {upstream} by hand"
+    if not ancestor(p["head"], upstream, top):
+        return f"{upstream} does not contain {p['head'][:7]} after the push"
+    return None
+
+
+def clean_up(p):
+    """Remove the worktree and delete the branch, local then remote. Returns the
+    steps that were skipped or failed (empty = all done)."""
+    left = []
+    main_clone, branch, upstream = p["main_clone"], p["branch"], p["upstream"]
+    rc, _, err = git("worktree", "remove", str(p["top"]), cwd=main_clone)
+    if rc:
+        left.append(f"worktree {p['top']} not removed: {err}")
+    else:
+        _, tip, _ = git("rev-parse", f"refs/heads/{branch}", cwd=main_clone)
+        if tip and ancestor(tip, upstream, main_clone):
+            rc, _, err = git("branch", "-D", branch, cwd=main_clone)
+            if rc:
+                left.append(f"local branch {branch} not deleted: {err}")
+        else:
+            left.append(f"local branch {branch} kept — its tip is not on {upstream}")
+    remote = f"origin/{branch}"
+    if git("rev-parse", "--verify", "--quiet", remote, cwd=main_clone)[0] == 0:
+        if ancestor(remote, upstream, main_clone):
+            rc, _, err = git("push", "-q", "origin", "--delete", branch, cwd=main_clone)
+            if rc:
+                left.append(f"remote branch {branch} not deleted: {err}")
+        else:
+            left.append(f"remote branch {branch} kept — it carries commits not on {upstream}")
+    return left
+
+
+def main(argv=None):
+    use_utf8_console()
+    ap = argparse.ArgumentParser(description="lanes: land a lane's branch, verify, then clean up")
+    ap.add_argument("--keep", action="store_true", help="land and verify; leave the worktree and the branch")
+    ap.add_argument("--dry-run", action="store_true", help="run every check; push nothing, remove nothing")
+    ap.add_argument("--onto", default=None, metavar="BRANCH",
+                    help="land on BRANCH instead of git.main_branch (a repo whose work integrates on another branch)")
+    args = ap.parse_args(argv)
+    try:
+        p = plan(Path.cwd(), args.onto)
+    except Refused as e:
+        print(f"NOT LANDED — {e}. Nothing was pushed, removed or deleted.", file=sys.stderr)
+        return NOT_LANDED
+    short = p["head"][:7]
+    if args.dry_run:
+        print(f"dry run: {p['branch']} @ {short} fast-forwards {p['upstream']}; would push "
+              f"{p['branch']}:{p['main']}" + ("" if args.keep else ", then remove the worktree and delete the branch"))
+        return 0
+    reason = land(p)
+    if reason:
+        print(f"NOT LANDED — {reason}. Nothing was removed or deleted.", file=sys.stderr)
+        return NOT_LANDED
+    print(f"landed: {p['branch']} @ {short} is on {p['upstream']}")
+    if args.keep:
+        print("kept: the worktree and the branch (--keep)")
+        return 0
+    left = clean_up(p)
+    for line in left:
+        print(f"clean-up: {line}", file=sys.stderr)
+    if left:
+        return CLEANUP_INCOMPLETE
+    print(f"cleaned: worktree {p['top']} removed, branch {p['branch']} deleted")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

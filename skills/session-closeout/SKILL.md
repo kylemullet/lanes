@@ -87,7 +87,10 @@ Act on what it finds, in this order:
    unpushed.
 2. **A branch with no upstream** — push it. It exists only on this disk otherwise.
 3. **A worktree whose lane is finished and landed** — remove it, so the next session's
-   sweep stays meaningful.
+   sweep stays meaningful. Its branch goes too, but only once
+   `git merge-base --is-ancestor <branch> origin/<main_branch>` passes: a branch that is
+   only pushed is the lane's one copy off this machine. Never in the same command line as
+   a landing.
 4. **A worktree whose lane is unfinished** — say so explicitly in the summary, naming the
    issue and what it is waiting on. A worktree the operator has forgotten about is how a
    lane dies. (`incidents.md` → "~24 files, one rm -rf from gone".)

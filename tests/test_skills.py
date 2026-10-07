@@ -85,6 +85,15 @@ def test_claim_marker_vocabulary_is_shared_with_the_doctor():
         assert ld.KIND_RE.search(f"**{kind}.**"), kind
 
 
+def test_landing_runs_through_the_land_script_and_never_shares_a_line_with_clean_up():
+    """LANES-20: a `;` ran the clean-up after a landing that lost the fast-forward race."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    assert 'scripts/lanes.sh" lanes_land.py' in text
+    assert "Never join the landing and the clean-up" in text
+    assert "deleted only when the SECOND passes: landed" in text
+    assert (ROOT / "scripts" / "lanes_land.py").is_file()
+
+
 def test_plugin_validates_strict():
     """A missing executable is a FileNotFoundError from subprocess, never a
     "command not found" on stderr -- the first CI run died on exactly that."""

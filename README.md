@@ -104,6 +104,15 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-r
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short>
 ```
 
+And one for the end of a lane, run from its worktree after the operator's landing OK:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py   # land, verify it landed, THEN remove the worktree + branch (--keep, --dry-run)
+```
+
+It never cleans up after a landing it cannot read back from the remote: exit 1 means nothing
+was pushed, removed or deleted.
+
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,
 `closed`, `commit`, `resolution`, `links`, optional `epic`) and three H2 sections: Context,
@@ -178,7 +187,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, guard_position.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_land.py, guard_position.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md

@@ -398,34 +398,73 @@ step fails the push gate.
    waiting for closeout is a lane that has not finished. (`incidents.md` → "The batching
    convention broken five times".)
 7. **To land — the operator's explicit OK, then RUN it yourself** (their OK is the
-   authorization, not a request for a command to paste). The SAFE shape, one command per
-   line, each starting with `git`:
+   authorization, not a request for a command to paste). From the worktree:
+
+   ```bash
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py
+   ```
+
+   It is the landing AND step 10.2's clean-up as one operation whose order cannot be
+   broken: refuse (touching nothing) from the main clone, on the main branch, with a dirty
+   tree or on a machine that does not `certifies`; fetch; refuse unless
+   `origin/<main_branch>` is an ancestor of HEAD; push `<branch>:<main_branch>`;
+   re-fetch and require HEAD on `origin/<main_branch>` — **landed is read back from the
+   remote, never inferred from the push**; only then remove the worktree and delete the
+   branch, locally and on origin (the remote one only if its tip landed too). Exit `0`
+   landed and cleaned · `1` NOT landed, nothing pushed, removed or deleted · `2` landed,
+   a named clean-up step left for you. `--keep` lands and verifies but leaves the worktree
+   and branch (a server still up on this lane's port, say); `--dry-run` runs every check;
+   `--onto <branch>` lands on an integration branch other than `git.main_branch`.
+
+   On exit `1` because origin moved: rebase + retest (6.1), then run it again. Never
+   force. `<branch>:<main_branch>` publishes exactly this branch's commits and cannot
+   sweep another session's unpushed work.
+
+   **Doing it by hand instead** (no plugin scripts reachable): one command per tool call,
+   each starting with `git`, each exit status read before the next runs —
 
    ```bash
    git -C <worktree> fetch origin
    git -C <worktree> merge-base --is-ancestor origin/<main_branch> HEAD   # confirms fast-forward
    git -C <worktree> push origin <branch>:<main_branch>
+   git -C <worktree> fetch origin
+   git -C <worktree> merge-base --is-ancestor HEAD origin/<main_branch>   # landed
    ```
 
-   `<branch>:<main_branch>` publishes exactly this branch's commits and cannot sweep
-   another session's unpushed work. If origin moved, rebase + retest first (6.1), never
-   force. ⚠️ Prefer `git -C <worktree> …` over `cd <worktree> && git …` — a permission
-   allow-rule matched as a prefix never matches a `cd` form.
+   🚫 **Never join the landing and the clean-up in one command line** — not with `;`, not
+   with `&&` after a pipe. A failed fast-forward is routine once sessions run
+   concurrently, and a `;` runs the clean-up after a landing that did not happen
+   (`incidents.md` → "The clean-up that ran after a failed landing"). ⚠️ Prefer
+   `git -C <worktree> …` over `cd <worktree> && git …` — a permission allow-rule matched
+   as a prefix never matches a `cd` form.
 
 ### 10. Clean up
 
 1. Stop the local server **on this lane's port**; confirm the port is free. Do not sweep
    a shared port or the band — another lane may be mid-verification.
-2. Remove the worktree — but first verify nothing is lost:
+2. Remove the worktree and delete the branch. `lanes_land.py` (9.7) already did both
+   unless you passed `--keep` or it exited `2`; otherwise do it by hand, in a SEPARATE
+   tool call from the landing, and only after verifying nothing is lost:
 
    ```bash
    git -C <worktree> merge-base --is-ancestor HEAD origin/<branch>        # branch pushed
-   git -C <worktree> merge-base --is-ancestor HEAD origin/<main_branch>   # or: landed (stronger)
+   git -C <worktree> merge-base --is-ancestor HEAD origin/<main_branch>   # landed (stronger)
    ```
 
-   Either passing is sufficient; **neither passing means the work exists only on this disk
-   — do not remove the worktree.** A worktree held for a verdict can stay in place until
-   the lane lands; one still in place is a visible reminder that a lane is waiting.
+   **The worktree** may go when either passes; **neither passing means the work exists
+   only on this disk — do not remove it.** A worktree held for a verdict can stay in
+   place until the lane lands; one still in place is a visible reminder that a lane is
+   waiting.
+
+   **The branch — local or on origin — is deleted only when the SECOND passes: landed.**
+   A branch that is only pushed is the lane's one copy off this machine once the worktree
+   is gone; delete it and the work survives only as an unreachable object. Delete the
+   remote branch only when `origin/<branch>` is itself an ancestor of
+   `origin/<main_branch>` — another machine may have pushed to it.
+
+   Lost one anyway? `git fsck --unreachable --no-reflogs` lists the dangling commits;
+   `git log --no-walk <sha>…` and a subject grep find the lane's, and a new branch on it
+   restores it (`incidents.md` → "The clean-up that ran after a failed landing").
 3. Optionally `git pull --ff-only` the main checkout so it is not left stale (skip if
    another session is active in it — theirs pulls at startup).
 

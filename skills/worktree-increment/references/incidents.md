@@ -103,6 +103,23 @@ backend, old bundle — which reads exactly like the fix not working. Restarting
 rebuilding is the lane's job; "reload the tab" goes in the handoff; and with two lanes up,
 a shared port compares the wrong server's bundle to this lane's disk and passes.
 
+## The clean-up that ran after a failed landing (2026-10-07)
+
+A session landed and cleaned up in one shell line — fetch, the fast-forward check, the
+landing push, then `;`, then `git worktree remove`, `git branch -D` and
+`git push origin --delete`. Another session had pushed a backlog commit to the main
+branch seconds earlier, so the fast-forward check failed and nothing landed. The `;`
+ran the clean-up anyway: the worktree was removed and the branch deleted locally and on
+origin. The commit survived only as an unreachable object; `git fsck --unreachable
+--no-reflogs` and a subject grep found it, and it was restored, rebased and landed.
+
+The session broke step 5's own warning about exit statuses, but the skill had a gap
+too: step 10 let the worktree go once the branch was *pushed*, and never said when the
+*branch* could go, so a tidy session deleted it with the worktree. With concurrent
+sessions a lost fast-forward is routine. The fix is mechanical, because the prose rule
+had just been broken: `lanes_land.py` gates every clean-up step on a landing it reads
+back from the remote, and the branch is deleted only once it has landed.
+
 ## The `cd &&` that was refused (2026-09-01)
 
 A permission allow-rule for `git *` is a PREFIX match over the command string, so `cd

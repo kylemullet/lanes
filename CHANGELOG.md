@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.14 — land, verify, then clean up (2026-10-07)
+
+- New `scripts/lanes_land.py`: `worktree-increment` step 9.7's landing and step 10's clean-up as
+  one operation (LANES-20). It refuses, touching nothing, from the main clone, on the main branch,
+  with a dirty tree or on a machine that does not certify. It checks the fast-forward, pushes
+  `<branch>:<main>`, re-fetches and requires HEAD on `origin/<main>`, and only then removes the
+  worktree and deletes the branch, locally and on origin. The remote branch is kept if it carries
+  commits that did not land. Exit 1 = not landed, nothing changed; 2 = landed, a named clean-up
+  step left. `--keep`, `--dry-run`, and `--onto <branch>` for a repo that integrates on a branch
+  other than `git.main_branch`.
+- A session had run the landing and the clean-up on one line joined by `;`. The fast-forward lost a
+  race with another session's push, nothing landed, and the clean-up deleted the worktree and the
+  branch on both sides anyway.
+- `worktree-increment` step 10: a branch, local or remote, is deleted only after it has **landed**,
+  never because it was pushed. The landing and the clean-up are never one command line. The
+  recovery path (`git fsck --unreachable --no-reflogs`) is in the incident.
+- `session-closeout` step 3 carries the same branch rule.
+
 ## 0.4.13 — doctor checks the settings file and the marketplace source (2026-10-07)
 
 - The single `settings` check is now three (LANES-16).
