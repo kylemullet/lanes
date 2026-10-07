@@ -13,6 +13,12 @@ def git(*args, cwd):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_plugins_dir(tmp_path_factory, monkeypatch):
+    """The doctor reads Claude Code's plugin state (LANES-16); a test never sees this machine's."""
+    monkeypatch.setenv("LANES_PLUGINS_DIR", str(tmp_path_factory.mktemp("plugins")))
+
+
 @pytest.fixture
 def repo(tmp_path):
     """A throwaway git repo with one commit on `main` and a known user."""

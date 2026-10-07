@@ -68,7 +68,9 @@ machine; it is per machine, so it is an environment variable and not a config ke
   three extension-point stubs. Never overwrites without `--force`.
 - **`/lanes:doctor [--strict] [--json]`** — one line per check: config valid, config tracked,
   installed vs expected version, stubs present, backlog integrity, every `in-progress` claim
-  classified (live / setting up / reserved / **stale-claim candidate**), settings pin the plugin.
+  classified (live / setting up / reserved / **stale-claim candidate**), settings pin the plugin (committed AND
+  unmodified in the working tree), and this machine's registered marketplace source and installed commit
+  match what the repo declares.
   Exit 1 on a failure, or on a warning with `--strict`. **It only reports.** A stale-claim
   candidate is a question for the session that owns the claim or for the operator; the doctor
   never edits an issue file, and a claim younger than the 15-minute floor is never a candidate.

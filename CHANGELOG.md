@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.13 — doctor checks the settings file and the marketplace source (2026-10-07)
+
+- The single `settings` check is now three (LANES-16).
+  - `settings` warns when the tracked `.claude/settings.json` differs from HEAD.
+    `claude plugin marketplace remove` empties it, and the old check caught that only when the edit
+    happened to remove `enabledPlugins`.
+  - `settings lanes` checks that lanes is enabled and its marketplace declared, in HEAD as well as in
+    the working tree. A committed regression is reported as committed.
+  - `marketplace` compares this machine's registered source (repo, ref) with the declared one, and
+    the installed commit with the marketplace clone's tip. No fetch is made. This is what would have
+    flagged a machine still installing from `main` after the repo moved to `next`.
+- The doctor now reads Claude Code's plugin state: `LANES_PLUGINS_DIR` if set, else the directory
+  above the plugin's own cache path, else `$CLAUDE_CONFIG_DIR/plugins`, else `~/.claude/plugins`.
+
 ## 0.4.12 — backfill on concurrent certifying machines (2026-10-07)
 
 - `--backfill` closes deterministically. `closed:` is the resolving commit's committer date

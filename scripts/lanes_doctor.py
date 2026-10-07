@@ -12,7 +12,10 @@ Checks, in order:
   backlog    the backlog directory exists; `--check` runs when the tracker ships with the plugin
   views      the generated INDEX.md / index.html are gitignored (a tracked copy conflicts at every rebase)
   claims     every `in-progress` issue classified: live / setting up / reserved / STALE CANDIDATE
-  settings   `.claude/settings.json` pins the plugin for the next person
+  settings   the tracked `.claude/settings.json` is unmodified against HEAD (`marketplace remove` empties it)
+  settings lanes  it declares lanes' marketplace and enables lanes — in HEAD and in the working tree
+  marketplace     this machine's registered marketplace source (repo, ref) matches the declared one,
+                  and the installed commit is the marketplace clone's tip (no fetch)
 
 The claims check is the one with teeth, and it only ever REPORTS. A claim younger than
 the 15-minute floor is never a candidate, whatever else the evidence says: a lane that is
@@ -256,20 +259,146 @@ def check_claims(root: Path, cfg: dict, now: Optional[datetime] = None) -> list:
     return out
 
 
-def check_settings(root: Path) -> Check:
-    settings = root / ".claude" / "settings.json"
-    if not settings.is_file():
-        return Check(WARN, "settings", ".claude/settings.json absent — nothing prompts the next person to install lanes")
+SETTINGS_REL = ".claude/settings.json"
+
+
+def plugins_dir() -> Path:
+    """Where Claude Code keeps plugin state on this machine. `LANES_PLUGINS_DIR` is the
+    test seam; else derived from this plugin's own cache path
+    (`<plugins>/cache/<marketplace>/<name>/<version>`); else `$CLAUDE_CONFIG_DIR/plugins`;
+    else `~/.claude/plugins`."""
+    env = os.environ.get("LANES_PLUGINS_DIR")
+    if env:
+        return Path(env)
+    root = lc.plugin_root()
+    if len(root.parents) > 3 and root.parents[2].name == "cache":
+        return root.parents[3]
+    base = os.environ.get("CLAUDE_CONFIG_DIR")
+    return (Path(base) if base else Path.home() / ".claude") / "plugins"
+
+
+def _load_json(path: Path):
     try:
-        data = json.loads(settings.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        return Check(WARN, "settings", f".claude/settings.json unreadable: {exc}")
-    enabled = data.get("enabledPlugins") or {}
-    keys = list(enabled) if isinstance(enabled, dict) else list(enabled or [])
-    if any(str(k).split("@")[0] == "lanes" for k in keys):
-        return Check(OK, "settings", "enabledPlugins pins lanes for the next person")
-    return Check(WARN, "settings", "enabledPlugins does not list lanes — add it (with extraKnownMarketplaces) "
-                                   "so the next clone is prompted to install")
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _lanes_marketplace(data) -> Optional[str]:
+    """The marketplace lanes is enabled from (`lanes@<mkt>`), '' for a bare `lanes`, or
+    None when lanes is not enabled."""
+    enabled = (data or {}).get("enabledPlugins") or {}
+    keys = list(enabled) if isinstance(enabled, (dict, list)) else []
+    for k in keys:
+        name, _, mkt = str(k).partition("@")
+        if name == "lanes" and (not isinstance(enabled, dict) or enabled[k] is not False):
+            return mkt
+    return None
+
+
+def _declared_source(data, mkt: str) -> Optional[dict]:
+    src = (((data or {}).get("extraKnownMarketplaces") or {}).get(mkt) or {}).get("source")
+    return src if isinstance(src, dict) else None
+
+
+def _lanes_problem(data) -> Optional[str]:
+    """Why this settings document would not get lanes installed for the next person."""
+    mkt = _lanes_marketplace(data)
+    if mkt is None:
+        return "enabledPlugins does not list lanes"
+    if mkt and _declared_source(data, mkt) is None:
+        return f"enabledPlugins names `lanes@{mkt}` but extraKnownMarketplaces does not declare `{mkt}`"
+    return None
+
+
+def check_settings(root: Path) -> list:
+    """Three checks on the tracked `.claude/settings.json` (LANES-16). `claude plugin
+    marketplace remove` silently empties it (LANES-15), so the file is checked against
+    HEAD, and this machine's registered source is checked against what it declares."""
+    settings = root / SETTINGS_REL
+    tracked = _git(["ls-files", "--error-unmatch", SETTINGS_REL], root) is not None
+    head_text = _git(["show", f"HEAD:{SETTINGS_REL}"], root) if tracked else None
+    if not settings.is_file() and head_text is None:
+        return [Check(WARN, "settings", f"{SETTINGS_REL} absent — nothing prompts the next person to install lanes")]
+    checks = []
+
+    # 1. the tracked file, modified in the working tree
+    if not tracked:
+        checks.append(Check(WARN, "settings", f"{SETTINGS_REL} is not committed — only this clone is prompted to install lanes"))
+    else:
+        try:
+            dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", SETTINGS_REL], cwd=root,
+                                   capture_output=True, timeout=15).returncode == 1
+        except (OSError, subprocess.TimeoutExpired):
+            dirty = False
+        checks.append(Check(WARN, "settings",
+                            f"{SETTINGS_REL} is modified in the working tree — `claude plugin marketplace remove` "
+                            f"empties it; `git checkout -- {SETTINGS_REL}` unless the change is intended")
+                      if dirty else Check(OK, "settings", f"{SETTINGS_REL} matches HEAD"))
+
+    # 2. lanes declared and enabled — committed AND working tree
+    wt = _load_json(settings) if settings.is_file() else None
+    head = None
+    if head_text is not None:
+        try:
+            head = json.loads(head_text)
+        except ValueError:
+            head = None
+    problems = []
+    if head_text is not None:
+        why = "unparseable" if head is None else _lanes_problem(head)
+        if why:
+            problems.append(f"committed (HEAD): {why} — a fresh clone gets no lanes and no position guard")
+    if settings.is_file():
+        why = "unreadable or not JSON" if wt is None else _lanes_problem(wt)
+        if why:
+            problems.append(f"working tree: {why}")
+    checks.append(Check(WARN, "settings lanes", "; ".join(problems)) if problems
+                  else Check(OK, "settings lanes", "enabledPlugins pins lanes for the next person"))
+
+    # 3. this machine's registered source vs the declared one
+    declared_doc = head if head is not None else wt
+    mkt = _lanes_marketplace(declared_doc)
+    declared = _declared_source(declared_doc, mkt) if mkt else None
+    if declared is None:
+        checks.append(Check(SKIP, "marketplace", "no lanes marketplace declared — nothing to compare"))
+        return checks
+    pdir = plugins_dir()
+    known = _load_json(pdir / "known_marketplaces.json")
+    entry = (known or {}).get(mkt) if isinstance(known, dict) else None
+    if not entry:
+        checks.append(Check(WARN, "marketplace",
+                            f"`{mkt}` is declared but not registered on this machine ({pdir}) — "
+                            f"`claude plugin marketplace add {declared.get('repo', '?')}"
+                            + (f"@{declared['ref']}" if declared.get("ref") else "") + "`"))
+        return checks
+    have = entry.get("source") or {}
+    mismatch = [f"{k} `{declared.get(k) or '(default branch)'}` but this machine has `{have.get(k) or '(default branch)'}`"
+                for k in ("repo", "ref") if (declared.get(k) or None) != (have.get(k) or None)]
+    if mismatch:
+        checks.append(Check(WARN, "marketplace",
+                            f"`{mkt}`: the repo declares " + "; ".join(mismatch)
+                            + " — remove and re-add the marketplace, then `git checkout -- "
+                            + SETTINGS_REL + "` (remove empties it)"))
+        return checks
+    where = f"`{mkt}` source matches ({have.get('repo')}" + (f"@{have['ref']}" if have.get("ref") else "") + ")"
+    clone_tip = _git(["rev-parse", "HEAD"], Path(entry["installLocation"])) if entry.get("installLocation") else None
+    installed = _load_json(pdir / "installed_plugins.json")
+    rows = ((installed or {}).get("plugins", installed) or {}).get(f"lanes@{mkt}") if isinstance(installed, dict) else None
+    row = None
+    for r in rows or []:
+        if r.get("scope") == "project" and Path(r.get("projectPath", "")).resolve() == root.resolve():
+            row = r
+    for r in rows or []:
+        row = row or (r if r.get("scope") == "user" else None)
+    sha = (row or {}).get("gitCommitSha")
+    if sha and clone_tip and sha != clone_tip:
+        checks.append(Check(WARN, "marketplace",
+                            f"{where}, but lanes is installed at {sha[:7]} and the marketplace clone is at "
+                            f"{clone_tip[:7]} — `claude plugin update lanes@{mkt}` (both scopes)"))
+    else:
+        checks.append(Check(OK, "marketplace", where + (f", installed at its tip {sha[:7]}" if sha and clone_tip else "")))
+    return checks
 
 
 # --------------------------------------------------------------------- main
@@ -283,7 +412,7 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     checks.append(check_stubs(root))
     checks.extend(check_backlog(root, cfg))
     checks.extend(check_claims(root, cfg, now))
-    checks.append(check_settings(root))
+    checks.extend(check_settings(root))
     return checks
 
 
