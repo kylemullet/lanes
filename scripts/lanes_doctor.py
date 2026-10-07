@@ -46,7 +46,15 @@ import lanes_config as lc              # noqa: E402
 OK, WARN, FAIL, SKIP = "OK", "WARN", "FAIL", "SKIP"
 
 MARKER_RE = re.compile(r"IN-PROGRESS \((\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?")
-KIND_RE = re.compile(r"\*\*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LANE)\.?\*\*")
+# The kind OPENS the bold span; whatever follows it inside the span is prose (LANES-19).
+# Sessions paraphrase the templates -- `**ACTIVE LANE — readlines leg.**`,
+# `**RESERVED, NOT STARTED — queued behind X**` -- and the views' MARKER_RE in
+# backlog_index.py already reads those; the doctor matching only the exact span made the
+# two disagree, silently, until the claim aged past the floor.
+KIND_RE = re.compile(r"\*\*\s*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LANE)\b")
+# The templates' exact spelling: what the skills and lanes_claim.py write, guarded by
+# tests/test_skills.py. Leniency is for reading other sessions' markers, not for writing.
+KIND_TEMPLATE_RE = re.compile(r"\*\*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LANE)\.?\*\*")
 WORKTREE_RE = re.compile(r"worktree ([A-Za-z0-9._-]+)")
 BRANCH_RE = re.compile(r"branch ([A-Za-z0-9._/-]+)")
 
@@ -206,9 +214,15 @@ def classify_claim(issue_id: str, text: str, now: datetime, root: Path, worktree
         return Check(WARN, f"claim {issue_id}", f"marker timestamp {date} {hhmm or ''} does not parse; treated as live")
     age = now - stamp
     age_txt = f"{int(age.total_seconds() // 60)} min" if hhmm else f"dated {date} (no time; age unknown)"
+    if kind is None:
+        # Before the age floor, not after it: a marker is written whole, kind included, so
+        # a young one without a kind is a misspelling, not a lane still setting up. Behind
+        # the floor it passed as "live by rule" and surfaced only at minute 15 (LANES-19).
+        return Check(WARN, f"claim {issue_id}", f"marker ({age_txt}) has no PENDING / RESERVED / ACTIVE "
+                                                "kind opening its bold span; ask the owner")
     floor = timedelta(minutes=lc.CLAIM_AGE_FLOOR_MINUTES)
     if hhmm and age < floor:
-        return Check(OK, f"claim {issue_id}", f"{kind or 'claimed'} {age_txt} ago — younger than the "
+        return Check(OK, f"claim {issue_id}", f"{kind} {age_txt} ago — younger than the "
                                               f"{lc.CLAIM_AGE_FLOOR_MINUTES}-minute floor, live by rule")
     if kind == "WORKTREE PENDING":
         return Check(OK, f"claim {issue_id}", f"WORKTREE PENDING, {age_txt} — claimed, setting up; route around it")
@@ -229,7 +243,6 @@ def classify_claim(issue_id: str, text: str, now: datetime, root: Path, worktree
                      f"STALE-CLAIM CANDIDATE: ACTIVE LANE {age_txt} ago, no worktree"
                      f"{' ' + wt_name if wt_name else ''} here and no branch{' ' + br_name if br_name else ''} "
                      f"anywhere — a QUESTION for the owner or the operator, never a takeover")
-    return Check(WARN, f"claim {issue_id}", f"marker {age_txt} has no PENDING / RESERVED / ACTIVE kind; ask the owner")
 
 
 def check_claims(root: Path, cfg: dict, now: Optional[datetime] = None) -> list:

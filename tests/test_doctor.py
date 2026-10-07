@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+import pytest
+
 import lanes_config as lc
 import lanes_doctor as ld
 import lanes_init as li
@@ -253,3 +255,26 @@ def test_json_and_text_output(repo, capsys):
     ld.main(["--root", str(repo)])
     out = capsys.readouterr().out
     assert "FAIL  config" in out and "fail" in out.splitlines()[-1]
+
+
+# --- paraphrased and kind-less markers (LANES-19) ----------------------------
+
+@pytest.mark.parametrize("span, kind", [
+    ("**ACTIVE LANE — readlines leg.**", "ACTIVE LANE"),
+    ("**RESERVED, NOT STARTED — queued behind LANES-3**", "RESERVED"),
+    ("**WORKTREE PENDING**", "WORKTREE PENDING"),
+])
+def test_a_paraphrased_kind_is_read_like_the_template(repo, span, kind):
+    git("branch", "core-5-work", cwd=repo)
+    write_issue(repo, "docs/backlog", "CORE", "CORE-5", "in-progress",
+                f"⏳ IN-PROGRESS ({stamp(90)}, T's session, worktree proj-core-5, branch core-5-work) — {span} x")
+    c = _claims(repo)["claim CORE-5"]
+    assert c.status == ld.OK and c.detail.startswith(kind)
+
+
+@pytest.mark.parametrize("minutes", [2, 90])
+def test_a_kind_less_marker_warns_at_any_age(repo, minutes):
+    write_issue(repo, "docs/backlog", "CORE", "CORE-6", "in-progress",
+                f"⏳ IN-PROGRESS ({stamp(minutes)}, T's session) — **ACTIVE, readlines leg.** x")
+    c = _claims(repo)["claim CORE-6"]
+    assert c.status == ld.WARN and "no PENDING / RESERVED / ACTIVE kind" in c.detail

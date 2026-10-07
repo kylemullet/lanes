@@ -113,7 +113,7 @@ def test_claims_run_through_the_claim_script():
         assert 'scripts/lanes.sh" lanes_claim.py' in text, name
         # every bold claim kind a skill spells out must be one the doctor recognizes
         for m in re.finditer(r"\*\*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LANE)[^*]*\*\*", text):
-            assert ld.KIND_RE.fullmatch(m.group(0)), f"{name}: {m.group(0)}"
+            assert ld.KIND_TEMPLATE_RE.fullmatch(m.group(0)) and ld.KIND_RE.match(m.group(0)), f"{name}: {m.group(0)}"
 
 
 def test_plugin_validates_strict():

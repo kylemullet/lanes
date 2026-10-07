@@ -74,6 +74,8 @@ machine; it is per machine, so it is an environment variable and not a config ke
   Exit 1 on a failure, or on a warning with `--strict`. **It only reports.** A stale-claim
   candidate is a question for the session that owns the claim or for the operator; the doctor
   never edits an issue file, and a claim younger than the 15-minute floor is never a candidate.
+  A marker's kind is read from the start of its bold span, so a paraphrase like
+  `**ACTIVE LANE — readlines leg.**` classifies as written. A marker with no kind warns at any age.
 
 Both are thin: the work is in `scripts/lanes_init.py` and `scripts/lanes_doctor.py`, which are
 stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualenv.

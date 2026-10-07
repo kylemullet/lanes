@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.20 — the doctor reads a paraphrased claim kind, and warns on a missing one at once (2026-10-07)
+
+- **The kind opens the bold span** (LANES-19). `lanes_doctor.py` read a claim's kind only when
+  it was the whole bold span (`**ACTIVE LANE.**`), so paraphrased markers like
+  `**ACTIVE LANE — readlines leg.**` or `**RESERVED, NOT STARTED — queued behind LANES-3**`
+  read as kind-less. The views' marker parser already accepted them, so the two disagreed. The
+  doctor now matches the kind as the span's prefix, the way the views do.
+- **A kind-less marker warns at any age.** It used to pass under the 15-minute floor as "live
+  by rule" and warn only at minute 15. A marker is written whole, kind included, so a young one
+  without a kind is a misspelling, not a lane still setting up.
+- The templates stay exact. `KIND_TEMPLATE_RE` keeps the old spelling, and `test_skills.py`
+  holds the skills' markers to it, so the leniency applies only to reading.
+
 ## 0.4.19 — the landing's close runs off origin, past a busy main clone (2026-10-07)
 
 - **`backlog_index.py --backfill --push --isolated`** (LANES-23). Closes and pushes from a
