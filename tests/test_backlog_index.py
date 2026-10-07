@@ -914,3 +914,15 @@ def test_backlog_new_accepts_verified(tmp_path, monkeypatch):
     assert not bidx.resolution_is_filled(p.read_text(encoding="utf-8"))
     with pytest.raises(ValueError):
         bnew.create_issue("UI", "y", status="done", regen_index=False)
+
+
+def test_one_person_on_two_certifying_machines_appears_once(tmp_path):
+    """LANES-3: two rows sharing `kyle` are one person -- one certifier, one assignee."""
+    raw = {"operators": [
+        {"name": "kylemullet", "platform": "darwin", "id": "kyle-mac", "short": "kyle", "certifies": True},
+        {"name": "kylemullet", "platform": "win32", "id": "kyle-win", "short": "kyle", "certifies": True},
+        {"name": "Mike", "platform": "win32", "id": "mike-win", "short": "mike", "may_edit_code": False},
+    ]}
+    s = bidx.settings(root=tmp_path, raw=raw)
+    assert s["CERTIFIER_LABEL"] == "kyle's" and s["DEFAULT_ASSIGNEE"] == "kyle"
+    assert s["ASSIGNEES"] == ("kyle", "mike", "shared") and s["REPORTERS"] == ("claude", "kyle", "mike")

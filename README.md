@@ -12,7 +12,7 @@ closed issues.
 
 ## Status
 
-**0.4.10 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
+**0.4.11 — complete, pre-release.** Configuration schema, `/lanes:init`, `/lanes:doctor`, the
 two backlog scripts, the three protocol skills with their incident references, the
 position-guard hook, a marketplace entry, and CI (pytest + `claude plugin validate --strict`).
 Installed on two consumers — the project it was extracted from, which runs its backlog gate on
@@ -138,7 +138,7 @@ annotated reference; the short version:
 | `tests.required_before_land` | `true` | |
 | `tests.rebase_rerun_command` | — | prints the test args for a scoped post-rebase re-run; absent = full suite |
 | `worktrees.port_command` | — | prints this lane's localhost port |
-| `[[operators]]` | `[]` (solo) | one row per `(git user.name, platform)` — a machine, not a person: `id`, `short`, `certifies`, `may_edit_code` |
+| `[[operators]]` | `[]` (solo) | one row per `(git user.name, platform)` — a machine, not a person: `id`, `short`, `certifies`, `may_edit_code`. `id` and the pair are unique; one person on two machines is two rows sharing a `short` |
 | `lanes.code`, `lanes.code_owner` | — | which paths only the owning operator edits; meaningless in solo mode |
 
 **Not configurable, on purpose:** the status vocabulary (`in-progress`, `open`, `blocked`,

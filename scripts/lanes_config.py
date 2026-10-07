@@ -255,7 +255,10 @@ def validate(raw: dict) -> list:
     if not isinstance(ops, list):
         err("`operators` must be an array of tables ([[operators]])")
         ops = []
-    ids, shorts, pairs = set(), set(), set()
+    # A row is a MACHINE: `id` and the (name, platform) pair are unique. `short` is the
+    # PERSON (assignee token, `--who`), so one person on two machines is two rows sharing
+    # one short (LANES-3) -- a distinct short per machine would split their queue.
+    ids, pairs = set(), set()
     any_certifies = False
     for i, row in enumerate(ops):
         where = f"operators[{i}]"
@@ -276,12 +279,8 @@ def validate(raw: dict) -> list:
             if oid in ids:
                 err(f"duplicate operator id {oid!r}")
             ids.add(oid)
-        if isinstance(short, str):
-            if short in shorts:
-                err(f"duplicate operator short {short!r}")
-            if short in (SHARED_ASSIGNEE, CLAUDE_REPORTER):
-                err(f"operator short {short!r} collides with a reserved token")
-            shorts.add(short)
+        if isinstance(short, str) and short in (SHARED_ASSIGNEE, CLAUDE_REPORTER):
+            err(f"operator short {short!r} collides with a reserved token")
         pair = (row.get("name"), row.get("platform"))
         if all(isinstance(x, str) for x in pair):
             if pair in pairs:
@@ -354,7 +353,8 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
     operators = merged["operators"]
     user_name = git_user_name() if user_name is None else user_name
     machine = machine_row(operators, user_name, platform)
-    shorts = [r["short"] for r in operators if isinstance(r.get("short"), str)] or [machine["short"]]
+    # Distinct, in table order: several machine rows may share one person's short.
+    shorts = list(dict.fromkeys(r["short"] for r in operators if isinstance(r.get("short"), str))) or [machine["short"]]
     docs_lane = merged["backlog"]["docs_lane_prefixes"]
     if docs_lane is None:
         docs_lane = list(merged["git"]["main_direct_paths"])

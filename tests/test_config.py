@@ -38,6 +38,26 @@ def test_two_operator_machine_rows():
     assert mike["assignees"] == ["kyle", "mike", "shared"] and mike["reporters"] == ["claude", "kyle", "mike"]
 
 
+ONE_PERSON_TWO_MACHINES = {"operators": [
+    {"name": "kylemullet", "platform": "darwin", "id": "kyle-mac", "short": "kyle", "certifies": True},
+    {"name": "kylemullet", "platform": "win32", "id": "kyle-win", "short": "kyle", "certifies": True},
+    {"name": "Mike", "platform": "win32", "id": "mike-win", "short": "mike", "certifies": False, "may_edit_code": False},
+]}
+
+
+def test_one_person_on_two_machines_shares_a_short():
+    """LANES-3: rows are machines, `short` is the person. Two rows, one short, distinct
+    ids and (name, platform) pairs is valid, and each machine resolves to its own row."""
+    assert lc.validate(ONE_PERSON_TWO_MACHINES) == []
+    mac = lc.resolve(ONE_PERSON_TWO_MACHINES, user_name="kylemullet", platform="darwin")["machine"]
+    win = lc.resolve(ONE_PERSON_TWO_MACHINES, user_name="kylemullet", platform="win32")
+    assert mac["id"] == "kyle-mac" and mac["known"] and mac["certifies"]
+    assert win["machine"]["id"] == "kyle-win" and win["machine"]["known"] and win["machine"]["certifies"]
+    assert win["machine"]["short"] == mac["short"] == "kyle"
+    assert win["assignees"] == ["kyle", "mike", "shared"], "the person appears once, however many machines"
+    assert win["reporters"] == ["claude", "kyle", "mike"]
+
+
 def test_unknown_machine_in_multi_operator_repo_has_no_permissions():
     cfg = lc.resolve(TWO_OPS, user_name="kylemullet", platform="win32")
     m = cfg["machine"]
@@ -75,7 +95,8 @@ def test_operator_rules():
         {"name": "b", "platform": "darwin", "id": "x", "short": "s"},
     ]}
     errs = _errors(dup)
-    assert any("duplicate operator id" in m for m in errs) and any("duplicate operator short" in m for m in errs)
+    assert any("duplicate operator id" in m for m in errs)
+    assert not any("short" in m for m in errs), "a shared short is one person on two machines (LANES-3)"
     assert any("missing `short`" in m for m in _errors({"operators": [{"name": "a", "platform": "darwin", "id": "x"}]}))
     assert any("reserved" in m for m in _errors({"operators": [{"name": "a", "platform": "darwin", "id": "x", "short": "claude"}]}))
     assert any("certifies" in m for m in _warnings({"operators": [{"name": "a", "platform": "darwin", "id": "x", "short": "s"}]}))

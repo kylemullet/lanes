@@ -81,7 +81,7 @@ def settings(root=None, raw=None):
     cfg = lc.resolve(raw)
     backlog_rel = cfg["backlog_dir"].strip("/")
     ops = cfg["operators"]
-    certifiers = [r["short"] for r in ops if r.get("certifies")]
+    certifiers = list(dict.fromkeys(r["short"] for r in ops if r.get("certifies")))
     machine = cfg["machine"]
     if cfg["solo"]:
         certifier_label = "your"
@@ -89,7 +89,7 @@ def settings(root=None, raw=None):
         certifier_label = f"{certifiers[0]}'s"
     else:
         certifier_label = "the certifying operator's"
-    editors = [r["short"] for r in ops if r.get("may_edit_code", True)]
+    editors = list(dict.fromkeys(r["short"] for r in ops if r.get("may_edit_code", True)))
     default_assignee = (machine["short"] if cfg["solo"] else (editors[0] if editors else cfg["assignees"][0]))
     return {
         "ROOT": root,

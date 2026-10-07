@@ -47,6 +47,7 @@ required_before_land = true
 # ---- Two or more operators: fill this in. Leave it empty for solo mode. ----
 # One row per (git user.name, platform) pair — a machine, not a person. `short` is the
 # assignee / reporter token used in issue frontmatter; `claude` is always a valid reporter.
+# One person on two machines is two rows that share a `short` (distinct `id`s).
 #
 # [[operators]]
 # name = "kylemullet"

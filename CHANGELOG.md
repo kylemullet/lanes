@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.11 — one person, two machines (2026-10-07)
+
+- Operator rows may share a `short`. A row is a machine (`id` and the `(name, platform)` pair stay
+  unique); `short` is the person, so one person on two machines is two rows with one short. 0.4.10
+  and earlier rejected that as a duplicate, which left a second machine with no permissions or a
+  fake second assignee. Assignees, reporters, the certifier label and the default assignee list each
+  person once (LANES-3).
+
 ## 0.4.10 — fail closed without a working Python (2026-10-07)
 
 - Every hook, command and skill runs its script through the new `scripts/lanes.sh`, never a bare
