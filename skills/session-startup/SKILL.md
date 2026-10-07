@@ -279,7 +279,9 @@ Every block but the Brief is a table. Keep item text to a short noun phrase.
 anything needing a decision right now; the backfill result ("closed N verified: IDs —
 commit pending push" / "N verified awaiting the certifying machine's close"); whatever
 `preflight.md` asked to report; unlanded branches from step 2; **the in-flight lanes from
-step 5b — one line each: ID, ACTIVE/PENDING/RESERVED, lane state, what it is waiting on**;
+step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the slice name
+(`LANES-20/21/9`), each issue's ACTIVE/PENDING/RESERVED state, lane state, what it is
+waiting on**;
 the backlog stat (`N open · X critical · oldest Nd`).
 
 **II — Sortable backlog.** The view's link alone on its own line, immediately after the

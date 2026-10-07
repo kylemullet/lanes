@@ -157,8 +157,8 @@ current understanding. At every closeout, either operator:
   issues up front, so a session that runs out of time leaves `status: in-progress` on
   issues with no worktree and nobody behind them, and those poison every future conflict
   scan. For each slice issue still marked `RESERVED, NOT STARTED`: set `status` back to
-  what it should now carry (`open`, or `blocked` / `paused` if that was its prior state)
-  and overwrite the ⏳ marker to say it was claimed and not reached. An issue that WAS
+  what it should now carry (`open`, or `blocked` / `paused` if that was its prior state),
+  delete its `lane:` line, and overwrite the ⏳ marker to say it was claimed and not reached. An issue that WAS
   worked and is parked mid-flight keeps its claim — that is a live lane.
 
   🚫 **Release only THIS session's own claims.** Closeout is where a claim is released

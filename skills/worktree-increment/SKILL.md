@@ -73,7 +73,7 @@ routes around the issue exactly as it would for an active lane; nothing has to b
 inferred.
 
 A reserved issue the session never reaches is **released at closeout**, not left claimed:
-set it back to the status it should carry and clear the marker. An `in-progress` issue
+set it back to the status it should carry and clear the marker and the `lane:` line. An `in-progress` issue
 with no live worktree and no session behind it poisons every future conflict scan.
 
 Concretely, handed "CORE-64, UI-40, INFRA-31": claim all three now (CORE-64 PENDING, the
@@ -163,7 +163,9 @@ Work happens in the MAIN checkout before the worktree exists:
    ```
 
    It writes BOTH halves, which are read by different things — one without the other is
-   the bug: **frontmatter** `status: in-progress` (what the views and `--report` render)
+   the bug: **frontmatter** `status: in-progress` plus `lane: <lead-ID>@<date>`, the lane's
+   recorded identity, the same on every issue of the slice (what the views and `--report`
+   render and group by, and which stays on the issue after it lands)
    and the **body** `WORKTREE PENDING` marker with the expected files at the top of
    **Current status** (what another session reads once its frontmatter scan points it at
    the file). It notes a prior `paused` / `blocked` status in the marker, so an abandoned
@@ -347,7 +349,11 @@ step fails the push gate.
    `in-progress` — to **`verified`** (NOT `closed`) with a filled Resolution and
    `resolution: done` (or `duplicate` / `superseded`, named in the prose), or, for a
    partial, back to the status it should now carry with Current status saying where it
-   stopped. Either way the ⏳ marker goes too. **Both halves, again.**
+   stopped. Either way the ⏳ marker goes too. **Both halves, again.** The `lane:` line
+   STAYS on an issue that landed (`verified`): it records which lane resolved it and keeps
+   the slice whole in the views until its last issue lands. A partial going back to the
+   queue deletes it, like a release — `--check` fails a `lane:` on an open, blocked or
+   paused issue.
 
    **`verified` means landed, awaiting close.** The lane never writes `closed` or a
    `commit:` hash: the hash is unknowable here. The landing (9.7) closes it the moment

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.18 — lanes are recorded, named after their slice, and checked (2026-10-07)
+
+- **`lane:` frontmatter** (LANES-10). `lanes_claim.py` writes `lane: <lead-ID>@<YYYY-MM-DD>` on
+  every issue of a slice, and a `--behind` extension copies the extended lane's value. Behind a
+  claim made before the field existed it derives the key the views derive from the marker
+  (`<ID>@<claim date>`), so old and new claims group as one lane. The field STAYS on an issue
+  that lands, as the record of which lane resolved it; closeout's release (and a partial going
+  back to the queue) deletes it with the ⏳ marker.
+- **A lane stays whole until its last issue lands** (Kyle). Its landed issues show beside the live
+  ones (✓ landed / ✓ closed, full titles, landed first), and the lane disappears from the views
+  only when none of its issues is in progress.
+- **A lane is named after its slice**: `LANES-20/21/9`, the lead's full ID then the others'
+  numbers in slice order (`LANES-22/INFRA-100` across projects). The lead comes from the
+  recorded key, so the name holds after the lead lands and only reservations remain. The
+  worktree and branch move into the card's detail line.
+- **`--report` and `INDEX.md` open with In progress**, grouped by lane like the HTML view, and a
+  claimed issue is listed once, under its lane, not again in the queue. `session-startup`
+  block I lists in-flight work one line per lane.
+- **`--check` lane rules**: a `lane:` on an open, blocked or paused issue, a value that is not
+  `<ID>@<YYYY-MM-DD>`, or two ACTIVE/PENDING issues in one lane. A lane with none is legal
+  (between two issues of a slice), and so is an in-progress issue without the field: claims
+  made before 0.4.18 are grouped from their markers, and only the owning session may write to
+  a claim.
+- The view's card is named from the lane's ACTIVE/PENDING issue rather than its first one, so
+  a slice whose lead has landed shows where work actually is.
+
 ## 0.4.17 — the backlog view, redesigned, with lanes on top (2026-10-07)
 
 - The view (`index.html` and `--serve`) is laid out again (LANES-22).

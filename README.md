@@ -128,13 +128,18 @@ main clone, so the lane's `verified` issue closes on landing rather than at the 
 
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,
-`closed`, `commit`, `resolution`, `links`, optional `epic`) and three H2 sections: Context,
+`closed`, `commit`, `resolution`, `links`, optional `epic`, and `lane` while claimed) and three H2 sections: Context,
 Current status, Resolution. `--check` is the integrity gate: duplicate or misnamed IDs,
 out-of-vocabulary values, a `status: in-progress` without its body claim marker (or the
 reverse), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
 issue whose Resolution does not cite a commit subject on HEAD, a `verified` issue whose change
-reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, and a
-`resolution:` that disagrees with the status. `--backfill` closes verified issues by the exact
+reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, a
+`resolution:` that disagrees with the status, and a lane problem: a `lane:` on an open, blocked
+or paused issue (a release deletes it), a value that is not `<ID>@<YYYY-MM-DD>`, or two
+ACTIVE/PENDING issues in one lane. The views and `--report` open with **In progress**, one group per
+lane named after its slice (`LANES-20/21/9`), its landed issues shown beside the live ones until the
+last one lands and the lane disappears. `lanes_claim.py` writes the `lane:` field, which stays on an
+issue after it lands; a claim made before it existed is grouped from its ⏳ marker under the same key. `--backfill` closes verified issues by the exact
 commit subject their Resolution cites, and only on a machine whose operator row certifies (solo
 mode: every machine). The close is deterministic, so several certifying machines may run it at once; `--push`
 fetches first, pushes a backlog-only result, and converges on a rejected push by rebasing.

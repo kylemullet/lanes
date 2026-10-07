@@ -395,6 +395,7 @@ def test_render_html_shows_lanes_on_top_and_each_claim_once():
     page = bidx.render_html(issues)
     assert page.index("In progress") < page.index("Open queue")
     assert "lanes-lanes-20" in page and "lanes-20-work" in page and "kyle-mac@Air" in page
+    assert '<span class="ln">LANES-20/21 <code>lanes-lanes-20</code>' in page
     assert '<time data-ts="2026-10-07 02:40">' in page
     assert page.index(">LANES-20</a>") < page.index(">LANES-21</a>")
     for iid in ("LANES-20", "LANES-21", "UI-1", "UI-2"):
@@ -435,6 +436,114 @@ def test_render_html_puts_the_clone_position_inline_or_in_a_callout():
     behind = bidx.render_html([_issue("UI-1")], position=("abc1234", 3))
     assert '<div class="callout"><strong>This clone is 3 commit(s) behind' in behind
     assert '<span class="pos"' not in behind
+
+
+# --- the recorded lane: field (LANES-10) -------------------------------------
+
+def test_lane_stays_on_a_landed_issue_and_leaves_with_a_released_one():
+    lane = "UI-1@2026-10-07"
+    assert bidx.lane_problems([_issue("UI-1", status="verified", lane=lane),
+                               _issue("UI-2", status="closed", closed="2026-10-07", lane=lane)]) == []
+    out = bidx.lane_problems([_issue("UI-3", status="open", lane=lane)])
+    assert len(out) == 1 and "on a `open` issue" in out[0] and "released" in out[0]
+
+
+def test_lane_problems_flag_a_malformed_value_and_two_heads_in_one_lane():
+    lane = "LANES-20@2026-10-07"
+    issues = [_claimed("LANES-20", ACTIVE_MK, lane=lane),
+              _claimed("LANES-21", PENDING_MK, lane=lane),
+              _claimed("LANES-22", _reserved("LANES-21"), lane="lanes twenty")]
+    out = bidx.lane_problems(issues)
+    assert any("2 ACTIVE/PENDING issues (LANES-20, LANES-21)" in p for p in out)
+    assert any("`lane: lanes twenty` is not `<ID>@<YYYY-MM-DD>`" in p for p in out)
+
+
+def test_a_lane_between_issues_and_a_pre_field_claim_are_both_legal():
+    lane = "LANES-20@2026-10-07"
+    issues = [_claimed("LANES-21", _reserved("LANES-20"), lane=lane),   # lead landed, next not flipped
+              _claimed("LANES-9", _reserved("LANES-21"), lane=lane),
+              _claimed("INFRA-100", ACTIVE_MK)]                          # claimed before the field
+    assert bidx.lane_problems(issues) == []
+
+
+def test_a_lane_shows_its_landed_issues_until_the_last_one_lands():
+    lane = "LANES-22@2026-10-07"
+    issues = [_issue("LANES-22", status="closed", closed="2026-10-07", lane=lane),
+              _claimed("LANES-10", ACTIVE_MK, lane=lane),
+              _issue("LANES-5", status="closed", closed="2026-10-07", lane="LANES-5@2026-10-01")]
+    (ln,) = bidx.lanes_in_flight(issues)
+    assert [m["id"] for m in ln["members"]] == ["LANES-22", "LANES-10"]
+    assert [bidx.lane_member_state(m) for m in ln["members"]] == ["closed", "active"]
+    assert bidx.lane_name(ln) == "LANES-22/10" and ln["lead"]["id"] == "LANES-22"
+    page = bidx.render_html(issues)
+    assert 'class="st st-closed"' in page and "<b>1</b> in progress" in page
+    assert "title for LANES-22" in page.split('class="lanes"')[1].split("</section>")[0]
+    # the last issue lands: the lane is gone, its issues remain in the closed table
+    issues[1] = _issue("LANES-10", status="verified", lane=lane)
+    assert bidx.lanes_in_flight(issues) == []
+
+
+def test_the_recorded_lane_keeps_a_slice_together_after_its_lead_lands():
+    lane = "LANES-20@2026-10-07"
+    issues = [_claimed("LANES-9", _reserved("LANES-21"), lane=lane),
+              _claimed("LANES-21", _reserved("LANES-20"), lane=lane),
+              _issue("LANES-20", status="verified", lane=lane)]
+    (ln,) = bidx.lanes_in_flight(issues)
+    assert ln["key"] == lane and [m["id"] for m in ln["members"]] == ["LANES-20", "LANES-21", "LANES-9"]
+    assert bidx.lane_member_state(ln["members"][0]) == "landed"
+    assert bidx.lane_member_note(ln, ln["members"][1]) == ""     # its lead is right there
+    assert bidx.lane_label(ln)["name"] == "LANES-20/21/9" and bidx.lane_label(ln)["where"] == "between issues"
+    # a lead that landed before the field existed is not in the lane: the reservation says so
+    issues[2] = _issue("LANES-20", status="verified")
+    (ln,) = bidx.lanes_in_flight(issues)
+    assert bidx.lane_member_note(ln, ln["members"][0]) == "queued behind LANES-20, no longer claimed"
+
+
+def test_a_recorded_reservation_joins_a_pre_field_lead_under_the_derived_key():
+    issues = [_claimed("LANES-20", ACTIVE_MK),                                  # no lane: field
+              _claimed("LANES-21", _reserved("LANES-20"), lane="LANES-20@2026-10-07")]
+    (ln,) = bidx.lanes_in_flight(issues)
+    assert ln["key"] == "LANES-20@2026-10-07" and len(ln["members"]) == 2
+
+
+def test_the_card_is_named_by_the_active_issue_even_when_it_is_not_the_lead():
+    lane = "LANES-20@2026-10-07"
+    active = ACTIVE_MK.replace("lanes-lanes-20", "lanes-lanes-21").replace("lanes-20-work", "lanes-21-work")
+    issues = [_claimed("LANES-21", active.replace("**ACTIVE LANE.**", "**ACTIVE LANE.** queued behind LANES-20"),
+                       lane=lane),
+              _claimed("LANES-9", _reserved("LANES-21"), lane=lane)]
+    (ln,) = bidx.lanes_in_flight(issues)
+    assert ln["head"]["id"] == "LANES-21"
+    lb = bidx.lane_label(ln)
+    assert lb["name"] == "LANES-20/21/9" and lb["where"] == "lanes-lanes-21" and lb["branch"] == "lanes-21-work"
+
+
+def test_index_md_and_report_group_claims_by_lane_and_list_each_once(capsys):
+    lane = "LANES-20@2026-10-07"
+    issues = [_claimed("LANES-20", ACTIVE_MK, lane=lane),
+              _claimed("LANES-21", _reserved("LANES-20"), lane=lane),
+              _issue("UI-1")]
+    md = bidx.render_index(issues)
+    assert "## In progress — 2 claimed · 1 lane" in md
+    assert "**LANES-20/21** · `lanes-lanes-20` (`lanes-20-work`)" in md and f"lane `{lane}`" in md
+    assert md.index("## In progress") < md.index("## Open / blocked / paused")
+    assert md.count("[LANES-21](") == 1 and md.index("- active · [LANES-20]") < md.index("- reserved · [LANES-21]")
+    for i in issues:
+        i["_age"] = bidx._age(i.get("opened"))
+    bidx.render_report(issues, "kyle")
+    out = capsys.readouterr().out
+    assert out.index("IN PROGRESS — 2 claimed · 1 lane") < out.index("BACKLOG (kyle)")
+    assert "LANES-20/21 · lanes-lanes-20 [lanes-20-work]" in out and f"lane {lane}" in out
+    assert out.count("reserved    LANES-21") == 1 and "     LANES-21 " not in out.split("BACKLOG (kyle)")[1]
+
+
+def test_a_lane_is_named_after_its_slice():
+    def ln(key, *ids):
+        ms = [_claimed(i, PENDING_MK) for i in ids]
+        return {"key": key, "members": ms, "lead": ms[0], "head": ms[0], "claimed": None}
+    assert bidx.lane_name(ln("INFRA-98@2026-10-07", "INFRA-98", "INFRA-89")) == "INFRA-98/89"
+    assert bidx.lane_name(ln("LANES-22@2026-10-07", "LANES-22", "INFRA-100")) == "LANES-22/INFRA-100"
+    assert bidx.lane_name(ln("UI-3", "UI-3")) == "UI-3"
 
 
 # --- the verified status + backfill ----------------------------------------

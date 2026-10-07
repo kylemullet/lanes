@@ -31,7 +31,7 @@ Hand-written markers also drift from the spelling the doctor reads.
 Exit status: 0 claimed and pushed; 1 refused, nothing written or committed; 2 committed
 but not pushed (the reason is printed; the commit is on local main).
 """
-import argparse, datetime, socket, subprocess, sys
+import argparse, datetime, re, socket, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -100,13 +100,19 @@ def marker(kind, stamp, who, behind=None, files=None, prior=None):
     return f"⏳ IN-PROGRESS ({stamp}, {who}) — **{kind}.** {tail}"
 
 
-def with_claim(text, line):
-    """`status: in-progress` + the marker at the top of Current status."""
+def with_claim(text, line, lane=None):
+    """`status: in-progress` (+ `lane:`) + the marker at the top of Current status."""
     nl = "\r\n" if "\r\n" in text else "\n"
     head, sep, body = text.partition(f"{nl}---{nl}")
     if not sep or not head.startswith("---"):
         raise Refused("no frontmatter block")
-    fm = [("status: in-progress" if l.startswith("status:") else l) for l in head.split(nl)]
+    fm = []
+    for l in head.split(nl):
+        if l.startswith("lane:"):
+            continue                      # rewritten below, never duplicated
+        fm.append("status: in-progress" if l.startswith("status:") else l)
+        if lane and l.startswith("status:"):
+            fm.append(f"lane: {lane}")    # LANES-10: the lane's recorded identity
     section = f"{nl}## Current status{nl}"
     if section not in body:
         raise Refused("no `## Current status` section")
@@ -208,9 +214,26 @@ class Claim:
             raise Refused("; ".join(problems))
 
     # -- 4 ------------------------------------------------------------------
+    def lane(self):
+        """`<lead-ID>@<YYYY-MM-DD>` -- or, with --behind, the extended lane's own value.
+
+        A lead claimed before the field existed has none; its key is derived the way
+        `backlog_index.lanes_in_flight` derives one from a marker, `<ID>@<claim date>`,
+        so the new reservation groups with it.
+        """
+        if not self.behind:
+            return f"{self.ids[0]}@{self.stamp[:10]}"
+        text = (self.root / self.paths[self.behind]).read_text(encoding="utf-8")
+        recorded = (frontmatter(text) or {}).get("lane")
+        if recorded and recorded not in ("null", "~"):
+            return recorded
+        m = re.search(r"⏳ IN-PROGRESS \((\d{4}-\d{2}-\d{2})", text)
+        return f"{self.behind}@{m.group(1) if m else self.stamp[:10]}"
+
     def rewrites(self):
         """{rel path: new text} for every ID, in slice order."""
         who, out, prev = identity(self.cfg), {}, self.behind
+        lane = self.lane()
         for issue_id in self.ids:
             rel = self.paths[issue_id]
             text = (self.root / rel).read_text(encoding="utf-8")
@@ -218,7 +241,7 @@ class Claim:
             kind = RESERVED if prev else PENDING
             line = marker(kind, self.stamp, who, behind=prev, files=self.files, prior=prior)
             try:
-                out[rel] = with_claim(text, line)
+                out[rel] = with_claim(text, line, lane)
             except Refused as e:
                 raise Refused(f"{issue_id}: {e}")
             prev = issue_id

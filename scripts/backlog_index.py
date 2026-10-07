@@ -224,13 +224,17 @@ def load_issues():
     return issues, problems
 
 
-# --- lanes, read from the ⏳ claim markers (LANES-22, LANES-10's view half) ---
+# --- lanes (LANES-22 view, LANES-10 recorded identity) ----------------------
 #
-# A lane is a slice of one or more claimed issues: one ACTIVE or PENDING issue
-# and the RESERVED ones queued behind it. Until LANES-10 adds a recorded `lane:`
-# field, the grouping is read from the marker prose the skills already write:
+# A lane is a slice of one or more claimed issues: at most one ACTIVE or PENDING
+# issue and the RESERVED ones queued behind it. Its identity is the frontmatter
+# field `lane: <lead-ID>@<YYYY-MM-DD>`, which `lanes_claim.py` writes on every
+# issue of a slice (and copies onto a `--behind` extension) and which leaves the
+# issue with its claim. A claim made before the field existed is grouped from its
+# marker prose instead -- under the SAME key, `<root>@<root's claim date>`, so an
+# old lead and a new reservation behind it still land in one lane:
 #   ⏳ IN-PROGRESS (<YYYY-MM-DD HH:MM>, <who>'s session[ on <machine>][, worktree <w>, branch <b>])
-#      — **ACTIVE LANE.** | **WORKTREE PENDING.** | **RESERVED, NOT STARTED — queued behind <ID>.**
+#      — **ACTIVE LANE.** | **WORKTREE PENDING.** | **RESERVED, NOT STARTED.** … queued behind <ID>
 # A marker this cannot read still yields a lane of one, never a dropped issue.
 
 MARKER_RE = re.compile(r"⏳ IN-PROGRESS \(([^)]*)\)\s*[—–-]+\s*\*\*\s*"
@@ -238,6 +242,7 @@ MARKER_RE = re.compile(r"⏳ IN-PROGRESS \(([^)]*)\)\s*[—–-]+\s*\*\*\s*"
 MARKER_STATES = {"ACTIVE LANE": "active", "WORKTREE PENDING": "pending",
                  "RESERVED, NOT STARTED": "reserved"}
 QUEUED_RE = re.compile(r"[Qq]ueued behind\s+(?:\[\[)?([A-Z][A-Z0-9]*-\d+)")
+LANE_RE = re.compile(r"^[A-Z][A-Z0-9]*-\d+@\d{4}-\d{2}-\d{2}$")
 
 
 def parse_marker(body):
@@ -263,13 +268,22 @@ def parse_marker(body):
     return None
 
 
-def lanes_in_flight(issues):
-    """Group the in-progress issues into lanes, each in slice order.
 
-    Returns a list of {"members": [issue, ...], "lead": issue, "claimed": str|None},
-    oldest claim first. A RESERVED issue joins the lane of the issue it is queued
-    behind when that issue is itself claimed; otherwise (it was released, or it
-    landed) it stands as its own lane rather than vanishing.
+def lanes_in_flight(issues):
+    """Group the lanes still in flight, each in slice order.
+
+    A lane is in flight while ANY of its issues is in-progress, and until then it
+    keeps the ones that already landed (`verified` / `closed` with the same `lane:`),
+    so the operator sees the whole slice -- what is done and what is left -- until
+    the last issue lands and the lane disappears (Kyle, 2026-10-07).
+
+    Returns a list of {"key", "members": [issue, ...], "lead", "head", "claimed"},
+    oldest claim first. `key` is the recorded `lane:` value, or the marker-derived
+    one for a claim that predates the field. Members run landed-first (by close
+    date), then the live ones in queued-behind order. `lead` is the slice's first
+    issue (the key's ID when present), `head` the ACTIVE/PENDING one (else the
+    first live one). A RESERVED issue whose lead is no longer claimed and carries
+    no field stands as its own lane rather than vanishing.
     """
     claimed = {i["id"]: i for i in issues if i.get("status") == "in-progress" and i.get("id")}
 
@@ -286,29 +300,127 @@ def lanes_in_flight(issues):
             path.append(p)
         return path[-1]
 
-    kids = {}
-    for iid in claimed:
-        if root(iid) != iid:
-            kids.setdefault(parent(iid), []).append(iid)
-    out = []
+    def key(iid):
+        recorded = claimed[iid].get("lane")
+        if recorded:
+            return str(recorded)
+        r = root(iid)
+        ts = (claimed[r].get("_marker") or {}).get("claimed")
+        return f"{r}@{ts[:10]}" if ts else r
+
+    groups = {}
     for iid in sorted(claimed, key=_sort_id_str):
-        if root(iid) != iid:
-            continue
-        order, todo = [], [iid]
+        groups.setdefault(key(iid), []).append(iid)
+    landed = {}
+    for i in issues:
+        if i.get("lane") and i.get("status") in ("verified", "closed") and str(i["lane"]) in groups:
+            landed.setdefault(str(i["lane"]), []).append(i)
+    out = []
+    for k, ids in groups.items():
+        inside = set(ids)
+        starts = [i for i in ids if parent(i) not in inside or root(i) == i]
+        kids = {}
+        for i in ids:
+            if i not in starts:
+                kids.setdefault(parent(i), []).append(i)
+        order, todo = [], list(starts)
         while todo:
             cur = todo.pop(0)
             if cur in order:
                 continue
             order.append(cur)
             todo.extend(sorted(kids.get(cur, []), key=_sort_id_str))
-        members = [claimed[x] for x in order]
-        stamps = [(m.get("_marker") or {}).get("claimed") for m in members]
-        stamps = [s for s in stamps if s]
-        out.append({"members": members, "lead": members[0],
+        order += [i for i in ids if i not in order]
+        done = sorted(landed.get(k, []), key=lambda i: (i.get("closed") or "9999", _sort_id_str(i["id"])))
+        live = [claimed[x] for x in order]
+        members = done + live
+        lead_id = k.split("@", 1)[0] if "@" in k else None
+        lead = next((m for m in members if m["id"] == lead_id), members[0])
+        if lead is not members[0]:
+            members = [lead] + [m for m in members if m is not lead]
+        heads = [m for m in live if (m.get("_marker") or {}).get("state") in ("active", "pending")]
+        stamps = [s for s in ((m.get("_marker") or {}).get("claimed") for m in live) if s]
+        out.append({"key": k, "members": members, "lead": lead,
+                    "head": heads[0] if heads else live[0],
                     "claimed": min(stamps) if stamps else None})
     out.sort(key=lambda ln: (ln["claimed"] or "9999", _sort_id_str(ln["lead"]["id"])))
     return out
 
+
+def lane_problems(issues):
+    """`--check`'s lane rules (LANES-10).
+
+    A `lane:` value must be `<ID>@<YYYY-MM-DD>`. It stays on an issue that LANDED
+    (`verified` / `closed`: the record of which lane resolved it, and what keeps the
+    slice whole in the views until its last issue lands) but not on one that went
+    back to the queue: a release deletes it. A lane holds AT MOST one ACTIVE or
+    PENDING issue -- zero is legal between two issues of a slice. An in-progress
+    issue WITHOUT the field is not a problem either: claims made before it existed
+    are grouped from their markers, and only the session that owns a claim may write
+    to it (INFRA-47).
+    """
+    out, heads = [], {}
+    for it in issues:
+        lane = it.get("lane")
+        if lane in (None, ""):
+            continue
+        if it.get("status") not in ("in-progress", "verified", "closed"):
+            out.append(f"{it['_path']}: `lane: {lane}` on a `{it.get('status')}` issue — a released "
+                       "claim deletes the field with its ⏳ marker")
+            continue
+        if not LANE_RE.match(str(lane)):
+            out.append(f"{it['_path']}: `lane: {lane}` is not `<ID>@<YYYY-MM-DD>`")
+        if it.get("status") == "in-progress" and (it.get("_marker") or {}).get("state") in ("active", "pending"):
+            heads.setdefault(str(lane), []).append(it["id"])
+    for lane, ids in sorted(heads.items()):
+        if len(ids) > 1:
+            out.append(f"lane {lane}: {len(ids)} ACTIVE/PENDING issues ({', '.join(sorted(ids))}) — "
+                       "a lane works one issue at a time")
+    return out
+
+
+def lane_name(ln):
+    """A lane is named after its slice: `LANES-20/21/9`, the lead's full ID then the
+    others' numbers in slice order (a member from another project keeps its full
+    ID: `LANES-22/INFRA-100`). The lead comes from the recorded key, so the name
+    stays the same after the lead lands and only its reservations remain."""
+    lead = ln["key"].split("@", 1)[0] if "@" in ln["key"] else ln["lead"]["id"]
+    ids = [lead] + [m["id"] for m in ln["members"] if m["id"] != lead]
+    proj = lead.rsplit("-", 1)[0]
+    return "/".join([ids[0]] + [i.rsplit("-", 1)[1] if i.rsplit("-", 1)[0] == proj else i
+                                for i in ids[1:]])
+
+
+def lane_label(ln):
+    """How every view describes a lane: its slice name, then where the head issue is."""
+    head = ln["head"].get("_marker") or {}
+    if head.get("worktree"):
+        where = head["worktree"]
+    elif head.get("state") == "pending":
+        where = "worktree pending"
+    else:
+        where = "between issues" if len(ln["members"]) > 1 else "not started"
+    return {"name": lane_name(ln), "where": where, "branch": head.get("branch"),
+            "machine": head.get("machine") or head.get("who"), "claimed": ln["claimed"],
+            "key": ln["key"]}
+
+
+def lane_member_state(m):
+    """active / pending / reserved for a claim; landed / closed for a member that is done."""
+    if m.get("status") == "verified":
+        return "landed"
+    if m.get("status") == "closed":
+        return "closed"
+    return (m.get("_marker") or {}).get("state") or "unknown"
+
+
+def lane_member_note(ln, m):
+    """A reservation queued behind an issue that is neither claimed nor in its lane says so."""
+    mk = m.get("_marker") or {}
+    if (m.get("status") == "in-progress" and mk.get("state") == "reserved" and mk.get("behind")
+            and mk["behind"] not in {x["id"] for x in ln["members"]}):
+        return f"queued behind {mk['behind']}, no longer claimed"
+    return ""
 
 def _sort_id_str(iid):
     proj, _, num = (iid or "").partition("-")
@@ -764,7 +876,7 @@ def check_problems(issues, problems):
     """Everything --check and the test suite assert, as one list of strings."""
     return (list(problems) + orphaned_claims(issues) + orphaned_commit_citations(issues)
             + unresolvable_verified(issues) + undocumented_verified(issues)
-            + dangling_epics(issues) + resolution_problems(issues))
+            + dangling_epics(issues) + resolution_problems(issues) + lane_problems(issues))
 
 
 # --- the backfill (ADMIN-8) ---------------------------------------------
@@ -962,6 +1074,26 @@ def _cell(v):
     return (v if v not in (None, "", []) else "—")
 
 
+def _md_lanes(lanes):
+    """INDEX.md's In progress section: one block per lane, issues in slice order."""
+    if not lanes:
+        return []
+    n = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
+    out = ["", f"## In progress — {n} claimed · {len(lanes)} lane{'s' if len(lanes) != 1 else ''}"]
+    for ln in lanes:
+        lb = lane_label(ln)
+        bits = [f"**{lb['name']}**", f"`{lb['where']}`" + (f" (`{lb['branch']}`)" if lb["branch"] else "")]
+        bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
+        bits.append(f"lane `{lb['key']}`")
+        out += ["", " · ".join(bits), ""]
+        for m in ln["members"]:
+            state = lane_member_state(m)
+            note = lane_member_note(ln, m)
+            out.append(f"- {state} · [{m['id']}]({m['_path'].as_posix().replace(BACKLOG_REL + '/', '')}) "
+                       f"— {m['_title']}" + (f" _({note})_" if note else ""))
+    return out
+
+
 def render_index(issues):
     open_issues = [i for i in issues if i.get("status") in LIVE_STATUSES]
     verified = [i for i in issues if i.get("status") == "verified"]
@@ -981,6 +1113,7 @@ def render_index(issues):
     counts = " · ".join(f"{p} {len(by_proj[p])}" for p in PROJECTS if p in by_proj)
     lines.append(f"**{len(open_issues)} live** ({counts}) · {len(verified)} verified "
                  f"(landed, awaiting close) · {len(closed)} closed")
+    lines += _md_lanes(lanes_in_flight(issues))
     lines += [
         "",
         "## Open / blocked / paused",
@@ -988,7 +1121,8 @@ def render_index(issues):
         "| ID | Type | Status | Pri | Assignee | Opened | Epic | Blocked on | Title |",
         "| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |",
     ]
-    for i in sorted(open_issues, key=sort_key):
+    # A claimed issue is listed once, under its lane, not again in the queue.
+    for i in sorted((i for i in open_issues if i.get("status") != "in-progress"), key=sort_key):
         title = i["_title"]
         title = title if len(title) <= 90 else title[:89] + "…"
         lines.append(
@@ -1119,6 +1253,11 @@ h2 small{color:var(--mut);font-weight:450;font-size:12px}
            box-shadow:0 0 0 3px var(--accent-soft)}
 .st-pending{color:var(--pend)}.st-pending::before{background:var(--pend)}
 .st-reserved::before{background:transparent;border:1.5px solid var(--res)}
+.st-landed,.st-closed{color:var(--ok)}
+.st-landed::before,.st-closed::before{content:"\\2713";width:auto;height:auto;background:none;
+                                      font-size:11px;line-height:1}
+.lane li.landed .t,.lane li.closed .t{color:var(--mut)}
+.lane li.landed a.id,.lane li.closed a.id{color:var(--mut)}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 #q{flex:1 1 260px;max-width:440px;padding:8px 12px;font:inherit;color:var(--fg);
    background:var(--surface);border:1px solid var(--line);border-radius:8px}
@@ -1452,33 +1591,29 @@ def _html_lanes(lanes):
         return ""
     cards = []
     for ln in lanes:
-        lead = ln["lead"].get("_marker") or {}
-        name = lead.get("worktree") or (f"{ln['lead']['id']} — worktree pending"
-                                        if lead.get("state") == "pending" else ln["lead"]["id"])
-        branch = f' <code>{_esc(lead["branch"])}</code>' if lead.get("branch") else ""
-        who = " · ".join(_esc(x) for x in (lead.get("machine") or lead.get("who"),) if x)
+        lb = lane_label(ln)
+        name = lb["name"]
+        branch = f' <code>{_esc(lb["where"])}</code>' + (f' <code>{_esc(lb["branch"])}</code>'
+                                                         if lb["branch"] else "")
+        who = _esc(lb["machine"] or "")
         when = (f'claimed <time data-ts="{_esc(ln["claimed"])}">{_esc(ln["claimed"])}</time>'
                 if ln["claimed"] else "claim time unreadable")
         items = []
         for m in ln["members"]:
-            mk = m.get("_marker") or {}
-            state = mk.get("state") or "unknown"
+            state = lane_member_state(m)
             pri = (" " + _pill("p", m.get("priority"))
                    if m.get("priority") in ("critical", "high") else "")
-            # A reservation whose lead is no longer claimed (it landed, or was
-            # released) says so: that is the stale-reservation tell.
-            after = ""
-            if mk.get("behind") and m is ln["lead"]:
-                after = f'<span class="after">queued behind {_esc(mk["behind"])}, no longer claimed</span>'
+            note = lane_member_note(ln, m)
+            after = f'<span class="after">{_esc(note)}</span>' if note else ""
             items.append(
                 f'<li class="{state}"><span class="st st-{state}">{state}</span>'
                 f'<a class="id" href="{_esc(_href(m))}">{_esc(m["id"])}</a>'
                 f'<span class="t">{_esc(m["_title"])}{pri}{after}</span></li>')
         cards.append(
-            f'<article class="lane"><header><span class="ln">{_esc(name)}{branch}</span>'
+            f'<article class="lane" title="lane {_esc(ln["key"])}"><header><span class="ln">{_esc(name)}{branch}</span>'
             f'<span>{who + " · " if who else ""}{when}</span></header>'
             f'<ol>{"".join(items)}</ol></article>')
-    n = sum(len(ln["members"]) for ln in lanes)
+    n = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
     lanes_word = "lane" if len(lanes) == 1 else "lanes"
     return (f'<section class="lanes"><h2>In progress <small>{n} claimed · {len(lanes)} '
             f'{lanes_word}</small></h2><div class="lane-grid">{"".join(cards)}</div></section>')
@@ -1521,7 +1656,7 @@ def render_html(issues, problems=(), position=None):
         _facet("epic", epics + ["—"]) if epics else "",
     ))
 
-    n_claimed = sum(len(ln["members"]) for ln in lanes)
+    n_claimed = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
     n_crit = sum(1 for i in live if i.get("priority") == "critical")
     stats = "".join((
         f'<div class="stat"><b>{len(live)}</b> live</div>',
@@ -1593,8 +1728,26 @@ def render_report(issues, who):
                    and who in (i.get("blocked_on") or "").lower()]
     else:
         mine, waiting = open_issues, []
+    lanes = lanes_in_flight(issues)
+    if lanes:
+        # Every operator's lanes, not just this one's: a claim is a wall for everyone.
+        n = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
+        print(f"{'='*100}\nIN PROGRESS — {n} claimed · {len(lanes)} lane{'s' if len(lanes) != 1 else ''}"
+              f" (claims are walls: route around every issue here)\n{'='*100}")
+        for ln in lanes:
+            lb = lane_label(ln)
+            bits = [lb["name"], lb["where"] + (f" [{lb['branch']}]" if lb["branch"] else "")]
+            bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
+            print("  " + " · ".join(bits + [f"lane {lb['key']}"]))
+            for m in ln["members"]:
+                state = lane_member_state(m)
+                note = lane_member_note(ln, m)
+                # Full titles: the lane block is short, and the title is what the eye reads.
+                print(f"      {state:<9} {m['id']:>10}  {m['_title']}" + (f"  ({note})" if note else ""))
+        print()
     print(f"{'='*100}\nBACKLOG ({who}) — {len(mine)} live\n{'='*100}")
-    for i in sorted(mine, key=lambda x: (x["_age"] is None, -(x["_age"] or 0))):
+    for i in sorted((i for i in mine if i.get("status") != "in-progress"),
+                    key=lambda x: (x["_age"] is None, -(x["_age"] or 0))):
         age = f"{i['_age']}d" if i["_age"] is not None else "undated"
         blocked = f"  ⛔ {i['blocked_on']}" if i.get("blocked_on") else ""
         print(f"{i['id']:>10} {i.get('type') or '?':>8} {i.get('status') or '?':>11} "
@@ -1792,7 +1945,7 @@ def main(argv=None):
             return 1
         n_verified = sum(1 for i in issues if i.get("status") == "verified")
         print(f"backlog check OK — {len(issues)} issues, no structural problems, "
-              "no orphaned claims, no orphaned commit citations, no dangling epics, "
+              "no orphaned claims, no orphaned commit citations, no dangling epics, no lane conflicts, "
               f"{n_verified} verified awaiting backfill (each documented).")
         return 0
 
