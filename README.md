@@ -225,7 +225,7 @@ annotated reference; the short version:
 | `tests.required_before_land` | `true` | |
 | `tests.rebase_rerun_command` | — | prints the test args for a scoped post-rebase re-run; absent = full suite |
 | `worktrees.port_command` | — | prints this lane's localhost port |
-| `[[operators]]` | `[]` (solo) | one row per `(git user.name, platform)` — a machine, not a person: `id`, `short`, `certifies`, `may_edit_code`. `id` and the pair are unique; one person on two machines is two rows sharing a `short` |
+| `[[operators]]` | `[]` (solo) | one row per `(git user.name, platform)` — a machine, not a person: `id`, `short`, `certifies`, `may_edit_code`. `id` and the pair are unique; one person on two machines is two rows sharing a `short`. `retired = true` (+ optional `retired_on`) keeps a departed operator's row as history: it grants nothing, never matches a machine, is not offered by `backlog_new.py`, and is valid on closed issues only (and as `reported_by` anywhere) |
 | `lanes.code`, `lanes.code_owner` | — | which paths only the owning operator edits; meaningless in solo mode |
 
 **Not configurable, on purpose:** the status vocabulary (`in-progress`, `open`, `blocked`,
@@ -240,6 +240,13 @@ two-operator rule in the protocol degrades to a no-op, never an error. Fill in `
 only when a second person or machine works the repo; an unknown `(user.name, platform)` pair
 in a multi-operator repo resolves to *no permissions*, which the skills treat as "ask, don't
 guess".
+
+When someone leaves, mark their row `retired = true` rather than deleting it. Removing it would fail
+`--check` on every closed issue that names them. A retired row grants nothing and never matches the
+running machine. Its `short` stays valid on closed and verified issues and as `reported_by` (who raised
+an issue doesn't change when they leave), but is not offered for new issues. A live issue still
+assigned to it fails `--check`, so a departure can't leave live work assigned to someone who is gone.
+The doctor's `config` line counts retired rows. With only retired rows left, the repo is in solo mode.
 
 ### Extension points
 

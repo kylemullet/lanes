@@ -68,6 +68,8 @@ required_before_land = true
 # short = "mike"
 # certifies = false
 # may_edit_code = false
+# retired = true                 # someone who left: keep the row so closed issues naming them stay
+# retired_on = "2026-10-08"      # valid; it grants nothing and is never offered for new work
 #
 # [lanes]                        # only meaningful with >1 operator
 # code = ["src/", "tests/", "scripts/"]

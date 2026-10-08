@@ -92,6 +92,7 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
 _OPERATOR_FIELDS = {
     "name": (str, True), "platform": (str, True), "id": (str, True), "short": (str, True),
     "certifies": (bool, False), "may_edit_code": (bool, False),
+    "retired": (bool, False), "retired_on": (str, False),     # LANES-27
 }
 _TOP_LEVEL_SCALARS = {"plugin_version": (str, False)}
 _PROJECT_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
@@ -289,9 +290,20 @@ def validate(raw: dict) -> list:
             if pair in pairs:
                 err(f"two operators share name+platform {pair!r}: a machine must resolve to one row")
             pairs.add(pair)
+        if row.get("retired") is True:
+            # A retired row is history: its short keeps closed issues valid, and it grants nothing.
+            granted = [k for k in ("certifies", "may_edit_code") if row.get(k) is True]
+            if granted:
+                warn(f"{where} is retired but sets {', '.join(f'`{k} = true`' for k in granted)} — "
+                     "ignored: a retired row grants nothing")
+            if isinstance(row.get("retired_on"), str) and not _DATE_RE.match(row["retired_on"]):
+                err(f"{where}.retired_on must be YYYY-MM-DD")
+            continue
+        if row.get("retired_on") is not None:
+            warn(f"{where}.retired_on is set but `retired` is not true")
         if row.get("certifies") is True:
             any_certifies = True
-    if ops and not any_certifies:
+    if any(isinstance(r, dict) and r.get("retired") is not True for r in ops) and not any_certifies:
         warn("no operator has `certifies = true`: nothing can land on the main branch")
 
     lanes_t = raw.get("lanes") if isinstance(raw.get("lanes"), dict) else {}
@@ -329,7 +341,7 @@ def machine_row(operators: list, user_name: str, platform: Optional[str] = None)
     don't guess".
     """
     platform = platform or sys.platform
-    for row in operators:
+    for row in active_operators(operators):   # a retired row never matches the running machine
         if row.get("name") == user_name and row.get("platform") == platform:
             return {
                 "name": user_name, "platform": platform, "id": row["id"], "short": row["short"],
@@ -337,13 +349,18 @@ def machine_row(operators: list, user_name: str, platform: Optional[str] = None)
                 "may_edit_code": bool(row.get("may_edit_code", True)),
                 "known": True,
             }
-    solo = not operators
+    solo = not active_operators(operators)
     return {
         "name": user_name, "platform": platform,
         "id": f"{user_name or 'operator'}+{platform}",
         "short": slug(user_name),
         "certifies": solo, "may_edit_code": solo, "known": False,
     }
+
+
+def active_operators(operators: list) -> list:
+    """The rows that still work here: every row without `retired = true` (LANES-27)."""
+    return [r for r in operators if isinstance(r, dict) and r.get("retired") is not True]
 
 
 def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] = None) -> dict:
@@ -356,8 +373,15 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
     operators = merged["operators"]
     user_name = git_user_name() if user_name is None else user_name
     machine = machine_row(operators, user_name, platform)
-    # Distinct, in table order: several machine rows may share one person's short.
-    shorts = list(dict.fromkeys(r["short"] for r in operators if isinstance(r.get("short"), str))) or [machine["short"]]
+    # Distinct, in table order: several machine rows may share one person's short. ACTIVE
+    # shorts are what live work may name and what new issues are offered; EVERY short that
+    # is or was an operator stays valid on history (LANES-27), so a departure needs no edit
+    # to the issues that already name the person.
+    active = active_operators(operators)
+    shorts = list(dict.fromkeys(r["short"] for r in active if isinstance(r.get("short"), str))) or [machine["short"]]
+    every = list(dict.fromkeys(shorts + [r["short"] for r in operators
+                                        if isinstance(r, dict) and isinstance(r.get("short"), str)]))
+    retired_shorts = [x for x in every if x not in shorts]
     docs_lane = merged["backlog"]["docs_lane_prefixes"]
     if docs_lane is None:
         docs_lane = list(merged["git"]["main_direct_paths"])
@@ -391,10 +415,13 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
         "operators": operators,
         "code_lane_paths": list(merged["lanes"]["code"]),
         "code_owner": merged["lanes"]["code_owner"],
-        "solo": not operators,
+        "solo": not active,
         "machine": machine,
         "assignees": shorts + [SHARED_ASSIGNEE],
         "reporters": [CLAUDE_REPORTER] + shorts,
+        "retired_shorts": retired_shorts,
+        "historical_assignees": every + [SHARED_ASSIGNEE],
+        "historical_reporters": [CLAUDE_REPORTER] + every,
         "claim_age_floor_minutes": CLAIM_AGE_FLOOR_MINUTES,
     }
 
@@ -424,5 +451,8 @@ def describe_mode(cfg: dict) -> str:
         perms.append("certifies")
     if m["may_edit_code"]:
         perms.append("edits code")
-    return (f"{len(cfg['operators'])} operators — this machine is {m['id']} ({who}; "
+    retired = [r.get("id") for r in cfg["operators"] if isinstance(r, dict) and r.get("retired") is True]
+    count = f"{len(cfg['operators']) - len(retired)} operators" + (
+        f" + {len(retired)} retired ({', '.join(str(x) for x in retired)})" if retired else "")
+    return (f"{count} — this machine is {m['id']} ({who}; "
             f"{', '.join(perms) if perms else 'no permissions'})")

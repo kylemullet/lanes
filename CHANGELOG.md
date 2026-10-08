@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.29 — retired operators (2026-10-08)
+
+- **`retired = true` on an operator row** (plus optional `retired_on = "YYYY-MM-DD"`, LANES-27). A
+  departure no longer forces a choice between deleting the row, which fails `--check` on every closed
+  issue that names the person, and keeping it live, which still offers them for new work. A retired row:
+  - grants nothing (a `certifies` or `may_edit_code` on it is a warning and is ignored) and never
+    matches the running machine;
+  - is not offered by `backlog_new.py` / `/lanes:new` (`--assignee`, `--reported-by`) or by `--report --who`;
+  - validates on history: a closed or verified issue may name any short that is or was an operator,
+    and `reported_by` accepts one on any issue, since who raised it doesn't change when they leave;
+  - fails `--check` when a live issue is still assigned to it, with a "reassign live work" line.
+- The doctor's `config` line counts retired rows (`2 operators + 1 retired (mike-win)`). A repo with only
+  retired rows is in solo mode.
+
 ## 0.4.28 — the doctor checks every install scope (2026-10-08)
 
 - **`version` reads every `installed_plugins.json` row that applies to the repo** (LANES-25): the

@@ -1385,3 +1385,32 @@ def test_isolated_needs_push(tmp_path, monkeypatch, capsys):
     _point(monkeypatch, mac)
     assert bidx.main(["--backfill", "--commit", "--isolated"]) == 2
     assert "--isolated needs --push" in capsys.readouterr().err
+
+
+# --- retired operators (LANES-27) ---------------------------------------------------
+
+def test_retired_shorts_validate_on_history_but_not_on_live_work(tmp_path, monkeypatch):
+    raw = {"backlog": {"projects": ["UI"]}, "operators": [
+        {"name": "Tester", "platform": sys.platform, "id": "test-box", "short": "kyle", "certifies": True},
+        {"name": "Other", "platform": "win32", "id": "other-box", "short": "mike", "retired": True}]}
+    for k, v in bidx.settings(tmp_path, raw).items():
+        monkeypatch.setattr(bidx, k, v)
+    assert bidx.ASSIGNEES == ("kyle", "shared") and bidx.RETIRED_SHORTS == ("mike",)
+    mike = "blocked_on: null\nassignee: mike\nreported_by: claude"
+    put(tmp_path, "UI-1", status="closed", closed="2026-09-01", resolution="done")             # history
+    put(tmp_path, "UI-2")                                                                       # live, by kyle
+    put(tmp_path, "UI-3", status="open")                                                        # live, mike's
+    put(tmp_path, "UI-4", status="open")                                                        # raised by mike
+    put(tmp_path, "UI-5", status="closed", closed="2026-09-01", resolution="done")             # never an operator
+    for iid, old, new in (("UI-1", "blocked_on: null\nassignee: kyle\nreported_by: claude", mike),
+                          ("UI-3", "blocked_on: null\nassignee: kyle\nreported_by: claude", mike),
+                          ("UI-4", "reported_by: claude", "reported_by: mike"),
+                          ("UI-5", "assignee: kyle", "assignee: bob")):
+        p = next((tmp_path / "docs/backlog/UI").glob(f"{iid}-*.md"))
+        p.write_text(p.read_text(encoding="utf-8").replace(old, new, 1), encoding="utf-8")
+    _, problems = bidx.load_issues()
+    assert [p for p in problems if "UI-1" in p] == [], "a closed issue may name a retired operator"
+    assert [p for p in problems if "UI-4" in p] == [], "who raised an issue does not change when they leave"
+    ui3 = [p for p in problems if "UI-3" in p]
+    assert len(ui3) == 1 and "retired operator" in ui3[0] and "reassign" in ui3[0]
+    assert any("UI-5" in p and "'bob'" in p for p in problems), "a short that never existed still fails"

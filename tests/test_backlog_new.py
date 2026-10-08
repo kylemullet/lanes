@@ -350,3 +350,14 @@ def test_no_origin_is_not_a_warning(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert bn.refs_max("INFRA", repo) == 1
     assert capsys.readouterr().err == ""
+
+
+def test_a_retired_operator_is_not_offered_for_new_issues(tmp_path, monkeypatch):
+    """LANES-27: `--assignee` and `--reported-by` offer active operators only."""
+    repo = _repo(tmp_path)
+    _point_at(monkeypatch, repo)
+    monkeypatch.setattr(bidx, "ASSIGNEES", ("kyle", "shared"))
+    monkeypatch.setattr(bidx, "REPORTERS", ("claude", "kyle"))
+    for kw in ({"assignee": "mike"}, {"reported_by": "mike"}):
+        with pytest.raises(ValueError, match=list(kw)[0]):
+            bn.create_issue("PROD", "x", regen_index=False, **kw)

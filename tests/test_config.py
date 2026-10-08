@@ -145,3 +145,59 @@ def test_installed_version_matches_manifest():
     import json
     manifest = lc.plugin_root() / ".claude-plugin" / "plugin.json"
     assert lc.installed_version() == json.loads(manifest.read_text())["version"]
+
+
+# --- retired operators (LANES-27) ---------------------------------------------------
+
+RETIRED = {"operators": [
+    {"name": "kylemullet", "platform": "darwin", "id": "kyle-mac", "short": "kyle", "certifies": True},
+    {"name": "Mike", "platform": "win32", "id": "mike-win", "short": "mike", "retired": True,
+     "retired_on": "2026-10-08"},
+]}
+
+
+def test_a_retired_row_is_history_only():
+    assert lc.validate(RETIRED) == []
+    cfg = lc.resolve(RETIRED, user_name="kylemullet", platform="darwin")
+    assert cfg["solo"] is False and cfg["machine"]["id"] == "kyle-mac"
+    assert cfg["assignees"] == ["kyle", "shared"] and cfg["reporters"] == ["claude", "kyle"]
+    assert cfg["retired_shorts"] == ["mike"]
+    assert cfg["historical_assignees"] == ["kyle", "mike", "shared"]
+    assert cfg["historical_reporters"] == ["claude", "kyle", "mike"]
+    assert "1 operators + 1 retired (mike-win)" in lc.describe_mode(cfg)
+
+
+def test_a_retired_row_never_matches_the_running_machine():
+    m = lc.resolve(RETIRED, user_name="Mike", platform="win32")["machine"]
+    assert m["known"] is False and not m["certifies"] and not m["may_edit_code"]
+
+
+def test_a_short_with_an_active_row_is_not_retired():
+    """One person, an old machine retired and a new one active: the person still works here."""
+    raw = {"operators": [
+        {"name": "k", "platform": "win32", "id": "old-box", "short": "kyle", "retired": True},
+        {"name": "k", "platform": "darwin", "id": "kyle-mac", "short": "kyle", "certifies": True},
+    ]}
+    cfg = lc.resolve(raw, user_name="k", platform="win32")
+    assert cfg["retired_shorts"] == [] and cfg["assignees"] == ["kyle", "shared"]
+    assert cfg["machine"]["known"] is False, "the retired machine itself grants nothing"
+
+
+def test_only_retired_rows_is_solo_mode():
+    raw = {"operators": [{"name": "Mike", "platform": "win32", "id": "mike-win", "short": "mike", "retired": True}]}
+    cfg = lc.resolve(raw, user_name="Ada", platform="darwin")
+    assert cfg["solo"] is True and cfg["machine"]["certifies"]
+    assert cfg["assignees"] == ["ada", "shared"] and "mike" in cfg["historical_assignees"]
+    assert not any("certifies" in m for m in _warnings(raw)), "no active row needs to certify"
+
+
+def test_retired_row_rules():
+    granting = {"operators": [RETIRED["operators"][0],
+                              dict(RETIRED["operators"][1], certifies=True, may_edit_code=True)]}
+    assert any("grants nothing" in m for m in _warnings(granting))
+    bad_date = {"operators": [RETIRED["operators"][0], dict(RETIRED["operators"][1], retired_on="Oct 8")]}
+    assert any("retired_on must be YYYY-MM-DD" in m for m in _errors(bad_date))
+    dangling = {"operators": [dict(RETIRED["operators"][0], retired_on="2026-10-08")]}
+    assert any("`retired` is not true" in m for m in _warnings(dangling))
+    assert any("retired" in m and "must be a bool" in m
+               for m in _errors({"operators": [dict(RETIRED["operators"][1], retired="yes")]}))

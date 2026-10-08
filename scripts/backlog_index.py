@@ -87,7 +87,7 @@ def settings(root=None, raw=None):
         raw = lc.load(root=root).raw
     cfg = lc.resolve(raw)
     backlog_rel = cfg["backlog_dir"].strip("/")
-    ops = cfg["operators"]
+    ops = lc.active_operators(cfg["operators"])   # a retired row grants nothing (LANES-27)
     certifiers = list(dict.fromkeys(r["short"] for r in ops if r.get("certifies")))
     machine = cfg["machine"]
     if cfg["solo"]:
@@ -110,6 +110,9 @@ def settings(root=None, raw=None):
         "PRIORITIES": tuple(cfg["priorities"]),
         "ASSIGNEES": tuple(cfg["assignees"]),
         "REPORTERS": tuple(cfg["reporters"]),
+        "HISTORICAL_ASSIGNEES": tuple(cfg["historical_assignees"]),
+        "HISTORICAL_REPORTERS": tuple(cfg["historical_reporters"]),
+        "RETIRED_SHORTS": tuple(cfg["retired_shorts"]),
         "DEFAULT_ASSIGNEE": default_assignee,
         "RESOLUTION_CUTOVER": cfg["resolution_required_from"],   # None = always required
         "DOCS_LANE_PREFIXES": tuple(cfg["docs_lane_prefixes"]),
@@ -206,10 +209,20 @@ def load_issues():
         for field, allowed in (("type", TYPES), ("status", STATUSES), ("priority", PRIORITIES)):
             if meta.get(field) not in allowed:
                 problems.append(f"{rel}: {field}={meta.get(field)!r} not in {allowed}")
-        for field, allowed in (("assignee", ASSIGNEES), ("reported_by", REPORTERS),
+        # Live work names someone who still works here; history may name anyone who did
+        # (LANES-27). `reported_by` records who raised the issue, a fact a departure does not
+        # change, so it accepts every short that is or was an operator on any issue.
+        live = meta.get("status") in LIVE_STATUSES
+        assignee = meta.get("assignee")
+        if live and assignee in RETIRED_SHORTS:
+            problems.append(f"{rel}: assignee={assignee!r} is a retired operator — reassign live work "
+                            f"(one of {ASSIGNEES})")
+        for field, allowed in (("assignee", ASSIGNEES if live else HISTORICAL_ASSIGNEES),
+                               ("reported_by", HISTORICAL_REPORTERS),
                                ("resolution", RESOLUTIONS)):
-            if meta.get(field) is not None and meta.get(field) not in allowed:
-                problems.append(f"{rel}: {field}={meta.get(field)!r} not in {allowed} (or null)")
+            value = meta.get(field)
+            if value is not None and value not in allowed and not (field == "assignee" and value in RETIRED_SHORTS):
+                problems.append(f"{rel}: {field}={value!r} not in {allowed} (or null)")
         meta.setdefault("assignee", None)
         meta.setdefault("reported_by", None)
         meta.setdefault("resolution", None)
