@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.23 — claims carry the machine; a lane can follow its operator (2026-10-08)
+
+- **The doctor judges evidence by machine** (LANES-7). A marker already named its owner
+  (`<Short>'s session on <machine id>@<host>`), but the stale-claim check counted "no
+  worktree here" against every claim, and `git worktree list` sees one machine only. For a lane
+  another machine owns, the pushed branch is now the only evidence. Its lines name the owner,
+  and a stale-claim question is addressed to that machine's session. A same-named local
+  worktree no longer counts for someone else's lane.
+- **`lanes_claim.py --resume <ID>`** re-homes the operator's own ACTIVE lane to this machine. It
+  refuses another person's lane, a lane this machine already owns, and a branch origin does
+  not have (the branch is the hand-off). It makes the worktree from `origin/<branch>`,
+  re-stamps the marker's time and machine (`Resumed from …`), and pushes under the OK-free
+  guard.
+- **`push_guard.py --ok-free` allows exactly that rewrite**: a marker by the same `short` on
+  another machine, replaced in the same file by this machine's marker on the same branch.
+  Every other edit to another machine's marker is still refused.
+- **Skills:** startup's 5b evidence table splits ACTIVE lanes by owner machine;
+  worktree-increment gains step 1r, resuming on another machine.
+
 ## 0.4.22 — a backlog-only push needs no OK, behind one guard (2026-10-07)
 
 - **`scripts/push_guard.py`** (LANES-5). The claim push and the backfill close each carried

@@ -6,6 +6,7 @@ Usage (in the MAIN clone, on the main branch, on the operator's directive):
   python3 lanes_claim.py CORE-64 UI-40 INFRA-31 --files "api/x.py, tests/test_x.py"
   python3 lanes_claim.py INFRA-92 --behind INFRA-90     # extend a lane already claimed
   python3 lanes_claim.py CORE-64 --dry-run
+  python3 lanes_claim.py --resume CORE-64              # the same operator, a second machine (LANES-7)
 
 `session-startup` step 8b and `worktree-increment` step 1 as one all-or-nothing
 operation (LANES-9). Written by hand, the claim slipped twice in one slice: a named
@@ -28,6 +29,15 @@ Hand-written markers also drift from the spelling the doctor reads.
      and re-checks 2-3 rather than forcing; a concurrent claim of the same ID
      conflicts, and this claim is withdrawn.
 
+`--resume <ID>` (LANES-7) re-homes an ACTIVE lane to THIS machine: the lane's operator
+started it on another machine and continues it here (the other-platform half, say). Refused unless the marker names the same person (`short`) on a different machine
+and its branch is on origin. It makes the worktree from `origin/<branch>`, rewrites only
+the marker's timestamp and `on <machine>@<host>` (keeping the worktree, branch and expected
+files, and appending where it was resumed from), and pushes that under the OK-free guard,
+which allows exactly this rewrite of another machine's marker. It is the owner moving their
+own lane, so INFRA-47's "never write to another session's claim" is not in play -- which is
+also why another person's lane is refused outright.
+
 Exit status: 0 claimed and pushed; 1 refused, nothing written or committed; 2 committed
 but not pushed (the reason is printed; the commit is on local main).
 """
@@ -38,6 +48,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
 import push_guard                      # noqa: E402
+
+ACTIVE_LINE_RE = re.compile(r"^⏳ IN-PROGRESS \((?P<stamp>\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?), "
+                            r"(?P<info>[^)]*)\) — \*\*ACTIVE LANE[^*]*\*\*(?P<tail>.*)$", re.M)
 
 NOT_CLAIMED, NOT_PUSHED = 1, 2
 PENDING, RESERVED = "WORKTREE PENDING", "RESERVED, NOT STARTED"
@@ -292,16 +305,93 @@ class Claim:
         return False, f"push rejected {attempts} times — the claim commit is on local `{self.main}`"
 
 
+def resume(root, issue_id, path=None, now=None):
+    """Re-home this operator's ACTIVE lane to this machine. Returns (exit code, message)."""
+    try:
+        claim = Claim(root, [issue_id], now=now)
+        claim.position()
+        claim.sync()
+        claim.ids = []                    # locate() only resolves the path; no claimability checks
+        claim.behind = None
+        _, names, _ = git("ls-tree", "--name-only", claim.upstream,
+                          f"{claim.backlog}/{issue_id.rsplit('-', 1)[0]}/", cwd=root)
+        hits = [n for n in names.splitlines() if Path(n).name.startswith(f"{issue_id}-")]
+        if len(hits) != 1:
+            raise Refused(f"{issue_id}: no single file on {claim.upstream}")
+        rel = hits[0]
+        text = (root / rel).read_text(encoding="utf-8")
+        if (frontmatter(text) or {}).get("status") != "in-progress":
+            raise Refused(f"{issue_id}: not claimed — claim it instead")
+        m = ACTIVE_LINE_RE.search(text)
+        if not m:
+            raise Refused(f"{issue_id}: no ACTIVE LANE marker — only a lane with a pushed branch can be resumed")
+        author = push_guard.marker_author(m.group(0))
+        me = claim.cfg["machine"]
+        if push_guard.is_mine(author, me):
+            raise Refused(f"{issue_id}: this machine already owns the lane — `git worktree add` its branch if the worktree is missing")
+        if author[0] != (me["short"] or "").lower():
+            raise Refused(f"{issue_id}: the lane is {author[0]}'s, not {me['short']}'s — "
+                          "never write to another person's claim")
+        br = re.search(r"branch ([A-Za-z0-9._/-]+)", m.group("info"))
+        wt = re.search(r"worktree ([A-Za-z0-9._-]+)", m.group("info"))
+        if not br:
+            raise Refused(f"{issue_id}: the marker names no branch")
+        branch = br.group(1)
+        if git("fetch", "-q", "origin", branch, cwd=root)[0]:
+            raise Refused(f"branch `{branch}` is not on origin — push it from {author[1]} first; "
+                          "the branch is the hand-off")
+        target = Path(path) if path else root.parent / (wt.group(1) if wt else f"{root.name}-{issue_id.lower()}")
+        if target.exists():
+            raise Refused(f"{target} already exists")
+        if git("rev-parse", "--verify", "-q", f"refs/heads/{branch}", cwd=root)[0] == 0:
+            if not ancestor(branch, f"origin/{branch}", root):
+                raise Refused(f"local `{branch}` has commits origin does not — push them, or delete the stale local branch")
+            rc, _, err = git("worktree", "add", str(target), branch, cwd=root)
+            if not rc:
+                git("-C", str(target), "merge", "-q", "--ff-only", f"origin/{branch}", cwd=root)
+        else:
+            rc, _, err = git("worktree", "add", "--track", "-b", branch, str(target), f"origin/{branch}", cwd=root)
+        if rc:
+            raise Refused(f"git worktree add failed: {err}")
+    except Refused as e:
+        return NOT_CLAIMED, f"NOT RESUMED — {e}. Nothing was written."
+    old_owner = re.search(r"session on (\S+?)(?:,|$)", m.group("info"))
+    info = re.sub(r"^[^,]*'s session(?: on [^,]+)?", identity(claim.cfg), m.group("info"))
+    line = (f"⏳ IN-PROGRESS ({claim.stamp}, {info}) — **ACTIVE LANE.**{m.group('tail')}"
+            f" Resumed from {old_owner.group(1) if old_owner else author[0]} (claimed {m.group('stamp')}).")
+    (root / rel).write_text(text.replace(m.group(0), line), encoding="utf-8", newline="")
+    subject = f"docs(backlog): {issue_id} resumed on {me['id']} (worktree {target.name}, branch {branch})"
+    err = push_guard.commit_paths(root, [rel], subject)
+    if err:
+        return NOT_PUSHED, f"worktree {target} made, but the marker commit failed: {err}"
+    code, msg = push_guard.push(root, claim.cfg, push_guard.OK_FREE)
+    if code:
+        return NOT_PUSHED, f"worktree {target} made and the marker committed, not pushed — {msg}"
+    return 0, f"resumed {issue_id} on {me['id']}: worktree {target}, branch {branch} ({msg})"
+
+
 def main(argv=None):
     use_utf8_console()
     ap = argparse.ArgumentParser(description="lanes: claim a slice of backlog issues in one pushed commit")
-    ap.add_argument("ids", nargs="+", metavar="ID", help="the slice, in working order")
+    ap.add_argument("ids", nargs="*", metavar="ID", help="the slice, in working order")
     ap.add_argument("--files", default=None,
                     help="the first issue's expected files, as the marker should list them")
     ap.add_argument("--behind", default=None, metavar="ID",
                     help="extend a claimed lane: every ID is RESERVED, chained behind this one")
     ap.add_argument("--dry-run", action="store_true", help="every check; print the markers, write nothing")
+    ap.add_argument("--resume", default=None, metavar="ID",
+                    help="re-home this operator's ACTIVE lane to this machine (LANES-7)")
+    ap.add_argument("--path", default=None, help="with --resume: where to make the worktree")
     args = ap.parse_args(argv)
+    if args.resume:
+        if args.ids or args.behind or args.dry_run:
+            ap.error("--resume takes one ID and no other claim options")
+        root = Path(git("rev-parse", "--show-toplevel", cwd=Path.cwd())[1] or Path.cwd())
+        code, msg = resume(root, args.resume.strip().upper(), path=args.path)
+        print(msg, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+    if not args.ids:
+        ap.error("name at least one ID (or --resume ID)")
     ids = list(dict.fromkeys(i.strip().upper() for i in args.ids))
     behind = args.behind.strip().upper() if args.behind else None
     try:

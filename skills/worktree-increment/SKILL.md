@@ -184,6 +184,30 @@ Work happens in the MAIN checkout before the worktree exists:
    ⚠️ **Run the conflict scan (1.2) in the MAIN CHECKOUT, never in a worktree.** A worktree
    created off the main branch before the claim push does not contain the claim.
 
+### 1r. Resuming your own lane on another machine
+
+A lane can move machines with its operator: started on one, its other-platform half finished
+on another. The claim does not move by hand. On the operator's directive naming the
+issue, from the second machine's MAIN CHECKOUT on the main branch:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py --resume <ID>     # [--path <dir>]
+```
+
+It refuses unless the issue's `ACTIVE LANE` marker names the same person (`short`) on a
+different machine, and its branch is on origin. **The branch is the hand-off**: the first
+machine commits and pushes everything before the operator leaves it, and the resume
+refuses a branch origin does not have. Then it makes the worktree from `origin/<branch>`,
+rewrites only the marker's timestamp and machine (appending `Resumed from …`), and pushes
+that under the OK-free guard. That guard allows this one rewrite of another machine's
+marker and nothing else. Continue at step 3 in the new worktree; run `lane-setup.md` for
+it first.
+
+This is not a write to someone else's claim: the lane is the operator's own and they named
+it. Another person's lane is refused outright. The first machine's worktree is now stale:
+on that machine, once `merge-base --is-ancestor HEAD origin/<branch>` passes, remove it
+by hand. It must never land from there.
+
 ### 2. Create the worktree
 
 `git worktree add ../<repo>-<topic> -b <topic>-work` (or the harness worktree tool).

@@ -30,6 +30,11 @@ different machine id is refused. Two sessions on ONE machine share an id, so the
 cannot tell them apart -- that rule stays a prohibition in the skills. A marker that
 predates the machine field (`Kyle's session`) is compared by the person's short.
 
+One rewrite of another machine's marker IS allowed: a resume (LANES-7). The same person
+re-homes their own ACTIVE lane to this machine -- the removed marker's short is this
+machine's short, and the same file gains a marker by THIS machine naming the same
+branch. That is the owning operator moving their lane, not a write to someone else's.
+
 Exit status: 0 the guard passed (and, with --push, HEAD is on origin); 1 refused,
 nothing pushed (the reasons are printed); 2 the guard passed but the push failed.
 """
@@ -48,6 +53,7 @@ REFUSED, NOT_PUSHED = 1, 2
 _MARKER_AUTHOR = re.compile(
     r"⏳ IN-PROGRESS \(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?, (?P<who>[^,)]+)")
 _SESSION = re.compile(r"^(?P<short>.+?)'s session(?: on (?P<machine>[^@\s]+)@\S+)?")
+_BRANCH = re.compile(r"branch ([A-Za-z0-9._/-]+)")
 
 
 def git(*args, cwd):
@@ -111,16 +117,34 @@ def foreign_claim_edits(root, cfg):
                       backlog + "/", cwd=root)
     if rc:
         return []
-    out, path = [], None
+    removed, added, path = {}, {}, None
     for line in diff.splitlines():
         if line.startswith("--- "):
             path = line[6:] if line.startswith("--- a/") else None
-        elif line.startswith("-") and not line.startswith("---") and path:
+        elif line.startswith("+++ "):
+            continue
+        elif line[:1] in "+-" and path:
             author = marker_author(line[1:])
-            if author and not is_mine(author, cfg["machine"]):
-                who = author[1] or author[0]
-                out.append(f"{path}: a claim marker by `{who}`")
+            if author:
+                br = _BRANCH.search(line)
+                bucket = removed if line[0] == "-" else added
+                bucket.setdefault(path, []).append((author, br.group(1) if br else None))
+    me = cfg["machine"]
+    out = []
+    for path, markers in removed.items():
+        for author, branch in markers:
+            if is_mine(author, me) or is_resume(author, branch, added.get(path, []), me):
+                continue
+            out.append(f"{path}: a claim marker by `{author[1] or author[0]}`")
     return out
+
+
+def is_resume(author, branch, added, machine):
+    """Is the removal of `author`'s marker on `branch` the owning person's resume onto THIS
+    machine? Same short, a branch named, and a marker by this machine on that branch added."""
+    if not branch or author[0] != (machine["short"] or "").lower():
+        return False
+    return any(is_mine(a, machine) and b == branch for a, b in added)
 
 
 def backlog_check(root):

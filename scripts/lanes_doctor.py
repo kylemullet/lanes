@@ -57,6 +57,9 @@ KIND_RE = re.compile(r"\*\*\s*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LAN
 KIND_TEMPLATE_RE = re.compile(r"\*\*(WORKTREE PENDING|RESERVED, NOT STARTED|ACTIVE LANE)\.?\*\*")
 WORKTREE_RE = re.compile(r"worktree ([A-Za-z0-9._-]+)")
 BRANCH_RE = re.compile(r"branch ([A-Za-z0-9._/-]+)")
+# `<Short>'s session on <machine id>@<host>` -- the claim's owner (LANES-7). Markers written
+# before the field have none; for them the old, local-only evidence rule applies.
+OWNER_RE = re.compile(r"session on ([^,@\s]+)@([^,)\s]+)")
 
 
 @dataclass
@@ -199,7 +202,13 @@ def check_backlog(root: Path, cfg: dict) -> list:
     return out
 
 
-def classify_claim(issue_id: str, text: str, now: datetime, root: Path, worktrees: set) -> Check:
+def classify_claim(issue_id: str, text: str, now: datetime, root: Path, worktrees: set,
+                   machine_id: Optional[str] = None) -> Check:
+    """One in-progress issue's claim, judged on age first, then evidence.
+
+    Evidence is MACHINE-scoped (LANES-7): `git worktree list` sees this machine only, so a
+    missing worktree counts only against a claim this machine owns. For a claim another
+    machine owns, the pushed branch is the one signal visible from here."""
     body = body_after_frontmatter(text)
     m = MARKER_RE.search(body)
     if not m:
@@ -229,18 +238,27 @@ def classify_claim(issue_id: str, text: str, now: datetime, root: Path, worktree
     if kind == "RESERVED, NOT STARTED":
         return Check(OK, f"claim {issue_id}", f"RESERVED, {age_txt} — queued behind another lane")
     if kind == "ACTIVE LANE":
-        wt = WORKTREE_RE.search(body[m.start():m.start() + 400])
-        br = BRANCH_RE.search(body[m.start():m.start() + 400])
+        head = body[m.start():m.start() + 400]
+        wt, br, own = WORKTREE_RE.search(head), BRANCH_RE.search(head), OWNER_RE.search(head)
         wt_name, br_name = (wt.group(1) if wt else None), (br.group(1) if br else None)
+        owner = f"{own.group(1)}@{own.group(2)}" if own else None
+        elsewhere = bool(own and machine_id and own.group(1) != machine_id)
+        where = f" on {owner}" if owner else ""
         evidence = []
-        if wt_name and wt_name in worktrees:
+        if wt_name and not elsewhere and wt_name in worktrees:
             evidence.append(f"worktree {wt_name} present")
         if br_name and branch_exists(root, br_name):
             evidence.append(f"branch {br_name} exists")
         if evidence:
-            return Check(OK, f"claim {issue_id}", f"ACTIVE LANE, {age_txt} — {'; '.join(evidence)}")
+            return Check(OK, f"claim {issue_id}", f"ACTIVE LANE{where}, {age_txt} — {'; '.join(evidence)}")
+        if elsewhere:
+            return Check(WARN, f"claim {issue_id}",
+                         f"STALE-CLAIM CANDIDATE: ACTIVE LANE{where} {age_txt} ago, no branch"
+                         f"{' ' + br_name if br_name else ''} on origin as of the last fetch; its worktree, if any, "
+                         f"is on {own.group(1)} and invisible from here — a QUESTION for that machine's session "
+                         f"or the operator, never a takeover")
         return Check(WARN, f"claim {issue_id}",
-                     f"STALE-CLAIM CANDIDATE: ACTIVE LANE {age_txt} ago, no worktree"
+                     f"STALE-CLAIM CANDIDATE: ACTIVE LANE{where} {age_txt} ago, no worktree"
                      f"{' ' + wt_name if wt_name else ''} here and no branch{' ' + br_name if br_name else ''} "
                      f"anywhere — a QUESTION for the owner or the operator, never a takeover")
 
@@ -266,7 +284,7 @@ def check_claims(root: Path, cfg: dict, now: Optional[datetime] = None) -> list:
         issue_id = fm.get("id") or path.stem.split("-")[0]
         if issue_id in exempt:
             continue
-        out.append(classify_claim(issue_id, text, now, root, worktrees))
+        out.append(classify_claim(issue_id, text, now, root, worktrees, (cfg.get("machine") or {}).get("id")))
     if not out:
         return [Check(OK, "claims", "no in-progress issues")]
     return out

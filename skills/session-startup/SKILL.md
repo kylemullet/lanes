@@ -242,14 +242,17 @@ them apart. Age can. (`incidents.md` → "113 seconds".)
 
 | Marker says | Evidence | Lane state (goes in the Brief) |
 | :-- | :-- | :-- |
-| `ACTIVE LANE`, worktree named | worktree present, or branch exists / has commits | live — *building* / *branch pushed, awaiting the verdict* / *verified, awaiting the landing OK* |
+| `ACTIVE LANE` on THIS machine | worktree present, or branch exists / has commits | live — *building* / *branch pushed, awaiting the verdict* / *verified, awaiting the landing OK* |
+| `ACTIVE LANE` on ANOTHER machine | branch on origin (after the step-2 fetch) | live on that machine — name it (`on <machine>@<host>`); its worktree is invisible from here and is never evidence either way |
 | `WORKTREE PENDING` | none needed | live — *claimed, setting up*; route around it exactly as for an ACTIVE lane |
 | `RESERVED, NOT STARTED` | none needed | queued behind the named lane |
-| `ACTIVE LANE` | claim ≥15 min old AND no worktree AND no branch AND no commits | stale-claim candidate — a **question** in the Brief, never a takeover |
+| `ACTIVE LANE` | claim ≥15 min old AND no worktree (this machine's lane only) AND no branch AND no commits | stale-claim candidate — a **question** in the Brief (to the owning machine's session when it is another machine), never a takeover |
 
 All four qualifiers on the last row are load-bearing. Note that "no session" is **not
-checkable by any command** and never contributed evidence; the branch check is the only
-signal visible across machines (`git worktree list` is local-only).
+checkable by any command** and never contributed evidence. **The marker names its machine**
+(`<Short>'s session on <machine id>@<host>`, LANES-7), and the worktree check applies only
+when that is this machine: `git worktree list` is local, so for another machine's lane the
+pushed branch is the ONLY evidence there is. `lanes_doctor.py` applies exactly this rule.
 
 Then build the **exclusion set**: every `in-progress` ID, plus every not-closed issue that
 **conflicts** with one — it touches a file in an ACTIVE marker's expected-files list, it
