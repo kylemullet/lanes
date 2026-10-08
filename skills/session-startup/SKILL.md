@@ -1,6 +1,6 @@
 ---
 name: session-startup
-description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. Pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, and renders the five-block queue report ending in a recommended slice — then STOPS and waits for the operator to name the work.
+description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. Pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants (or reads it from the trigger, e.g. "GA quick wins"), and offers 2–3 proposals for that mode — then STOPS and waits for the operator to name the work.
 ---
 
 # Session startup
@@ -259,11 +259,12 @@ Then build the **exclusion set**: every `in-progress` ID, plus every not-closed 
 extends or depends on the same module that lane is changing, or the in-flight issue's own
 file sequences it (*"queued behind"*). A bare `links:` entry is not a conflict by itself.
 
-Blocks IV and V are drawn from what is left, and nothing else. Block III may name an
-in-flight lane **only** when it needs a decision from the operator right now (a verified
-branch awaiting the landing OK, a stale claim to release) — mark it `🔒 in flight` so it
-cannot be mistaken for a pick. **The operator's own lanes are not an exception** — a claim
-does not care whose it is. (`incidents.md` → "Our own claims in block V".)
+The proposals (step 8) are drawn from what is left, and nothing else, whatever the mode.
+The Brief's `critical:` line may name an in-flight lane **only** when it needs a decision
+from the operator right now (a verified branch awaiting the landing OK, a stale claim to
+release) — mark it `🔒 in flight` so it cannot be mistaken for a pick. **The operator's own
+lanes are not an exception** — a claim does not care whose it is. (`incidents.md` → "Our
+own claims in block V".)
 
 ### 6. Staleness pass
 
@@ -279,9 +280,9 @@ next OK'd push — it is a backlog-only commit:
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <issue file> -m "docs(backlog): <ID> — <what was stale>"
 ```
 
-### 7. Render the report — five blocks, everything in tables
+### 7. Render the Brief and the view link
 
-Every block but the Brief is a table. Keep item text to a short noun phrase.
+Two blocks, every time. Keep item text to a short noun phrase.
 
 **I — Brief.** Bullets, one line each: sync result; what landed since last session;
 anything needing a decision right now; the backfill result ("closed N verified: IDs —
@@ -289,67 +290,84 @@ commit pending push" / "N verified awaiting the certifying machine's close"); wh
 `preflight.md` asked to report; unlanded branches from step 2; **the in-flight lanes from
 step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the slice name
 (`LANES-20/21/9`), each issue's ACTIVE/PENDING/RESERVED state, lane state, what it is
-waiting on**;
-the backlog stat (`N open · X critical · oldest Nd`).
+waiting on**; the backlog stat (`N open · X critical · oldest Nd`); and, **always, the
+critical line**:
+
+```
+critical: N — <ID> <noun phrase>, <ID> <noun phrase>, …        (or `critical: none`)
+```
+
+Timely and urgent only: a red canary row, something blocking someone (the other operator
+above all), something needing a decision now, something actively costing. Not a priority
+dump. **It is in the Brief so that no mode answer can hide it**: the operator who asks for
+quick wins still sees the red row. Step 6's `⚠️` staleness marks ride on whatever line
+cites the issue.
 
 **II — Sortable backlog.** The view's link alone on its own line, immediately after the
 Brief — `http://127.0.0.1:<view_port>/` when served, else the `file://` path the generator
-printed. Nothing else in the block. It goes HIGH because it is the operator's escape
-hatch from the ordering below.
+printed. Nothing else in the block. It is the operator's escape hatch from every
+proposal below.
 
-**Every item in blocks III–V is cited by its real ID with its IDENTICAL title.** Sub-tasks
-within one issue are one row (`CORE-2 · 2 sub-tasks`), never rows that look like separate
-issues.
+**There is no full-backlog table**, and no fixed Critical / Quick wins / Slice blocks
+(LANES-24): the operator usually acts on one of them, so analysis spent on all three was
+mostly spent on blocks nobody read. Step 8 puts it into the one mode the operator wants.
+(`incidents.md` → "The full table that oscillated".)
 
-**III — Critical (3–5 rows).** Timely and urgent only: blocking someone, needing a
-decision, or actively costing something. Not a priority dump.
+### 8. Ask the mode, then propose 2–3 — by operator
+
+**The mode question.** Skip it when the trigger already names a mode (`GA autonomous`,
+`startup quick wins`, `GA LANES-12`). Otherwise ask with the question tool (2–4 options +
+Other), after the Brief. **The menu comes from this machine's operator row:**
+
+| Operator | Options |
+| :-- | :-- |
+| may edit code (`may_edit_code`, the default; solo mode) | **Critical / unblocking** · **Quick wins** · **Deep (epic or project)** · **Autonomous** |
+| does not edit code | **Authoring** (fixtures, docs, session assets) · **Decisions** (ratify, rule, product calls) · **Quick wins** |
+
+"Other" takes free text: a project prefix, an epic ID, a theme. Treat it as Deep scoped to
+what they named.
+
+**The proposals: 2–3, never one.** Each is a short table, so the operator chooses between
+them rather than taking or overruling one. Every proposal is drawn only from step 5b's
+eligible set — **no `in-progress` issue, nothing in the exclusion set, in any mode** — and
+every cited ID carries its IDENTICAL title. Sub-tasks within one issue are one row
+(`CORE-2 · 2 sub-tasks`). When a lane is in flight, say each proposal is the *next* work
+(*"after CORE-31 lands: …"*).
 
 ```
-| ID | Item | What it is | Why now | Blocked on |
+**A — <one-line thesis>**
+| ID | Item | Why | Est | Blocked on |
+First action: … · Parked: …
 ```
 
-**IV — Quick wins.** Self-contained, closable in one sitting, no upstream dependency. The
-relief valve. Staleness corrections from step 6 go here.
+What each mode optimizes:
 
-```
-| ID | Item | What it is | Est | Blocked on |
-```
+- **Critical / unblocking** — the `critical:` items that are pickable, plus whatever
+  unblocks the other operator or a waiting lane. Unblocking is mostly a subset of
+  critical. Proposals differ by which blocker they clear first.
+- **Quick wins** — self-contained, closable in one sitting, no upstream dependency; step
+  6's staleness corrections go here. Proposals are batches of 2–4 by shared context.
+- **Deep** — the context-switching enemy: one project, or a machinery-sharing cluster in
+  it, where ≥2 open issues touch the same files, so one context load closes several.
+  Prefer the cluster that ends in something for the other operator to author, verify or
+  ratify. Proposals are alternative clusters.
+- **Autonomous** — work that can run with nobody watching. Until the backlog carries an
+  `autonomy:` field, an issue qualifies only when ALL of these hold: no operator decision
+  in `blocked_on`; no visual or UX verdict needed (automated tests are the verdict
+  otherwise); no legal or product judgment; acceptance criteria a test can check. Say
+  which rubric line a borderline issue passes. An autonomous slice tells the operator to
+  keep the machine awake, or calls the host's keep-awake tool where one exists:
+  unattended runs die when the laptop sleeps.
+- **Authoring / Decisions** (non-code operator) — 1–3 independent picks that are
+  genuinely theirs, batched by context, with an honest `Est` (measured numbers where they
+  exist, estimates labelled as estimates).
 
-**V — Recommended slice.** One line of thesis, then the table, then one line naming the
-first concrete action and one naming what is explicitly parked. One issue = ONE row.
+**Solo mode** gets the code-operator menu; there is no other operator to give runway to.
 
-```
-| ID | Item | Why it's in the slice | Blocked on |
-```
-
-**Block V never contains an `in-progress` issue or anything in the exclusion set.** It is
-the *next* slice, and its thesis line says so when a lane is in flight (*"after CORE-31
-lands: …"*).
-
-**There is no full-backlog table.** Block II's view beats any static table, and the
-`--report` output already printed the rows to the terminal. (`incidents.md` → "The full
-table that oscillated".)
-
-### 8. Choose the slice (block V) — by operator
-
-**A code-editing operator with long sessions — the enemy is context-switching.** ONE
-slice: a single project (or a machinery-sharing cluster within one) so one context load
-closes several issues. In order: only from step 5b's eligible set; a hard blocker on the
-other operator first, if one exists; else the highest-priority cluster where ≥2 open
-issues touch the same files; prefer the slice that ends in something for the other
-operator to author, verify or ratify; name what is parked.
-
-**A non-code operator with short sessions — the enemy is picking wrong.** Block V becomes
-1–3 independent picks, each genuinely theirs (authoring, domain judgment, product
-decisions), batched by context, with an honest cost in the `Est` column using measured
-numbers where they exist and estimates labelled as estimates.
-
-**Solo mode:** the first shape. There is no other operator to give runway to.
-
-**Then STOP and wait.** Block V is a recommendation, not an assignment — startup does NOT
-begin work. End the message by asking what the operator wants to work on. Work begins only
-when they name it ("do X", "run the slice", "go"). Sole exception: a staleness correction
-from step 6 is part of the report itself.
+**Then STOP and wait.** A proposal is a recommendation, not an assignment — startup does
+NOT begin work. End the message by asking which proposal (or what else) the operator
+wants. Work begins only when they name it ("do B", "run A", "go"). Sole exception: a
+staleness correction from step 6 is part of the report itself.
 
 ### 8a. How a slice is EXECUTED — read this before saying "on it"
 
@@ -393,7 +411,7 @@ with no product work".)
 ### 8b. On the directive — claim, commit, PUSH, then hand off
 
 "go", "run the slice", "do CORE-64", "work X then Y" — any directive naming one issue, a
-group, or the recommended slice. This is the ONE write startup makes in the main checkout
+group, or one of the proposals. This is the ONE write startup makes in the main checkout
 after the brief, and it happens *before* the first worktree exists:
 
 1. **Resolve the directive to an ordered ID list.** Re-run the step-5b grep: if any named

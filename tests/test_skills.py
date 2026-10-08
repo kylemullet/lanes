@@ -124,3 +124,36 @@ def test_plugin_validates_strict():
     done = subprocess.run(["claude", "plugin", "validate", "--strict", str(ROOT)],
                           capture_output=True, text=True, encoding="utf-8")
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+# --- startup asks the mode, then proposes (LANES-24) -----------------------------------------
+
+def _startup():
+    return (ROOT / "skills" / "session-startup" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_startup_always_carries_the_critical_line():
+    """No mode answer may hide an urgent item: the Brief carries it whatever the mode."""
+    text = _startup()
+    assert "critical: N — <ID> <noun phrase>" in text and "critical: none" in text
+
+
+def test_startup_asks_the_mode_with_a_menu_per_operator_and_no_fixed_blocks():
+    text = _startup()
+    for mode in ("Critical / unblocking", "Quick wins", "Deep (epic or project)", "Autonomous",
+                 "Authoring", "Decisions"):
+        assert f"**{mode}**" in text, mode
+    assert "`may_edit_code`" in text                                    # the menu comes from the row
+    assert "GA quick wins" in text or "startup quick wins" in text      # a mode named in the trigger
+    assert "five blocks" not in text and "five-block" not in text
+    assert "**III — Critical" not in text and "**V — Recommended slice" not in text
+
+
+def test_startup_proposals_keep_the_invariants():
+    text = _startup()
+    assert "2–3, never one" in text
+    assert "no `in-progress` issue, nothing in the exclusion set, in any mode" in text
+    assert "Then STOP and wait." in text
+    for line in ("no operator decision", "no visual or UX verdict", "no legal or product judgment",
+                 "acceptance criteria a test can check"):
+        assert line in text, line                                      # the autonomous rubric

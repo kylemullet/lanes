@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.25 — startup asks what kind of session, then proposes 2–3 (2026-10-08)
+
+- **`session-startup` steps 7–8 rewritten** (LANES-24). The five fixed blocks (Brief, view,
+  Critical, Quick wins, one Recommended slice) became: the Brief and the view link, the
+  **mode question**, then **2–3 proposals for that mode**, then stop. The operator usually
+  acted on one block, so most of the analysis went into blocks nobody read, and a single
+  slice could only be taken or overruled.
+- **Critical is never dropped.** The Brief always carries `critical: N — <ID> …` (or
+  `critical: none`), so a mode answer cannot hide a red canary row or a blocker.
+- **The menu comes from the operator row**, with no new config key: a row that may edit code
+  (and solo mode) gets Critical / unblocking · Quick wins · Deep · Autonomous; a non-code
+  operator gets Authoring · Decisions · Quick wins. "Other" takes a project or an epic. A
+  mode named in the trigger (`GA quick wins`) skips the question.
+- **Autonomous has a rubric** until the backlog grows an `autonomy:` field: no operator
+  decision in `blocked_on`, no visual or UX verdict, no legal or product judgment, and
+  acceptance criteria a test can check. It also says to keep the machine awake.
+- Unchanged: step 5b's exclusion set is built first and binds every proposal in every mode;
+  identical titles; startup starts no work; 8a/8b.
+
 ## 0.4.24 — issue numbering sees the other machines (2026-10-08)
 
 - **`backlog_new.py` fetches `origin` before it scans the refs** (LANES-4). `git log --all`
