@@ -110,6 +110,15 @@ a `git.main_direct_paths` path). Two limits, said plainly: it never sees a write
 through Bash (`sed -i`, a heredoc), so the two commands above are still the rule; and a
 session loads hooks from the directory it STARTED in.
 
+**The commit guard is the second layer** (`guard_commit.py`, a git `pre-commit` shim that
+`session-startup` installs). It applies the same rule to the STAGED SET of every commit,
+whoever wrote the files and whatever made the commit: a terminal, a script, a Bash
+heredoc. It refuses a commit on the main branch in the main clone that stages a path
+outside `git.main_direct_paths`, any commit in the main clone off the main branch, and any
+commit in a worktree that has the main branch checked out. `git commit --no-verify`
+bypasses it once. That is for the operator's deliberate choice, never a session's way
+around a refusal: a refusal means the work is in the wrong place. Move it to the lane.
+
 ## Procedure
 
 ### 1. Sync main + claim the item

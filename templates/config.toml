@@ -30,6 +30,8 @@ main_direct_paths = ["docs/", ".claude/lanes/", "*.md"]   # may reach main_branc
                                               # .claude/lanes/ is in by default so adopting lanes is itself main-direct
 # ok_free_paths = ["docs/backlog/"]           # may reach main_branch with NO operator OK (push_guard.py --ok-free).
                                               # Default: backlog.dir alone. [] = every main-branch push waits for the OK
+# commit_guard = true                         # git pre-commit shim: refuses non-main-direct commits on main_branch
+                                              # and any commit in the main clone off it. startup installs it.
 
 [tests]
 command = "pytest -q"

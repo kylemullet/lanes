@@ -34,6 +34,18 @@ and edits everything, and every two-operator step below is a no-op. In a multi-o
 repo an unknown `(user.name, platform)` pair resolves to **no permissions**: ask, do not
 guess.
 
+Then make sure the commit guard is in place. It is idempotent and prints one line:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" guard_commit.py --install
+```
+
+It writes a git `pre-commit` shim that refuses a commit putting non-main-direct paths on
+the main branch, or any commit made in the main clone off it. Running it every session is
+the per-clone setup step: a fresh clone is guarded after its first startup, and a plugin
+update re-points the shim. `installed (unchanged)` needs no Brief line. Anything else goes
+in the Brief: re-pointed, `off`, another tool's hook, `core.hooksPath`.
+
 Keys this skill binds to: `git.main_branch`, `backlog.dir`, `backlog.view_port`,
 `tests.command`, `operators[]`, `lanes.code` / `lanes.code_owner`. Where this skill says
 *main branch*, *the backlog*, *the test command*, read the config's value.
@@ -395,8 +407,9 @@ git rev-parse --abbrev-ref HEAD  # must NOT be the main branch
 ```
 
 If either fails, stop and make the worktree. The plugin's position-guard hook enforces
-the same rule on the edit tools; it never sees a write made through Bash, so the two
-commands stay.
+the same rule on the edit tools; it never sees a write made through Bash. The commit
+guard catches that write when it is committed, not when it is made, so the two commands
+stay.
 
 **The reply to "go" states the order before starting:**
 

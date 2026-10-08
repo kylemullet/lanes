@@ -54,6 +54,17 @@ repository the session was started in; a target in another repository is allowed
 never sees a write made through Bash, so the skill's two-command position check stays the rule.
 `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" guard_position.py --explain <path>` is the dry run.
 
+**The commit guard** (`scripts/guard_commit.py`) closes that gap at git's own `pre-commit`. It
+applies the same truth table to the staged set of every commit, so a file written through Bash, or
+a commit made from a terminal, is judged when it is committed. `session-startup` runs
+`guard_commit.py --install` every session. That writes a small shim into the repository's hooks
+directory, which every worktree shares, so there is no per-clone setup step and a plugin update
+re-points it. It never overwrites a `pre-commit` hook it did not write and writes nothing when
+`core.hooksPath` is set; `/lanes:doctor` reports both, with the line to add by hand. A shim whose
+launcher path has vanished allows the commit and says so, so a stale path cannot block a
+repository. `git commit --no-verify` bypasses it once; `git.commit_guard = false` turns it off.
+`guard_commit.py --explain` judges the current staged set.
+
 Every hook, command and skill runs its script through `scripts/lanes.sh`, never a bare `python3`. The
 launcher takes the first of `$LANES_PYTHON`, `python3`, `python` and `py` that proves it is a real
 Python 3.11+, and exits 2 when none does. That matters on Windows, where `python3` can be the Microsoft
@@ -233,7 +244,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md, claim.md, new.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, push_guard.py, guard_position.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, push_guard.py, guard_position.py, guard_commit.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md

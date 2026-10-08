@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.26 — the commit guard: the position rule at git's pre-commit (2026-10-08)
+
+- **New `scripts/guard_commit.py`** (LANES-1). The edit-tool hook never sees a file written
+  through Bash or a commit made from a terminal. The commit guard judges the STAGED SET of every
+  commit with the same truth table: it refuses a commit on the main branch in the main clone
+  that stages a path outside `git.main_direct_paths`, any commit in the main clone off the main
+  branch (the incident shape, docs included), and any commit in a worktree that has the main
+  branch checked out. A lane commit, and a claim or close on the main branch, pass. A rename
+  counts as both its paths. During a rebase it judges the branch being rebased, not the
+  detached HEAD.
+- **Installed every session, no per-clone step.** `session-startup` step zero runs
+  `guard_commit.py --install`, which is idempotent. It writes a `pre-commit` shim into
+  `git rev-parse --git-path hooks`, shared by every worktree, and a plugin update re-points
+  it. It never overwrites another tool's `pre-commit` and writes nothing under
+  `core.hooksPath`; both are reported with the line to add by hand.
+- **Fails open only on a stale path.** If the shim's launcher has vanished it allows the commit
+  and says so, so a plugin update cannot block every commit in a repository. When no Python
+  resolves, the launcher still refuses (LANES-17). `git commit --no-verify` bypasses the guard
+  once; `git.commit_guard = false` (new key, default true) turns it off and makes `--install`
+  remove the shim.
+- **`/lanes:doctor` gains a `commit guard` line**: installed, stale, absent, another tool's hook,
+  `core.hooksPath`, or off.
+
 ## 0.4.25 — startup asks what kind of session, then proposes 2–3 (2026-10-08)
 
 - **`session-startup` steps 7–8 rewritten** (LANES-24). The five fixed blocks (Brief, view,

@@ -16,6 +16,8 @@ Checks, in order:
   settings lanes  it declares lanes' marketplace and enables lanes — in HEAD and in the working tree
   marketplace     this machine's registered marketplace source (repo, ref) matches the declared one,
                   and the installed commit is the marketplace clone's tip (no fetch)
+  commit guard    the git pre-commit shim is installed and points at THIS plugin version (LANES-1);
+                  `session-startup` installs it, so a warning here names the line to run
 
 The claims check is the one with teeth, and it only ever REPORTS. A claim younger than
 the 15-minute floor is never a candidate, whatever else the evidence says: a lane that is
@@ -42,6 +44,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
+import guard_commit as gc              # noqa: E402
 
 OK, WARN, FAIL, SKIP = "OK", "WARN", "FAIL", "SKIP"
 
@@ -432,6 +435,19 @@ def check_settings(root: Path) -> list:
     return checks
 
 
+def check_commit_guard(root: Path) -> Check:
+    w = gc.where(str(root))
+    if w is None:
+        return Check(SKIP, "commit guard", "cannot read the repository's position")
+    state, detail = gc.status(w.main_clone)
+    if state in ("installed", "disabled"):
+        return Check(OK, "commit guard", detail)
+    fix = f" — `sh \"{gc.LAUNCHER.as_posix()}\" guard_commit.py --install` (session-startup runs it)"
+    if state in ("absent", "stale"):
+        return Check(WARN, "commit guard", detail + fix)
+    return Check(WARN, "commit guard", detail)
+
+
 # --------------------------------------------------------------------- main
 def run(root: Path, now: Optional[datetime] = None) -> list:
     loaded = lc.load(root=root)
@@ -444,6 +460,7 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     checks.extend(check_backlog(root, cfg))
     checks.extend(check_claims(root, cfg, now))
     checks.extend(check_settings(root))
+    checks.append(check_commit_guard(root))
     return checks
 
 

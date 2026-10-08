@@ -58,6 +58,7 @@ DEFAULTS: dict[str, Any] = {
         "land_requires_ok": True,
         "main_direct_paths": ["docs/", ".claude/lanes/", "*.md"],
         "ok_free_paths": None,               # None -> [backlog.dir + "/"] (LANES-5)
+        "commit_guard": True,                # the pre-commit shim (LANES-1)
     },
     "tests": {
         "command": "pytest -q",
@@ -83,7 +84,7 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "view_port": (int, False),
     },
     "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False),
-            "ok_free_paths": (list, False)},
+            "ok_free_paths": (list, False), "commit_guard": (bool, False)},
     "tests": {"command": (str, False), "required_before_land": (bool, False), "rebase_rerun_command": (str, False)},
     "worktrees": {"port_command": (str, False)},
     "lanes": {"code": (list, False), "code_owner": (str, False)},
