@@ -43,6 +43,18 @@ the absolute path it was run from. If the repo ignores `.claude/` wholesale, the
 `.claude/*` with `!.claude/settings.json` and `!.claude/lanes/`. For hacking on the plugin itself, load a
 checkout directly: `claude --plugin-dir /path/to/lanes`.
 
+**Updating: every scope you installed.** Claude Code keeps one install per scope, and
+`claude plugin update lanes@lanes-marketplace` updates one of them. A machine with both a user-scope
+and a project-scope install needs both, then a restart:
+
+```bash
+claude plugin update lanes@lanes-marketplace --scope user
+claude plugin update lanes@lanes-marketplace --scope project    # from the main clone
+```
+
+Otherwise the session can load the stale copy while the other reads current. `/lanes:doctor`'s `version`
+and `marketplace` lines check every install that applies to the repo, and name the one the session runs.
+
 ## The hook
 
 `hooks/hooks.json` wires `scripts/guard_position.py` as a `PreToolUse` hook on the four edit
@@ -78,7 +90,7 @@ machine; it is per machine, so it is an environment variable and not a config ke
   with every key defaulted to **solo mode** and the installed plugin version pinned, plus the
   three extension-point stubs. Never overwrites without `--force`.
 - **`/lanes:doctor [--strict] [--json]`** — one line per check: config valid, config tracked,
-  installed vs expected version, stubs present, backlog integrity, every `in-progress` claim
+  every install scope vs the expected version, stubs present, backlog integrity, every `in-progress` claim
   classified (live / setting up / reserved / **stale-claim candidate**), settings pin the plugin (committed AND
   unmodified in the working tree), and this machine's registered marketplace source and installed commit
   match what the repo declares.

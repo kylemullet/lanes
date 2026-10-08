@@ -287,3 +287,71 @@ def test_a_kind_less_marker_warns_at_any_age(repo, minutes):
                 f"⏳ IN-PROGRESS ({stamp(minutes)}, T's session) — **ACTIVE, readlines leg.** x")
     c = _claims(repo)["claim CORE-6"]
     assert c.status == ld.WARN and "no PENDING / RESERVED / ACTIVE kind" in c.detail
+
+
+# --- every install scope, not one (LANES-25) -------------------------------------------
+
+def _installs(plugins, rows):
+    import json
+    (plugins / "installed_plugins.json").write_text(
+        json.dumps({"version": 2, "plugins": {"lanes@lanes-marketplace": rows}}), encoding="utf-8")
+
+
+def _pinned(repo, version):
+    p = repo / lc.CONFIG_REL
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(f'plugin_version = "{version}"\n', encoding="utf-8")
+    return lc.resolve(lc.load(root=repo).raw, user_name="t", platform="linux")
+
+
+def test_a_stale_user_scope_warns_even_when_the_project_scope_is_current(repo, monkeypatch, tmp_path):
+    """The LANES-7 shape: `plugin update` moved only the project scope, and the session
+    loaded the user scope's older copy while the doctor read 0 warn."""
+    plugins = _plugins(monkeypatch, tmp_path)
+    old, new = tmp_path / "cache" / "0.4.21", tmp_path / "cache" / "0.4.22"
+    _installs(plugins, [
+        {"scope": "user", "installPath": str(old), "version": "0.4.21", "gitCommitSha": "c" * 40},
+        {"scope": "project", "projectPath": str(repo), "installPath": str(new), "version": "0.4.22",
+         "gitCommitSha": "4" * 40},
+        {"scope": "project", "projectPath": str(tmp_path / "elsewhere"), "version": "0.1.0"},   # another repo
+    ])
+    monkeypatch.setattr(lc, "plugin_root", lambda: old)
+    monkeypatch.setattr(lc, "installed_version", lambda: "0.4.21")
+    v = ld.check_version(_pinned(repo, "0.4.22"), repo)
+    assert v.status == ld.WARN
+    assert "user install is 0.4.21" in v.detail and "project install" not in v.detail
+    assert "`claude plugin update lanes@lanes-marketplace --scope user`" in v.detail
+    assert "this session runs the user install" in v.detail
+    assert "0.1.0" not in v.detail, "a project install for another repo does not apply"
+
+
+def test_every_scope_current_reads_ok_and_names_them(repo, monkeypatch, tmp_path):
+    plugins = _plugins(monkeypatch, tmp_path)
+    here = tmp_path / "cache" / "0.4.22"
+    _installs(plugins, [{"scope": "user", "installPath": str(here), "version": "0.4.22"},
+                        {"scope": "project", "projectPath": str(repo), "installPath": str(here), "version": "0.4.22"}])
+    monkeypatch.setattr(lc, "plugin_root", lambda: here)
+    monkeypatch.setattr(lc, "installed_version", lambda: "0.4.22")
+    v = ld.check_version(_pinned(repo, "0.4.22"), repo)
+    assert v.status == ld.OK and v.detail.endswith("(user + project)")
+
+
+def test_a_worktree_session_uses_the_main_clones_project_install(repo, monkeypatch, tmp_path):
+    plugins = _plugins(monkeypatch, tmp_path)
+    lane = tmp_path / "proj-lane"
+    git("worktree", "add", "-q", str(lane), "-b", "lane-work", cwd=repo)
+    _installs(plugins, [{"scope": "project", "projectPath": str(repo), "version": "0.0.1"}])
+    assert [r["version"] for _k, r in ld.lanes_installs(lane)] == ["0.0.1"]
+
+
+def test_marketplace_names_each_scope_behind_the_clone(repo, monkeypatch, tmp_path):
+    plugins = _plugins(monkeypatch, tmp_path)
+    src = {"source": "github", "repo": "o/lanes", "ref": "next"}
+    _register(plugins, src, clone_tip=True, tmp_path=tmp_path)
+    tip = git("rev-parse", "HEAD", cwd=tmp_path / "mkt-clone")
+    _installs(plugins, [{"scope": "user", "version": "9", "gitCommitSha": "0" * 40},
+                        {"scope": "project", "projectPath": str(repo), "version": "9", "gitCommitSha": tip}])
+    _settings(repo, SETTINGS)
+    mk = by_label(ld.check_settings(repo))["marketplace"]
+    assert mk.status == ld.WARN and "0000000 (user)" in mk.detail and "(project)" not in mk.detail
+    assert "--scope user" in mk.detail

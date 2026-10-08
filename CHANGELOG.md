@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.28 — the doctor checks every install scope (2026-10-08)
+
+- **`version` reads every `installed_plugins.json` row that applies to the repo** (LANES-25): the
+  user scope, plus project or local scope rows whose `projectPath` is this repo's main clone (so a
+  worktree session counts the main clone's install). It warns on any row that differs from
+  `plugin_version`, gives each its fix line (`claude plugin update lanes@<mkt> --scope <scope>`,
+  then restart), and names the copy this session runs. A user-scope 0.4.21 beside a project-scope
+  0.4.22 used to read `installed 0.4.22 == expected 0.4.22` while the session loaded 0.4.21.
+- **`marketplace` compares every applicable scope's commit** with the marketplace clone's tip,
+  instead of the first row it found.
+- README: updating means every scope you installed.
+
 ## 0.4.27 — an epic reads in progress while a child is claimed (2026-10-08)
 
 - **Derived, never written** (LANES-31). `backlog_index.epic_activity()` maps every live epic that

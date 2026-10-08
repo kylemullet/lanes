@@ -7,7 +7,8 @@ Checks, in order:
   position   where the session is (toplevel, branch, main clone or worktree) — informational
   config     `.claude/lanes/config.toml` present, parses, validates; mode summary
   tracked    the config is committed (a config only one machine can see protects nobody)
-  version    installed plugin version vs the `plugin_version` the repo expects
+  version    every install that applies here (user scope + this repo's project scope) vs the
+             `plugin_version` the repo expects, naming the copy this session runs (LANES-25)
   stubs      the three extension-point files exist
   backlog    the backlog directory exists; `--check` runs when the tracker ships with the plugin
   views      the generated INDEX.md / index.html are gitignored (a tracked copy conflicts at every rebase)
@@ -155,17 +156,37 @@ def check_tracked(root: Path, loaded: lc.Loaded) -> Check:
     return Check(WARN, "tracked", f"{lc.CONFIG_REL} is {why} — the config only protects machines that can see it; commit it{hint}")
 
 
-def check_version(cfg: dict) -> Check:
-    installed = lc.installed_version()
+def check_version(cfg: dict, root: Optional[Path] = None) -> Check:
+    """Every install that applies to this repo against the pin, not just one (LANES-25).
+
+    Claude Code keeps one `installed_plugins.json` row per scope. `plugin update` updates
+    ONE scope, and a stale user-scope row can be the copy a session actually loads while
+    the project-scope row reads current. So every applicable row is compared, and the
+    running copy (this script's own plugin root) is named, since a session invoking the
+    doctor through `${CLAUDE_PLUGIN_ROOT}` runs exactly the copy it loaded."""
+    running = lc.installed_version()
     expected = cfg.get("plugin_version")
-    if installed is None:
+    rows = lanes_installs(root) if root is not None else []
+    if running is None and not rows:
         return Check(WARN, "version", "cannot read the installed plugin's manifest")
+    here = lc.plugin_root().resolve()
+    loaded = next((r for _k, r in rows if r.get("installPath") and Path(r["installPath"]).resolve() == here), None)
+    runs = (f"this session runs the {loaded.get('scope')} install" if loaded
+            else f"running from {here}, not an installed copy" if rows else None)
     if not expected:
-        return Check(WARN, "version", f"installed {installed}; the repo pins none — set `plugin_version` so drift is visible")
-    if installed == expected:
-        return Check(OK, "version", f"installed {installed} == expected {expected}")
-    return Check(WARN, "version", f"installed {installed} but this repo expects {expected} — update the plugin or the pin, "
-                                  f"so two machines do not run two protocols")
+        seen = ", ".join(f"{r.get('scope')} {r.get('version')}" for _k, r in rows) or f"installed {running}"
+        return Check(WARN, "version", f"{seen}; the repo pins none — set `plugin_version` so drift is visible")
+    stale = [(k, r) for k, r in rows if r.get("version") != expected]
+    if not stale and running == expected:
+        scopes = " + ".join(r.get("scope") or "?" for _k, r in rows)
+        return Check(OK, "version", f"installed {expected} == expected {expected}" + (f" ({scopes})" if scopes else ""))
+    if not stale:   # every install is current; only the copy running this check is not
+        return Check(WARN, "version", f"installed {running} but this repo expects {expected} — update the plugin or the "
+                                      f"pin, so two machines do not run two protocols" + (f"; {runs}" if runs else ""))
+    parts = [f"{r.get('scope')} install is {r.get('version')}" for _k, r in stale]
+    fixes = [f"`claude plugin update {k} --scope {r.get('scope')}`" for k, r in stale]
+    return Check(WARN, "version", f"this repo expects {expected} but the " + ", the ".join(parts)
+                 + f" — {'; '.join(fixes)}, then restart" + (f"; {runs}" if runs else ""))
 
 
 def check_stubs(root: Path) -> Check:
@@ -321,6 +342,40 @@ def _load_json(path: Path):
         return None
 
 
+def _main_clone(root: Path) -> Path:
+    common = _git(["rev-parse", "--git-common-dir"], root)
+    if not common:
+        return root.resolve()
+    return (root / common).resolve().parent
+
+
+def lanes_installs(root: Path, mkt: Optional[str] = None) -> list:
+    """[(plugin key, row)] for every `installed_plugins.json` row of lanes that applies to
+    this repo: user scope, plus project/local scope rows whose `projectPath` is this repo's
+    main clone (a worktree's session uses the main clone's project install). LANES-25."""
+    data = _load_json(plugins_dir() / "installed_plugins.json")
+    table = data.get("plugins", data) if isinstance(data, dict) else None
+    if not isinstance(table, dict):
+        return []
+    keys = [f"lanes@{mkt}"] if mkt else [k for k in table if str(k).partition("@")[0] == "lanes"]
+    main = _main_clone(root)
+    out = []
+    for k in keys:
+        for r in table.get(k) or []:
+            if not isinstance(r, dict):
+                continue
+            scope = r.get("scope")
+            if scope == "user":
+                out.append((k, r))
+            elif scope in ("project", "local") and r.get("projectPath"):
+                try:
+                    if Path(r["projectPath"]).resolve() == main:
+                        out.append((k, r))
+                except OSError:
+                    continue
+    return out
+
+
 def _lanes_marketplace(data) -> Optional[str]:
     """The marketplace lanes is enabled from (`lanes@<mkt>`), '' for a bare `lanes`, or
     None when lanes is not enabled."""
@@ -420,21 +475,19 @@ def check_settings(root: Path) -> list:
         return checks
     where = f"`{mkt}` source matches ({have.get('repo')}" + (f"@{have['ref']}" if have.get("ref") else "") + ")"
     clone_tip = _git(["rev-parse", "HEAD"], Path(entry["installLocation"])) if entry.get("installLocation") else None
-    installed = _load_json(pdir / "installed_plugins.json")
-    rows = ((installed or {}).get("plugins", installed) or {}).get(f"lanes@{mkt}") if isinstance(installed, dict) else None
-    row = None
-    for r in rows or []:
-        if r.get("scope") == "project" and Path(r.get("projectPath", "")).resolve() == root.resolve():
-            row = r
-    for r in rows or []:
-        row = row or (r if r.get("scope") == "user" else None)
-    sha = (row or {}).get("gitCommitSha")
-    if sha and clone_tip and sha != clone_tip:
+    # Every applicable scope, not the first found: `plugin update` moves one scope (LANES-25).
+    rows = [r for _k, r in lanes_installs(root, mkt) if r.get("gitCommitSha")]
+    behind = [r for r in rows if clone_tip and r["gitCommitSha"] != clone_tip]
+    if behind:
+        at = ", ".join(f"{r['gitCommitSha'][:7]} ({r.get('scope')})" for r in behind)
+        fixes = "; ".join(f"`claude plugin update lanes@{mkt} --scope {r.get('scope')}`" for r in behind)
         checks.append(Check(WARN, "marketplace",
-                            f"{where}, but lanes is installed at {sha[:7]} and the marketplace clone is at "
-                            f"{clone_tip[:7]} — `claude plugin update lanes@{mkt}` (both scopes)"))
+                            f"{where}, but the marketplace clone is at {clone_tip[:7]} and lanes is installed at "
+                            f"{at} — {fixes}, then restart"))
     else:
-        checks.append(Check(OK, "marketplace", where + (f", installed at its tip {sha[:7]}" if sha and clone_tip else "")))
+        tip = rows[0]["gitCommitSha"][:7] if rows and clone_tip else None
+        scopes = " + ".join(r.get("scope") or "?" for r in rows)
+        checks.append(Check(OK, "marketplace", where + (f", installed at its tip {tip} ({scopes})" if tip else "")))
     return checks
 
 
@@ -458,7 +511,7 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     cfg_check, cfg = check_config(loaded)
     checks.append(cfg_check)
     checks.append(check_tracked(root, loaded))
-    checks.append(check_version(cfg))
+    checks.append(check_version(cfg, root))
     checks.append(check_stubs(root))
     checks.extend(check_backlog(root, cfg))
     checks.extend(check_claims(root, cfg, now))
