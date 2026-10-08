@@ -396,15 +396,18 @@ def lane_problems(issues):
 
 
 def lane_name(ln):
-    """A lane is named after its slice: `LANES-20/21/9`, the lead's full ID then the
-    others' numbers in slice order (a member from another project keeps its full
-    ID: `LANES-22/INFRA-100`). The lead comes from the recorded key, so the name
-    stays the same after the lead lands and only its reservations remain."""
+    """A lane is named after its slice: `LANES-20/21/9`. '/' joins issues of ONE
+    project, the first written in full and the rest by number; ', ' separates
+    projects, which are grouped in order of first appearance (LANES-29), so
+    `DOC-100, PROD-19, DOC-103` reads `DOC-100/103, PROD-19` whatever the slice
+    order. The lead comes from the recorded key, so the name stays the same after
+    the lead lands and only its reservations remain."""
     lead = ln["key"].split("@", 1)[0] if "@" in ln["key"] else ln["lead"]["id"]
-    ids = [lead] + [m["id"] for m in ln["members"] if m["id"] != lead]
-    proj = lead.rsplit("-", 1)[0]
-    return "/".join([ids[0]] + [i.rsplit("-", 1)[1] if i.rsplit("-", 1)[0] == proj else i
-                                for i in ids[1:]])
+    groups = {}
+    for i in [lead] + [m["id"] for m in ln["members"] if m["id"] != lead]:
+        proj, _, num = i.rpartition("-")
+        groups.setdefault(proj, []).append(num)
+    return ", ".join(f"{proj}-" + "/".join(nums) for proj, nums in groups.items())
 
 
 def lane_label(ln):
@@ -1201,7 +1204,7 @@ def _md_lanes(lanes):
 
 def _md_status(i, activity):
     if i.get("id") in activity:
-        return f"in-progress (lane {', '.join(activity[i['id']])})"
+        return f"in-progress (lane {'; '.join(activity[i['id']])})"
     return i.get("status")
 
 
@@ -1622,7 +1625,7 @@ def _html_row(i, cols, activity=None):
     why_html = (f'<div class="why" title="{_esc(why)}">{_esc(why)}</div>'
                 if why and i.get("status") in LIVE_STATUSES else "")
     if i.get("id") in activity:
-        lanes_txt = "lane " + ", ".join(activity[i["id"]])
+        lanes_txt = "lane " + "; ".join(activity[i["id"]])
         why_html += f'<div class="why via" title="a child is claimed: {_esc(lanes_txt)}">▶ {_esc(lanes_txt)}</div>'
     status_pill = _pill("s", status)
     if i.get("id") in activity:
@@ -1876,7 +1879,7 @@ def render_report(issues, who):
                     key=lambda x: (x["_age"] is None, -(x["_age"] or 0))):
         age = f"{i['_age']}d" if i["_age"] is not None else "undated"
         blocked = f"  ⛔ {i['blocked_on']}" if i.get("blocked_on") else ""
-        lanes_txt = f"  ▶ lane {', '.join(activity[i['id']])}" if i.get("id") in activity else ""
+        lanes_txt = f"  ▶ lane {'; '.join(activity[i['id']])}" if i.get("id") in activity else ""
         print(f"{i['id']:>10} {i.get('type') or '?':>8} {shown_status(i, activity) or '?':>11} "
               f"{i.get('priority') or '?':>8} [{age:>7}] {i['_title'][:80]}{blocked}{lanes_txt}")
     sc = {s: sum(1 for i in mine if i.get("status") == s) for s in STATUSES}
@@ -1892,7 +1895,7 @@ def render_report(issues, who):
         for e in sorted(epics, key=sort_key):
             roll = epic_rollup(issues, e["id"])
             summary = " · ".join(f"{s} {n}" for s, n in roll.items()) or "no children yet"
-            active = f"  ▶ IN PROGRESS: lane {', '.join(activity[e['id']])}" if e["id"] in activity else ""
+            active = f"  ▶ IN PROGRESS: lane {'; '.join(activity[e['id']])}" if e["id"] in activity else ""
             print(f"    {e['id']:>10}  {e['_title'][:58]:<58}  {sum(roll.values()):>2} children: {summary}{active}")
     if waiting:
         print(f"\n  Blocked on YOU — the other operator's issues your work unblocks ({len(waiting)}):")

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.31 — slice labels group by project (2026-10-08)
+
+- **'/' within a project, ', ' between projects** (LANES-29). A slice of DOC-100 and PROD-19 was
+  labelled `DOC-100/PROD-19`, which reads as one project. It is now `DOC-100, PROD-19`. Issues are
+  grouped by project in order of first appearance, so DOC-100, PROD-19, DOC-103 reads
+  `DOC-100/103, PROD-19`, the same label as DOC-100, DOC-103, PROD-19.
+- An epic worked by several lanes now joins their names with `; ` (`▶ lane DOC-105, INFRA-101; PIPE-74`),
+  since a lane name can now contain `, `.
+
 ## 0.4.30 — the lane row names the slice, not the worktree (2026-10-08)
 
 - **The In progress row drops the worktree and branch names** (LANES-28) in `--report`, `INDEX.md` and

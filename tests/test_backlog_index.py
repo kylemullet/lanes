@@ -560,7 +560,13 @@ def test_a_lane_is_named_after_its_slice():
         ms = [_claimed(i, PENDING_MK) for i in ids]
         return {"key": key, "members": ms, "lead": ms[0], "head": ms[0], "claimed": None}
     assert bidx.lane_name(ln("INFRA-98@2026-10-07", "INFRA-98", "INFRA-89")) == "INFRA-98/89"
-    assert bidx.lane_name(ln("LANES-22@2026-10-07", "LANES-22", "INFRA-100")) == "LANES-22/INFRA-100"
+    # LANES-29: '/' within a project, ', ' between projects, grouped by first appearance
+    assert bidx.lane_name(ln("LANES-22@2026-10-07", "LANES-22", "INFRA-100")) == "LANES-22, INFRA-100"
+    assert bidx.lane_name(ln("DOC-100@2026-10-08", "DOC-100", "PROD-19")) == "DOC-100, PROD-19"
+    assert bidx.lane_name(ln("DOC-100@2026-10-08", "DOC-100", "DOC-103", "PROD-19")) == "DOC-100/103, PROD-19"
+    assert bidx.lane_name(ln("DOC-100@2026-10-08", "DOC-100", "PROD-19", "DOC-103")) == "DOC-100/103, PROD-19"
+    assert (bidx.lane_name(ln("DOC-105@2026-10-08", "DOC-105", "INFRA-101", "INFRA-102", "DOC-9"))
+            == "DOC-105/9, INFRA-101/102")
     assert bidx.lane_name(ln("UI-3", "UI-3")) == "UI-3"
 
 
@@ -1206,6 +1212,23 @@ def test_report_shows_the_derived_state_in_the_row_rollup_and_lane(capsys):
     assert "IN PROGRESS" not in other
     head = next(l for l in out.splitlines() if l.startswith("  LANES-20/21"))
     assert "epic PROD-14" in head
+
+
+def test_an_epic_with_two_lanes_separates_them_with_a_semicolon(capsys):
+    """A mixed-project lane name carries ', ' (LANES-29), so the lanes under one epic
+    are joined with '; ' or two lanes would read as one."""
+    issues = [_issue("PROD-14", type="epic"),
+              _claimed("DOC-105", ACTIVE_MK, lane="DOC-105@2026-10-08", epic="PROD-14"),
+              _claimed("INFRA-101", _reserved("DOC-105"), lane="DOC-105@2026-10-08", epic="PROD-14"),
+              _claimed("PIPE-74", ACTIVE_MK, lane="PIPE-74@2026-10-08", epic="PROD-14")]
+    for i in issues:
+        i["_age"] = 1
+    bidx.render_report(issues, "kyle")
+    out = capsys.readouterr().out
+    row = next(l for l in out.split("BACKLOG (kyle)")[1].splitlines() if l.strip().startswith("PROD-14 "))
+    assert sorted(row.split("▶ lane ", 1)[1].strip().split("; ")) == ["DOC-105, INFRA-101", "PIPE-74"]
+    page = bidx.render_html(issues)
+    assert "lane PIPE-74; DOC-105, INFRA-101" in page or "lane DOC-105, INFRA-101; PIPE-74" in page
 
 
 def test_html_and_index_show_the_derived_state():
