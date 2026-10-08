@@ -415,6 +415,13 @@ def main(argv=None):
             print(f"would claim {rel}\n  {line}")
         print(f"would commit: {claim.subject()}")
         return 0
+    try:
+        return _write_commit_push(root, claim, texts, ids, behind)
+    finally:
+        push_guard.refresh_view(root)       # claimed or restored, the bookmark shows it (LANES-11)
+
+
+def _write_commit_push(root, claim, texts, ids, behind):
     originals = {rel: (root / rel).read_bytes() for rel in texts}
     for rel, text in texts.items():
         with open(root / rel, "w", encoding="utf-8", newline="") as fh:

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.32 — the backlog view is a bookmark (2026-10-08)
+
+- **`backlog.view_mode = "file"` is the default** (LANES-11), replacing INFRA-43's served view. The
+  operator bookmarks `file://<main clone>/<backlog.dir>/index.html`, and no server runs to show the backlog.
+  `"serve"` keeps the old shape, and `session-startup` starts `--serve` only in that mode.
+- **The view always lives in the main clone and renders its files**, from any checkout:
+  `backlog_index.refresh_main_view()`. `backlog_index.py` run in a worktree writes and prints the main
+  clone's view, never the worktree's.
+- **Every backlog write regenerates it**: `backlog_new.py`, `lanes_claim.py` (claimed or restored),
+  `push_guard.py --add`, the backfill and `--check`. An automatic refresh writes only where both views are
+  gitignored, so it never leaves an untracked file for a broad `git add`.
+- **`view_hooks.py`**: `post-merge`, `post-rewrite` and `post-checkout` blocks that regenerate the view after
+  any pull, rebase or branch switch in the main clone. A fast-forward `pull --rebase` fires `post-merge`;
+  one that replays local commits fires `post-rewrite`. Worktree checkouts and mid-rebase checkouts are
+  ignored. The blocks **chain** after another tool's hook instead of refusing it (git-lfs writes two of the
+  three); a non-shell hook, one that hands off with `exec`, and `core.hooksPath` are reported, not touched.
+  `session-startup` installs them every session, beside the commit guard; `view_mode = "serve"` removes
+  them. The doctor gains a `view hooks` check.
+- The page header names the commit it was rendered from, and calls out a clone that is behind origin, in
+  both modes.
+
 ## 0.4.31 — slice labels group by project (2026-10-08)
 
 - **'/' within a project, ', ' between projects** (LANES-29). A slice of DOC-100 and PROD-19 was

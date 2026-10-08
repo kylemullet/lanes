@@ -122,6 +122,9 @@ def test_type_and_unknown_key_checks():
     assert any("unknown top-level" in m for m in _warnings({"bogus": {}}))
     assert any("YYYY-MM-DD" in m for m in _errors({"backlog": {"resolution_required_from": "yesterday"}}))
     assert any("view_port" in m for m in _errors({"backlog": {"view_port": 80}}))
+    assert any("view_mode" in m for m in _errors({"backlog": {"view_mode": "browser"}}))     # LANES-11
+    assert lc.resolve({})["view_mode"] == "file"
+    assert lc.resolve({"backlog": {"view_mode": "serve"}})["view_mode"] == "serve"
     assert any("MAJOR.MINOR.PATCH" in m for m in _warnings({"plugin_version": "v1"}))
 
 

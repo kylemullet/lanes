@@ -20,7 +20,9 @@ priorities = ["critical", "high", "normal", "low"]
 claim_marker_exempt = []                      # issue IDs whose body legitimately quotes a claim marker
 # resolution_required_from = "2026-01-01"     # issues closed before this date need no `resolution:`;
                                               # omit = always required (a fresh project has no history)
-view_port = 8099                              # the served backlog view
+view_mode = "file"                            # "file": a file:// view every backlog write and every pull
+                                              # regenerates (bookmark it); "serve": `--serve` re-parses per request
+view_port = 8099                              # the served backlog view (view_mode = "serve")
 
 [git]
 main_branch = "main"

@@ -46,7 +46,18 @@ the per-clone setup step: a fresh clone is guarded after its first startup, and 
 update re-points the shim. `installed (unchanged)` needs no Brief line. Anything else goes
 in the Brief: re-pointed, `off`, another tool's hook, `core.hooksPath`.
 
-Keys this skill binds to: `git.main_branch`, `backlog.dir`, `backlog.view_port`,
+The same goes for the view hooks (LANES-11), which regenerate the bookmarked backlog view
+after any pull, rebase or branch switch in the main clone:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" view_hooks.py --install
+```
+
+They chain after another tool's hooks (git-lfs writes two of the three). `installed
+(unchanged)` and `off` (`backlog.view_mode = "serve"`) need no Brief line; anything else
+does.
+
+Keys this skill binds to: `git.main_branch`, `backlog.dir`, `backlog.view_mode`, `backlog.view_port`,
 `tests.command`, `operators[]`, `lanes.code` / `lanes.code_owner`. Where this skill says
 *main branch*, *the backlog*, *the test command*, read the config's value.
 
@@ -177,21 +188,27 @@ mechanics); the backlog (step 5 reads it mechanically); the latest dated file in
 ### 5. Build the queue — run the report
 
 ```bash
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py              # rebuild the LOCAL, gitignored views
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py              # rebuild the main clone's gitignored views; prints the file:// path
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # this machine's operator; --who <short>|both
 ```
 
-**Also start the served view, detached, if it is not already up** (`run_in_background`),
-from the MAIN CHECKOUT:
+**The view is a file the operator bookmarks** (`backlog.view_mode = "file"`, the default,
+LANES-11): `<main clone>/<backlog.dir>/index.html`, the `file://` path the first command
+prints. It always lives in the MAIN CLONE and renders the main clone's files, whichever
+checkout runs the script. Nothing has to remember to regenerate it: every lanes script that
+writes the backlog does (`backlog_new.py`, `lanes_claim.py`, `push_guard.py --add`, the
+backfill, `--check`), and the view hooks do after any pull. Its header names the commit it
+was rendered from and when, and says when the clone is behind origin, so a stale page
+announces itself. `INDEX.md` and `index.html` are generated and must stay gitignored; the
+scripts refresh them only where they are.
+
+**`view_mode = "serve"`** keeps the INFRA-43 shape: start the served view, detached, if it
+is not already up (`run_in_background`), from the MAIN CHECKOUT. It re-parses on every
+request, so refreshing the page is the regeneration:
 
 ```bash
 curl -s -m 2 http://127.0.0.1:<backlog.view_port>/ >/dev/null || sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve
 ```
-
-It re-parses the backlog on every request, so **refreshing the bookmark IS the
-regeneration** and no later step can leave the operator looking at a stale queue. The
-written `INDEX.md` / `index.html` are the offline fallback; both are generated and must
-stay gitignored (every concurrent lane rewrites them).
 
 **The view's link is block II of the report, on its own line.** It is the operator's
 whole queue — sortable, filterable, linking into each issue file — and it carries the
@@ -320,8 +337,8 @@ quick wins still sees the red row. Step 6's `⚠️` staleness marks ride on wha
 cites the issue.
 
 **II — Sortable backlog.** The view's link alone on its own line, immediately after the
-Brief — `http://127.0.0.1:<view_port>/` when served, else the `file://` path the generator
-printed. Nothing else in the block. It is the operator's escape hatch from every
+Brief — the `file://` path the generator printed (the main clone's, never a worktree's), or
+`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. Nothing else in the block. It is the operator's escape hatch from every
 proposal below.
 
 **There is no full-backlog table**, and no fixed Critical / Quick wins / Slice blocks

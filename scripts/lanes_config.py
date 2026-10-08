@@ -39,6 +39,9 @@ LIVE_STATUSES = ("in-progress", "open", "blocked", "paused")   # verified is lan
 RESOLUTIONS = ("done", "duplicate", "superseded", "wont-do")
 CLAIM_AGE_FLOOR_MINUTES = 15
 SHARED_ASSIGNEE = "shared"
+# How the operator reads the backlog view (LANES-11): a bookmarked file:// page every
+# backlog write regenerates, or the --serve page that re-parses per request (INFRA-43).
+VIEW_MODES = ("file", "serve")
 CLAUDE_REPORTER = "claude"
 
 DEFAULTS: dict[str, Any] = {
@@ -52,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "claim_marker_exempt": [],
         "resolution_required_from": None,    # None -> always required
         "view_port": 8099,
+        "view_mode": "file",                 # "file" | "serve" (LANES-11)
     },
     "git": {
         "main_branch": "main",
@@ -81,7 +85,7 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "dir": (str, False), "projects": (list, False), "types": (list, False),
         "priorities": (list, False), "docs_lane_prefixes": (list, False),
         "claim_marker_exempt": (list, False), "resolution_required_from": (str, False),
-        "view_port": (int, False),
+        "view_port": (int, False), "view_mode": (str, False),
     },
     "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False),
             "ok_free_paths": (list, False), "commit_guard": (bool, False)},
@@ -245,6 +249,9 @@ def validate(raw: dict) -> list:
     port = backlog.get("view_port")
     if isinstance(port, int) and not (1024 <= port <= 65535):
         err(f"`backlog.view_port` {port} is outside 1024..65535")
+    mode = backlog.get("view_mode")
+    if isinstance(mode, str) and mode not in VIEW_MODES:
+        err(f"`backlog.view_mode` must be one of {', '.join(VIEW_MODES)}, got {mode!r}")
     if "statuses" in backlog:
         err("`backlog.statuses` is not configurable: in-progress / verified / closed are read by name in the gate")
     if "resolutions" in backlog:
@@ -404,6 +411,7 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
         "claim_marker_exempt": list(merged["backlog"]["claim_marker_exempt"]),
         "resolution_required_from": merged["backlog"]["resolution_required_from"],
         "view_port": merged["backlog"]["view_port"],
+        "view_mode": merged["backlog"]["view_mode"],
         "main_branch": merged["git"]["main_branch"],
         "land_requires_ok": merged["git"]["land_requires_ok"],
         "main_direct_paths": list(merged["git"]["main_direct_paths"]),

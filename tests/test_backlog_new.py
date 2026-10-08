@@ -247,12 +247,41 @@ def test_create_issue_rejects_unknown_reporter_assignee_or_resolution(tmp_path, 
         bn.create_issue("ZZ", "x", regen_index=False)
 
 
+def _ignore_views(repo):
+    (repo / ".gitignore").write_text("docs/backlog/INDEX.md\ndocs/backlog/index.html\n", encoding="utf-8")
+
+
 def test_create_issue_regenerates_the_views_in_the_configured_root(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
+    _ignore_views(repo)
     _point_at(monkeypatch, repo)
     bn.create_issue("INFRA", "indexed", reported_by="kyle")
     assert (repo / "docs" / "backlog" / "INDEX.md").is_file()
     assert "INFRA-2" in (repo / "docs" / "backlog" / "index.html").read_text(encoding="utf-8")
+
+
+def test_create_issue_leaves_no_view_where_the_views_are_not_ignored(tmp_path, monkeypatch):
+    """An automatic refresh never leaves an untracked file for a broad add (LANES-11)."""
+    repo = _repo(tmp_path)
+    _point_at(monkeypatch, repo)
+    bn.create_issue("INFRA", "indexed", reported_by="kyle")
+    assert not (repo / "docs" / "backlog" / "index.html").exists()
+    assert "index.html" not in _git(repo, "status", "--porcelain", "-uall").stdout
+
+
+def test_create_issue_in_a_worktree_refreshes_the_main_clones_view(tmp_path, monkeypatch):
+    """The bookmark is the main clone's file, rendered from the main clone's files (LANES-11)."""
+    repo = _repo(tmp_path)
+    _ignore_views(repo)
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "-qm", "ignore")
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", str(wt), "-b", "lane")
+    _point_at(monkeypatch, wt)
+    bn.create_issue("INFRA", "from the lane", reported_by="kyle")
+    assert not (wt / "docs" / "backlog" / "index.html").exists()
+    page = (repo / "docs" / "backlog" / "index.html").read_text(encoding="utf-8")
+    assert "INFRA-1" in page and "from the lane" not in page    # the main clone's files, not the lane's
 
 
 def test_cli_requires_reported_by(monkeypatch, capsys):

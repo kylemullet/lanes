@@ -225,6 +225,17 @@ def load_cfg(root):
     return lc.resolve(loaded.raw, user_name=lc.git_user_name(root))
 
 
+def refresh_view(root):
+    """Regenerate the main clone's backlog view after a backlog write (LANES-11). Lazy
+    import: backlog_index imports this module. Never raises."""
+    try:
+        import backlog_index as bidx
+        bidx.configure(Path(root))
+        bidx.refresh_main_view()
+    except Exception as e:                            # noqa: BLE001 -- a view is never worth a failed write
+        print(f"backlog view not refreshed: {e}", file=sys.stderr)
+
+
 def main(argv=None):
     use_utf8_console()
     ap = argparse.ArgumentParser(description="lanes: may the commits ahead of origin reach the main branch without an OK?")
@@ -253,6 +264,7 @@ def main(argv=None):
             print(f"NOT COMMITTED — {err}", file=sys.stderr)
             return REFUSED
         print(f"committed: {args.message}")
+        refresh_view(root)
     if args.push:
         code, msg = push(root, cfg, args.mode)
         print(("OK — " if code == 0 else "NOT PUSHED — ") + msg, file=sys.stdout if code == 0 else sys.stderr)

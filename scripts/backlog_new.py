@@ -290,7 +290,7 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
         content += "\n"
     path.write_text(content, encoding="utf-8")
     if regen_index:
-        bidx.regenerate()
+        bidx.refresh_main_view()            # the main clone's bookmarked view (LANES-11)
     return path
 
 

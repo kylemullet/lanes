@@ -185,10 +185,10 @@ Work happens in the MAIN checkout before the worktree exists:
    work is the OK for this push.** Exit `1` means nothing was written — report the line and
    stop; exit `2` means the claim is committed on local main behind work that is not
    main-direct, which is the finding to surface.
-4. Refresh the browsable view: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py
-   --root "$(git rev-parse --git-common-dir)/.."` — **the main clone's root is the point**:
-   run from a worktree, the script indexes the WORKTREE and the operator's bookmark points
-   at the main clone's files. (If the served view is up, it is already current.)
+4. The browsable view needs nothing from you: `lanes_claim.py` and `push_guard.py --add`
+   regenerate the main clone's view themselves, from any checkout (LANES-11). Run
+   `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py` by hand only to print its
+   `file://` path; it writes the main clone's view, never the worktree's.
 
    ⚠️ **Run the conflict scan (1.2) in the MAIN CHECKOUT, never in a worktree.** A worktree
    created off the main branch before the claim push does not contain the claim.

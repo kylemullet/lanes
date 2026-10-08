@@ -1920,8 +1920,60 @@ def regenerate():
     issues, problems = load_issues()
     INDEX.parent.mkdir(parents=True, exist_ok=True)
     INDEX.write_text(render_index(issues), encoding="utf-8")
-    HTML_VIEW.write_text(render_html(issues, problems), encoding="utf-8")
+    HTML_VIEW.write_text(render_html(issues, problems, position=clone_position()), encoding="utf-8")
     return issues, problems
+
+
+# --- the bookmarked view (LANES-11) ----------------------------------------
+# INFRA-43 served the view because nothing remembered to regenerate a file. The
+# operator wants a file:// bookmark and no server, so the file has to stay fresh by
+# other means: every script that writes the backlog calls refresh_main_view(), and a
+# git hook (view_hooks.py) calls it after any pull, rebase or branch switch in the
+# main clone. The view always lives in the MAIN CLONE and renders its files: a
+# worktree's copy is not the file the bookmark points at (the INFRA-43 bug class).
+# Its header names the commit it was rendered from and when, so a stale page says so.
+
+
+def main_clone():
+    """The main clone's root, from the main clone or any of its worktrees; ROOT itself
+    outside git."""
+    rc, out, _ = _git_run("rev-parse", "--path-format=absolute", "--git-common-dir")
+    if rc or not out:
+        return ROOT
+    common = Path(out)
+    return common.parent if common.name == ".git" else ROOT
+
+
+def views_ignored():
+    """Both views are gitignored in ROOT. Outside git there is nothing to sweep up."""
+    rc, out, _ = _git_run("check-ignore", "--", f"{BACKLOG_REL}/INDEX.md", f"{BACKLOG_REL}/index.html")
+    if rc == 128:                                     # not a repository
+        return True
+    return len([l for l in out.splitlines() if l.strip()]) == 2
+
+
+def refresh_main_view(auto=True):
+    """Regenerate the main clone's views from the main clone's own files, whichever
+    checkout calls. Returns the HTML path, or None when it did not (said on stderr when
+    it failed). Never raises: a backlog write must not fail because its view could not
+    refresh. `auto` (every call but an explicit `backlog_index.py`): write only where both
+    views are gitignored, so a side effect never leaves an untracked file for a broad
+    `git add` to sweep up; the doctor's `views` check says how to ignore them."""
+    main = main_clone()
+    paths = ("ROOT", "BACKLOG", "INDEX", "HTML_VIEW")
+    home = {k: globals()[k] for k in paths}
+    try:
+        apply({"ROOT": main, "BACKLOG": main / BACKLOG_REL, "INDEX": main / BACKLOG_REL / "INDEX.md",
+               "HTML_VIEW": main / BACKLOG_REL / "index.html"})   # same config, the main clone's files
+        if auto and not views_ignored():
+            return None
+        regenerate()
+        return HTML_VIEW
+    except Exception as e:                            # noqa: BLE001 -- a view is never worth a failed write
+        print(f"backlog view not refreshed: {e}", file=sys.stderr)
+        return None
+    finally:
+        apply(home)
 
 
 
@@ -1973,7 +2025,7 @@ def _banner(head, behind):
         return (f'<div class="callout"><strong>This clone is {behind} commit(s) behind '
                 f'<code>origin/{_esc(MAIN_BRANCH)}</code></strong> (HEAD <code>{head}</code>, as of its last '
                 f'fetch) — a lane that landed from a worktree will not appear until you pull.</div>')
-    return (f'<span class="pos" title="Rendered live at each request">'
+    return (f'<span class="pos" title="The commit this view was rendered from">'
             f'<code>{head}</code> · level with <code>origin/{_esc(MAIN_BRANCH)}</code></span>')
 
 
@@ -2035,7 +2087,7 @@ def run_backfill(args, issues=None, isolated=False):
         return 0
     if closed and not args.dry_run:
         if not isolated:
-            regenerate()
+            refresh_main_view()
         if args.do_commit:
             subject = commit_backfill(closed)
             if args.push:
@@ -2115,9 +2167,11 @@ def main(argv=None):
         for p in extra:
             print(f"⚠️  {p}", file=sys.stderr)
         if problems or extra:
+            refresh_main_view()
             print(f"backlog check FAILED — {len(problems) + len(extra)} problem(s) above",
                   file=sys.stderr)
             return 1
+        refresh_main_view()
         n_verified = sum(1 for i in issues if i.get("status") == "verified")
         print(f"backlog check OK — {len(issues)} issues, no structural problems, "
               "no orphaned claims, no orphaned commit citations, no dangling epics, no lane conflicts, "
@@ -2162,15 +2216,16 @@ def main(argv=None):
                 return 1
         return run_backfill(args, issues)
 
-    INDEX.parent.mkdir(parents=True, exist_ok=True)
-    INDEX.write_text(render_index(issues), encoding="utf-8")
-    HTML_VIEW.write_text(render_html(issues, problems), encoding="utf-8")
-    print(f"wrote {INDEX.relative_to(ROOT)} + {HTML_VIEW.relative_to(ROOT)} "
-          f"(local, gitignored) — {len(issues)} issues"
-          + (f", {len(problems)} problem(s) above" if problems else ""))
-    print(f"  sortable view → {HTML_VIEW.as_uri()}")
+    # The views are the MAIN CLONE's, rendered from its files, whichever checkout runs
+    # this (LANES-11): the printed file:// path is the one to bookmark.
+    view = refresh_main_view(auto=False)
+    if view is None:
+        return 1
+    print(f"wrote {BACKLOG_REL}/INDEX.md + {BACKLOG_REL}/index.html in {view.parents[len(Path(BACKLOG_REL).parts)]} "
+          f"(local, gitignored)" + (f" — {len(problems)} problem(s) above" if problems else ""))
+    print(f"  sortable view → {view.as_uri()}")
     if args.open_view:
-        webbrowser.open(HTML_VIEW.as_uri())
+        webbrowser.open(view.as_uri())
     return 1 if problems else 0
 
 

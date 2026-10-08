@@ -46,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
 import guard_commit as gc              # noqa: E402
+import view_hooks as vh                # noqa: E402
 
 OK, WARN, FAIL, SKIP = "OK", "WARN", "FAIL", "SKIP"
 
@@ -504,6 +505,20 @@ def check_commit_guard(root: Path) -> Check:
     return Check(WARN, "commit guard", detail)
 
 
+def check_view_hooks(root: Path) -> Check:
+    """The hooks that keep the bookmarked view fresh after a pull (LANES-11)."""
+    w = gc.where(str(root))
+    if w is None:
+        return Check(SKIP, "view hooks", "cannot read the repository's position")
+    state, detail = vh.status(w.main_clone)
+    if state in ("installed", "disabled"):
+        return Check(OK, "view hooks", detail)
+    fix = f" — `sh \"{vh.LAUNCHER.as_posix()}\" view_hooks.py --install` (session-startup runs it)"
+    if state in ("absent", "stale"):
+        return Check(WARN, "view hooks", detail + fix)
+    return Check(WARN, "view hooks", detail)
+
+
 # --------------------------------------------------------------------- main
 def run(root: Path, now: Optional[datetime] = None) -> list:
     loaded = lc.load(root=root)
@@ -517,6 +532,7 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     checks.extend(check_claims(root, cfg, now))
     checks.extend(check_settings(root))
     checks.append(check_commit_guard(root))
+    checks.append(check_view_hooks(root))
     return checks
 
 
