@@ -22,8 +22,8 @@ The sequence, each step gating the next:
      tree has uncommitted or untracked changes, or this machine's operator row does
      not certify.
   2. Fetch, and refuse unless `origin/<main>` is an ancestor of HEAD (a fast-forward).
-     Losing that race is routine with concurrent sessions; the answer is rebase and
-     re-verify, never force. Refuse, too, a landing that moves `plugin_version` to a
+     Losing that race is routine with concurrent sessions; the answer is rebase (a
+     re-run only after a hand-resolved logic conflict, LANES-34), never force. Refuse, too, a landing that moves `plugin_version` to a
      version whose release tag is not on the plugin's remote (LANES-33): a consumer's CI
      checks the plugin out at that tag, and an untagged pin turned every push after it
      red. The plugin's CI mints the tag seconds after a release reaches `next`, so the
@@ -164,8 +164,9 @@ def plan(cwd, onto=None):
     if git("rev-parse", "--verify", "--quiet", upstream, cwd=top)[0]:
         raise Refused(f"{upstream} does not exist")
     if not ancestor(upstream, "HEAD", top):
-        raise Refused(f"{upstream} moved and is not an ancestor of HEAD — rebase onto it and "
-                      "re-verify, then run this again (never force)")
+        raise Refused(f"{upstream} moved and is not an ancestor of HEAD — rebase onto it (a clean "
+                      "rebase needs no re-run; a hand-resolved logic conflict re-runs once), then run "
+                      "this again (never force)")
     pin_note = check_pin_is_released(upstream, top)
     _, head, _ = git("rev-parse", "HEAD", cwd=top)
     return {"top": top, "main_clone": main_clone, "branch": branch, "main": main,

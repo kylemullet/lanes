@@ -23,7 +23,7 @@ the plugin's scripts, and a solo-mode second adopter. Private until published.
 | Layer | What | Where it lives |
 | :-- | :-- | :-- |
 | **Protocol** — the rule and the incident that produced it | claims as a concurrency primitive with an arbitration rule for ambiguous locks; the backlog as files in git with an integrity gate; the operator-OK gate on *landing*, never on a branch push; assert-position-before-first-edit | ships in the plugin |
-| **Binding** — what the rule points at in *this* repo | the test command, the backlog directory, the main branch, who certifies, the port command, the scoped post-rebase re-run | `.claude/lanes/config.toml` |
+| **Binding** — what the rule points at in *this* repo | the test command, the backlog directory, the main branch, who certifies, the port command, the scoped re-run after a logic conflict | `.claude/lanes/config.toml` |
 | **Local fact** — true of one project only | data mirrors, bootstraps, a local server, a scheduled check | three extension-point files beside the config |
 
 ## Install
@@ -115,7 +115,7 @@ stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualen
 | Skill | When | What it does |
 | :-- | :-- | :-- |
 | `session-startup` | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief (always with a `critical:` line), ask the session mode (or read it from the trigger: `GA quick wins`), offer 2–3 proposals for it; **stop** |
-| `worktree-increment` | "do CORE-7", "run the slice", "go" | claim the whole slice up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator, close the doc loop, push the branch freely, land only with the OK |
+| `worktree-increment` | "do CORE-7", "run the slice", "go" | claim the whole slice up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator, close the doc loop, push the branch freely, land only with the OK, on the lane's own green (a rebase re-runs tests only after a hand-resolved logic conflict) |
 | `session-closeout` | "let's wrap", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
 
 Each `SKILL.md` is protocol only; the project-specific steps live in the repo's
@@ -239,7 +239,7 @@ annotated reference; the short version:
 | `git.ok_free_paths` | `[<backlog.dir>/]` | may reach the main branch with no operator OK (`push_guard.py --ok-free`); deliberately narrower than `main_direct_paths` — `[]` makes every main-branch push wait for the OK |
 | `tests.command` | `pytest -q` | |
 | `tests.required_before_land` | `true` | |
-| `tests.rebase_rerun_command` | — | prints the test args for a scoped post-rebase re-run; absent = full suite |
+| `tests.rebase_rerun_command` | — | prints the test args for the re-run after a rebase that needed a hand-resolved logic conflict (a clean rebase re-runs nothing); absent = full suite |
 | `worktrees.port_command` | — | prints this lane's localhost port |
 | `[[operators]]` | `[]` (solo) | one row per `(git user.name, platform)` — a machine, not a person: `id`, `short`, `certifies`, `may_edit_code`. `id` and the pair are unique; one person on two machines is two rows sharing a `short`. `retired = true` (+ optional `retired_on`) keeps a departed operator's row as history: it grants nothing, never matches a machine, is not offered by `backlog_new.py`, and is valid on closed issues only (and as `reported_by` anywhere) |
 | `lanes.code`, `lanes.code_owner` | — | which paths only the owning operator edits; meaningless in solo mode |

@@ -39,8 +39,9 @@ main_direct_paths = ["docs/", ".claude/lanes/", "*.md"]   # may reach main_branc
 command = "pytest -q"
 required_before_land = true
 # rebase_rerun_command = "python3 scripts/rebase_impact.py --argv-only"
-                                              # prints the pytest args for a scoped post-rebase re-run;
-                                              # omit = the full `command` after every rebase
+                                              # prints the pytest args for the re-run after a rebase
+                                              # with a hand-resolved logic conflict (a clean rebase
+                                              # re-runs nothing); omit = the full `command` then
 
 [worktrees]
 # port_command = "python3 scripts/lane_port.py"   # prints this lane's localhost port; omit if the

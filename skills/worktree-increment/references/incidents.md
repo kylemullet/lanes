@@ -70,6 +70,19 @@ before the self-verify, and a post-rebase re-run is scoped to what the incoming 
 can reach (`tests.rebase_rerun_command`) with the full suite as the fallback whenever a
 path is global or unmapped.
 
+## The re-run that never landed (2026-10-08)
+
+The scoped re-run still ran after every move of the main branch, and the scope was no
+help when the lane touched a module nearly every test imports: one lane's 20-minute green
+was followed by a "slice" of 101 test files after a rebase whose only conflict was one
+import line. The operator stopped it at 15 minutes; by then 15 more commits had landed. A
+docs-only lane ran 23 minutes, then 19 more after its rebase. Three suites on one laptop
+each ran two to three times slower, which widened the window for the next landing. Past a
+few landings an hour, a lane that re-runs on every rebase never lands. Now a lane lands on
+its own full green plus a rebase with no hand-resolved logic conflict; a composite break
+is caught by the next full run at the new tip and fixed forward. A batched merge queue is
+the shape for more landings than one machine makes.
+
 ## The variable that was one argument (2026-09-26)
 
 `ARGS=$(classifier --argv-only); pytest $ARGS` handed the test runner ONE argument in

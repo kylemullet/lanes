@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.34 — a lane lands on its own green (2026-10-08)
+
+- **A clean rebase re-runs nothing** (LANES-34). `worktree-increment` 6.1 used to re-run
+  `tests.rebase_rerun_command` (or the full suite) after every rebase onto a moved main branch, and
+  `lanes_land.py` refuses a landing that is not a fast-forward, so each landing during a re-run forced
+  another rebase and another run. As landings sped up, a lane could go round that loop indefinitely.
+  Now a lane lands on its own step-4 full green plus a rebase with no hand-resolved logic conflict.
+  Conflicts in the docs lane, the backlog, a changelog, a version string, or import lines where both
+  sides were kept do not count. A logic conflict re-runs once, scoped as before; `main` moving during
+  that run does not restart it. A composite break between two clean lanes is caught by the next full
+  run at the new tip and fixed forward. The step-9 retry after a refused landing follows the same rule.
+- `tests.rebase_rerun_command` keeps its name and format; it now runs only after a logic conflict.
+
 ## 0.4.33 — every release is tagged; an untagged pin does not land (2026-10-08)
 
 - **The release mints its tag** (LANES-33). `scripts/release_tag.py --ensure --push` tags HEAD

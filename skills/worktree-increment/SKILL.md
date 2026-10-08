@@ -252,8 +252,9 @@ out-of-scope discoveries get LOGGED (step 8), not chased.
 
 **Rebase FIRST, then verify — not the other way round.** `git fetch origin`; if
 `origin/<main_branch>` moved, rebase onto it BEFORE the suite runs. A green on a tree that
-is already behind buys nothing — step 6.1 has to re-establish it anyway. The old order
-(verify → hold → rebase → re-verify) cost a lane up to three full suites.
+is already behind buys nothing. The old order (verify → hold → rebase → re-verify) cost
+a lane up to three full suites. This run is the lane's gate: a later rebase that applies
+cleanly does not repeat it (6.1).
 
 - Full `tests.command` — green, zero failures. An environment failure means step 2's
   setup was skipped or stale; re-supply, don't rationalize. Keep the machine awake for
@@ -294,18 +295,34 @@ When the operator says they are ready:
 
 1. `git fetch origin`. If `origin/<main_branch>` moved: WIP-commit → `git rebase` (exit
    status on its own line) → reset → re-supply any lane setup other lanes may have
-   changed → **re-run what the incoming commits can actually reach.** With
-   `tests.rebase_rerun_command` set, run exactly what it prints:
+   changed. **Then judge the rebase, not the distance `main` moved.** The lane's own
+   full green (step 4) is the gate; a rebase adds a test run only when you resolved a
+   *logic* conflict by hand.
 
-   ```bash
-   <tests.command> $(<tests.rebase_rerun_command>)
-   ```
+   - **No re-run** — the rebase applied cleanly, or every conflict you resolved was in
+     the docs lane (`backlog.docs_lane_prefixes`, the backlog), a changelog entry, a
+     version string, or import lines where both sides' imports were kept. Land on the
+     step-4 green.
+   - **Re-run once** — any other hunk you resolved by hand: code a test can execute,
+     where you chose between or merged two sides' logic. **Unsure is a logic conflict.**
+     With `tests.rebase_rerun_command` set, run exactly what it prints:
 
-   (Use the inline `$(...)` form — a variable holding the args is not word-split in
-   every shell.) Without it, re-run the full `tests.command`. **Never hand-edit a verdict
-   downward.** What backstops a miss: the next full run at the new tip, however the
-   project produces one, surfaces a composite regression within one lane cycle — fixed
-   forward, not blocked.
+     ```bash
+     <tests.command> $(<tests.rebase_rerun_command>)
+     ```
+
+     (Use the inline `$(...)` form — a variable holding the args is not word-split in
+     every shell.) Without it, re-run the full `tests.command`. If `main` moves again
+     during that run, the next rebase is judged by the same rule: a clean one lands on
+     this run's green. It never restarts the run.
+
+   **Never hand-edit a verdict downward**, and never call a conflict "imports only"
+   without reading the resolved hunk. A clean rebase can still compose into a break:
+   two lanes that each pass alone and fail together. The next full run at the new tip
+   catches that, however the project produces one (a canary, a nightly, the next lane's
+   step 4), and it is fixed forward, not blocked. Re-running after every move of `main`
+   only moved that check earlier, and as landings sped up it kept a lane from ever
+   landing (`incidents.md` → "The re-run that never landed").
 2. If the project has a build step for what the operator will look at, run it explicitly
    now (a launcher that only builds when output is MISSING serves a stale build after a
    rebase).
@@ -469,8 +486,8 @@ step fails the push gate.
    next startup closes it. `--no-close` skips it. Not run for `--onto` another branch.
    (`incidents.md` → "Six verified issues and a question".)
 
-   On exit `1` because origin moved: rebase + retest (6.1), then run it again. Never
-   force. `<branch>:<main_branch>` publishes exactly this branch's commits and cannot
+   On exit `1` because origin moved: rebase, judge it by 6.1 (a clean rebase needs no
+   re-run), then run it again. Never force. `<branch>:<main_branch>` publishes exactly this branch's commits and cannot
    sweep another session's unpushed work.
 
    **Doing it by hand instead** (no plugin scripts reachable): one command per tool call,
