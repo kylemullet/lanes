@@ -1,0 +1,41 @@
+# lanes release tag -- a release is tagged the moment it is pushed (LANES-33).
+#
+# A consumer's CI checks the plugin out at the tag matching its pin (readlines'
+# backlog gate, INFRA-78), so a version with no `lanes--v<version>` tag breaks
+# that CI on every push after the pin. Nothing minted tags once releases moved to
+# `next` (LANES-14): twenty went out untagged, about 250 red consumer runs.
+#
+# On every push to main or next, `release_tag.py --ensure --push` tags HEAD with
+# plugin.json's version unless that version is already tagged -- a push that does
+# not bump the version is a no-op. A separate workflow from ci.yml on purpose:
+# ci.yml cancels an in-progress run on `next` when the next push arrives, and a
+# cancelled tag run is exactly the untagged release this exists to prevent. It
+# does not wait for the tests either: the consumer installs from the branch, not
+# from the tag, so the release is out whether or not it is green, and the
+# consumer's pin follows within seconds (`lanes_land.py` waits for the tag).
+#
+# A tag pushed with GITHUB_TOKEN starts no workflow, so this cannot loop.
+name: release-tag
+
+on:
+  push:
+    branches: [main, next]
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: tag the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag plugin.json's version unless it is already tagged
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 scripts/release_tag.py --ensure --push

@@ -23,7 +23,11 @@ The sequence, each step gating the next:
      not certify.
   2. Fetch, and refuse unless `origin/<main>` is an ancestor of HEAD (a fast-forward).
      Losing that race is routine with concurrent sessions; the answer is rebase and
-     re-verify, never force.
+     re-verify, never force. Refuse, too, a landing that moves `plugin_version` to a
+     version whose release tag is not on the plugin's remote (LANES-33): a consumer's CI
+     checks the plugin out at that tag, and an untagged pin turned every push after it
+     red. The plugin's CI mints the tag seconds after a release reaches `next`, so the
+     check waits up to TAG_WAIT_SECONDS for it before refusing.
   3. Push `<branch>:<main>` -- exactly this branch's commits.
   4. Re-fetch and require HEAD to be an ancestor of `origin/<main>`: "landed" is a
      fact read back from the remote, not inferred from a push exit status.
@@ -51,14 +55,16 @@ close did not complete (the startup backfill is the backstop).
 
 The operator's OK is the skill's gate, not this script's: run it after the OK.
 """
-import argparse, subprocess, sys
+import argparse, subprocess, sys, time, tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
+import release_tag as rt               # noqa: E402
 
 NOT_LANDED, CLEANUP_INCOMPLETE = 1, 2
+TAG_WAIT_SECONDS, TAG_POLL_SECONDS = 90, 10
 
 
 def git(*args, cwd):
@@ -77,6 +83,44 @@ def ancestor(a, b, cwd):
 
 class Refused(Exception):
     """A pre-landing check failed; nothing has been changed."""
+
+
+def pinned_version(rev, cwd):
+    """`plugin_version` in the config at `rev`, or None (no config, no pin, unparseable)."""
+    rc, text, _ = git("show", f"{rev}:{lc.CONFIG_REL}", cwd=cwd)
+    if rc:
+        return None
+    try:
+        value = tomllib.loads(text).get("plugin_version")
+    except tomllib.TOMLDecodeError:
+        return None
+    return value if isinstance(value, str) and value else None
+
+
+def check_pin_is_released(upstream, cwd, wait=None):
+    """Refuse a landing that pins an untagged plugin version (LANES-33). Returns a note
+    to print, or None when the landing does not move the pin."""
+    new = pinned_version("HEAD", cwd)
+    if new is None or new == pinned_version(upstream, cwd):
+        return None
+    tag, remote = rt.tag_name(new), rt.release_remote()
+    if remote is None:
+        return f"pin {new}: release-tag lookup is off ({rt.REMOTE_ENV} is empty) — not checked"
+    deadline = time.monotonic() + (TAG_WAIT_SECONDS if wait is None else wait)
+    while True:
+        found = rt.tag_on_remote(new, remote)
+        if found:
+            return f"pin {new}: {tag} is on {remote}"
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(TAG_POLL_SECONDS)
+    if found is None:
+        raise Refused(f"this landing pins plugin_version {new} and {remote} could not be asked for {tag} — "
+                      f"retry once it answers, or set {rt.REMOTE_ENV}= (empty) to land without the check")
+    raise Refused(f"this landing pins plugin_version {new}, but {tag} is not on {remote} — a consumer whose CI "
+                  "checks out the pinned release goes red on every push until it exists. Release the version "
+                  "first: from the plugin checkout, `python3 scripts/release_tag.py --ensure --push` (its CI's "
+                  "release-tag job does the same on a push to next/main); then run this again")
 
 
 def position(cwd):
@@ -122,9 +166,10 @@ def plan(cwd, onto=None):
     if not ancestor(upstream, "HEAD", top):
         raise Refused(f"{upstream} moved and is not an ancestor of HEAD — rebase onto it and "
                       "re-verify, then run this again (never force)")
+    pin_note = check_pin_is_released(upstream, top)
     _, head, _ = git("rev-parse", "HEAD", cwd=top)
     return {"top": top, "main_clone": main_clone, "branch": branch, "main": main,
-            "upstream": upstream, "head": head,
+            "upstream": upstream, "head": head, "pin_note": pin_note,
             "lands_on_main": main == cfg["main_branch"], "has_backlog": (top / cfg["backlog_dir"]).is_dir()}
 
 
@@ -202,6 +247,8 @@ def main(argv=None):
         print(f"NOT LANDED — {e}. Nothing was pushed, removed or deleted.", file=sys.stderr)
         return NOT_LANDED
     short = p["head"][:7]
+    if p["pin_note"]:
+        print(p["pin_note"])
     if args.dry_run:
         print(f"dry run: {p['branch']} @ {short} fast-forwards {p['upstream']}; would push "
               f"{p['branch']}:{p['main']}" + ("" if args.keep else ", then remove the worktree and delete the branch"))

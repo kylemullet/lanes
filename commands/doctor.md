@@ -20,7 +20,8 @@ Diagnose the `lanes` setup for the repository the session is in.
    detail; it was written to be read.
 
 3. For each `FAIL` or `WARN`, say what fixes it when the script said so (it names
-   `/lanes:init` for a missing config or stub, and the two versions on drift).
+   `/lanes:init` for a missing config or stub, the two versions on drift, and the
+   `release_tag.py --ensure --push` line for a pin with no release tag).
 
 4. **Stale-claim candidates are questions, never actions.** If the doctor lists an
    `in-progress` issue as a stale-claim candidate, report it and ask the user. Do not

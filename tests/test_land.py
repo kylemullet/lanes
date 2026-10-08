@@ -265,3 +265,97 @@ def test_a_close_that_cannot_push_is_reported_not_fatal(lane, tmp_path, capsys):
     assert "status: verified" in _origin_issue(origin, tmp_path)
     err = capsys.readouterr().err
     assert "backstop" in err and "discarded with the throwaway worktree" in err
+
+
+# --- an untagged pin does not land (LANES-33) --------------------------------
+
+def _pin(wt, version, subject):
+    cfg = wt / ".claude" / "lanes"
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "config.toml").write_text(f'plugin_version = "{version}"\n', encoding="utf-8")
+    git("add", ".claude/lanes/config.toml", cwd=wt)
+    git("commit", "-q", "-m", subject, cwd=wt)
+
+
+@pytest.fixture
+def releases(tmp_path, monkeypatch):
+    """The plugin's remote, as a bare repo the release-tag lookup asks; tag(v) publishes one."""
+    plugin = tmp_path / "plugin.git"
+    git("init", "-q", "--bare", "-b", "next", str(plugin), cwd=tmp_path)
+    seed = tmp_path / "plugin-seed"
+    git("clone", "-q", str(plugin), str(seed), cwd=tmp_path)
+    git("config", "user.email", "t@example.com", cwd=seed)
+    git("config", "user.name", "Tester", cwd=seed)
+    git("commit", "-q", "--allow-empty", "-m", "lanes", cwd=seed)
+    git("push", "-q", "origin", "HEAD:next", cwd=seed)
+    monkeypatch.setenv("LANES_RELEASE_REMOTE", str(plugin))
+    monkeypatch.setattr(ll, "TAG_WAIT_SECONDS", 0)
+
+    def tag(version):
+        git("tag", "-a", f"lanes--v{version}", "-m", f"lanes {version}", cwd=seed)
+        git("push", "-q", "origin", f"refs/tags/lanes--v{version}", cwd=seed)
+    return tag
+
+
+def test_a_pin_to_an_untagged_version_is_refused_before_anything_moves(lane, releases, tmp_path, capsys):
+    origin, clone, wt = lane
+    _pin(wt, "0.9.1", "lanes: pin 0.9.1")
+    before = _remote_heads(origin, tmp_path)
+    assert ll.main([]) == ll.NOT_LANDED
+    assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
+    err = capsys.readouterr().err
+    assert "lanes--v0.9.1 is not on" in err and "release_tag.py --ensure --push" in err
+
+
+def test_a_pin_to_a_tagged_version_lands(lane, releases, tmp_path, capsys):
+    origin, clone, wt = lane
+    releases("0.9.1")
+    _pin(wt, "0.9.1", "lanes: pin 0.9.1")
+    tip = git("rev-parse", "HEAD", cwd=wt)
+    assert ll.main([]) == 0
+    assert _remote_heads(origin, tmp_path)["main"] == tip
+    assert "pin 0.9.1: lanes--v0.9.1 is on" in capsys.readouterr().out
+
+
+def test_the_landing_waits_for_the_tag_the_release_ci_mints(lane, releases, monkeypatch):
+    """The release reaches `next` seconds before the pin lands; the plugin's CI tags it
+    shortly after. The landing polls for the tag instead of refusing at once."""
+    origin, clone, wt = lane
+    _pin(wt, "0.9.1", "lanes: pin 0.9.1")
+    asked = []
+
+    def tag_on_remote(version, remote=None):
+        asked.append(version)
+        return len(asked) >= 3
+    monkeypatch.setattr(ll.rt, "tag_on_remote", tag_on_remote)
+    monkeypatch.setattr(ll, "TAG_WAIT_SECONDS", 60)
+    monkeypatch.setattr(ll, "TAG_POLL_SECONDS", 0)
+    assert ll.main([]) == 0
+    assert asked == ["0.9.1"] * 3
+
+
+def test_a_landing_that_keeps_the_pin_asks_nothing(lane, releases, tmp_path, monkeypatch):
+    """Only a landing that MOVES the pin is checked: the pin already on main is not re-litigated."""
+    origin, clone, wt = lane
+    _pin(clone, "0.9.0", "lanes: pin 0.9.0")                 # untagged, already on main
+    git("push", "-q", "origin", "main", cwd=clone)
+    git("fetch", "-q", "origin", cwd=wt)
+    git("rebase", "-q", "origin/main", cwd=wt)
+    git("push", "-q", "-f", "origin", "core-1-work", cwd=wt)
+    monkeypatch.setattr(ll.rt, "tag_on_remote", lambda *a, **k: pytest.fail("looked up a pin the lane did not move"))
+    assert ll.main([]) == 0
+
+
+def test_an_unreachable_release_remote_refuses(lane, releases, tmp_path, monkeypatch, capsys):
+    origin, clone, wt = lane
+    monkeypatch.setenv("LANES_RELEASE_REMOTE", str(tmp_path / "nowhere.git"))
+    _pin(wt, "0.9.1", "lanes: pin 0.9.1")
+    assert ll.main([]) == ll.NOT_LANDED
+    assert "could not be asked" in capsys.readouterr().err
+
+
+def test_with_the_lookup_off_the_pin_lands_and_says_so(lane, tmp_path, capsys):
+    origin, clone, wt = lane                                 # conftest: LANES_RELEASE_REMOTE is empty
+    _pin(wt, "0.9.1", "lanes: pin 0.9.1")
+    assert ll.main([]) == 0
+    assert "release-tag lookup is off" in capsys.readouterr().out

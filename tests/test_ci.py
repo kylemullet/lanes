@@ -25,3 +25,18 @@ def test_ci_runs_the_suite_and_the_strict_validator_per_target():
             "components differs by environment, so all three are named")
     assert "validate --strict skills" not in text and "validate --strict commands" not in text, (
         "a bare component directory is read as a plugin root in CI (No manifest found)")
+
+
+RELEASE = ROOT / ".github" / "workflows" / "release-tag.yml"
+
+
+def test_every_push_to_main_or_next_tags_the_release():
+    """LANES-33: twenty releases went out untagged and a consumer CI that checks out the
+    pinned tag failed on every push. The tag is minted by CI, not by memory."""
+    text = RELEASE.read_text(encoding="utf-8")
+    assert "\n  push:\n    branches: [main, next]" in text
+    assert "python3 scripts/release_tag.py --ensure --push" in text
+    assert "contents: write" in text
+    assert "cancel-in-progress: false" in text, (
+        "a cancelled tag run is an untagged release; ci.yml cancels on next, this must not")
+    assert "needs:" not in text, "the consumer installs from the branch; the tag cannot wait for the tests"

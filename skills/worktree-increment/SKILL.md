@@ -448,7 +448,8 @@ step fails the push gate.
    It is the landing AND step 10.2's clean-up as one operation whose order cannot be
    broken: refuse (touching nothing) from the main clone, on the main branch, with a dirty
    tree or on a machine that does not `certifies`; fetch; refuse unless
-   `origin/<main_branch>` is an ancestor of HEAD; push `<branch>:<main_branch>`;
+   `origin/<main_branch>` is an ancestor of HEAD, or when the lane moves `plugin_version`
+   to a version with no release tag on the plugin's remote (LANES-33); push `<branch>:<main_branch>`;
    re-fetch and require HEAD on `origin/<main_branch>` — **landed is read back from the
    remote, never inferred from the push**; only then remove the worktree and delete the
    branch, locally and on origin (the remote one only if its tip landed too). Exit `0`

@@ -355,3 +355,43 @@ def test_marketplace_names_each_scope_behind_the_clone(repo, monkeypatch, tmp_pa
     mk = by_label(ld.check_settings(repo))["marketplace"]
     assert mk.status == ld.WARN and "0000000 (user)" in mk.detail and "(project)" not in mk.detail
     assert "--scope user" in mk.detail
+
+
+# --- the pinned version's release tag (LANES-33) ----------------------------
+
+@pytest.fixture
+def plugin_remote(tmp_path, monkeypatch):
+    """A bare repo standing in for the plugin's remote, carrying `lanes--v1.0.0` only."""
+    remote = tmp_path / "plugin.git"
+    git("init", "-q", "--bare", "-b", "next", str(remote), cwd=tmp_path)
+    seed = tmp_path / "seed"
+    git("clone", "-q", str(remote), str(seed), cwd=tmp_path)
+    git("config", "user.email", "t@example.com", cwd=seed)
+    git("config", "user.name", "Tester", cwd=seed)
+    git("commit", "-q", "--allow-empty", "-m", "lanes 1.0.0", cwd=seed)
+    git("tag", "-a", "lanes--v1.0.0", "-m", "lanes 1.0.0", cwd=seed)
+    git("push", "-q", "origin", "HEAD:next", "refs/tags/lanes--v1.0.0", cwd=seed)
+    monkeypatch.setenv("LANES_RELEASE_REMOTE", str(remote))
+    return remote
+
+
+def test_release_tag_ok_when_the_pin_is_tagged(plugin_remote):
+    c = ld.check_release_tag({"plugin_version": "1.0.0"})
+    assert c.status == ld.OK and "lanes--v1.0.0 is on" in c.detail
+
+
+def test_release_tag_warns_on_an_untagged_pin(plugin_remote):
+    c = ld.check_release_tag({"plugin_version": "1.0.1"})
+    assert c.status == ld.WARN and "lanes--v1.0.1 is not on" in c.detail and "--ensure --push" in c.detail
+
+
+def test_release_tag_skips_offline_off_or_unpinned(tmp_path, monkeypatch):
+    assert ld.check_release_tag({"plugin_version": None}).status == ld.SKIP
+    assert "lookup off" in ld.check_release_tag({"plugin_version": "1.0.0"}).detail      # conftest: empty
+    monkeypatch.setenv("LANES_RELEASE_REMOTE", str(tmp_path / "nowhere.git"))
+    c = ld.check_release_tag({"plugin_version": "1.0.0"})
+    assert c.status == ld.SKIP and "could not ask" in c.detail
+
+
+def test_release_tag_is_one_of_the_run_checks(repo):
+    assert "release tag" in by_label(ld.run(repo, now=NOW))

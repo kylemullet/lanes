@@ -19,6 +19,14 @@ def _no_real_plugins_dir(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("LANES_PLUGINS_DIR", str(tmp_path_factory.mktemp("plugins")))
 
 
+@pytest.fixture(autouse=True)
+def _no_release_tag_lookup(monkeypatch):
+    """The landing and the doctor ask the plugin's remote for a pin's release tag (LANES-33);
+    a test never reaches the network. Set and empty, the lookup is off; a test that wants it
+    points LANES_RELEASE_REMOTE at a local bare repo."""
+    monkeypatch.setenv("LANES_RELEASE_REMOTE", "")
+
+
 @pytest.fixture
 def repo(tmp_path):
     """A throwaway git repo with one commit on `main` and a known user."""

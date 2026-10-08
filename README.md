@@ -92,8 +92,8 @@ machine; it is per machine, so it is an environment variable and not a config ke
 - **`/lanes:doctor [--strict] [--json]`** — one line per check: config valid, config tracked,
   every install scope vs the expected version, stubs present, backlog integrity, every `in-progress` claim
   classified (live / setting up / reserved / **stale-claim candidate**), settings pin the plugin (committed AND
-  unmodified in the working tree), and this machine's registered marketplace source and installed commit
-  match what the repo declares.
+  unmodified in the working tree), this machine's registered marketplace source and installed commit
+  match what the repo declares, and the pinned version's release tag is on the plugin's remote.
   Exit 1 on a failure, or on a warning with `--strict`. **It only reports.** A stale-claim
   candidate is a question for the session that owns the claim or for the operator; the doctor
   never edits an issue file, and a claim younger than the 15-minute floor is never a candidate.
@@ -185,6 +185,9 @@ so the lane's `verified` issue closes on landing rather than at the next startup
 closes and pushes from a throwaway worktree at a freshly fetched `origin/<main>`, so another
 session's unpushed claim in the shared main clone cannot block it, and the main clone itself is
 never touched (`--no-close` skips the close; `--keep`, `--dry-run`, `--onto <branch>`).
+A landing that moves `plugin_version` to a version whose `lanes--v<version>` tag is not on the
+plugin's remote is refused, after waiting up to 90 seconds for the release CI to mint it: a
+consumer CI that checks out the pinned release fails on every push until the tag exists (LANES-33).
 
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,
@@ -220,7 +223,7 @@ annotated reference; the short version:
 
 | Key | Default | Meaning |
 | :-- | :-- | :-- |
-| `plugin_version` | — | the version this repo expects; `/lanes:doctor` warns on drift |
+| `plugin_version` | — | the version this repo expects; `/lanes:doctor` warns on drift and on a version with no release tag |
 | `backlog.dir` | `docs/backlog` | one file per issue, `<PROJECT>/<ID>-<slug>.md` |
 | `backlog.projects` | `["CORE","INFRA","DOC"]` | issue ID prefixes (`INFRA-12`); `[A-Z][A-Z0-9]*` |
 | `backlog.types` | story, bug, spike, qa, decision, chore, epic | must include `epic` |
@@ -282,7 +285,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md, claim.md, new.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md
@@ -308,6 +311,25 @@ claude plugin validate --strict .claude-plugin/marketplace.json
 
 CI (`.github/workflows/ci.yml`) runs exactly these on every push. All three are named because which
 target descends into `skills/` and `commands/` has differed between machines on the same CLI version.
+
+### Releasing
+
+A release is a commit that bumps `version` in `.claude-plugin/plugin.json` and adds its
+`CHANGELOG.md` section, pushed to `next` (or `main`). **Every release has a tag**,
+`lanes--v<version>` (the name `claude plugin tag` mints), annotated with the release commit's
+subject. A consumer pins a version, and its CI may check the plugin out at that tag.
+`.github/workflows/release-tag.yml` mints it on every push to `main` or `next` (a version
+already tagged is left alone), and a release can tag itself first:
+
+```bash
+python3 scripts/release_tag.py --ensure --push    # tag HEAD's version unless it is already tagged
+python3 scripts/release_tag.py --check 0.4.32      # is that version's tag on the plugin's remote?
+```
+
+The consumer side is guarded too. `lanes_land.py` refuses to land a pin to an untagged version,
+and `/lanes:doctor` warns on one. `LANES_RELEASE_REMOTE` points both lookups at another remote,
+and set but empty it turns them off (offline). Releases 0.4.10 to 0.4.30 went out untagged and
+turned a consumer's CI red for about 250 pushes before anyone noticed (LANES-33).
 
 ## Privacy
 

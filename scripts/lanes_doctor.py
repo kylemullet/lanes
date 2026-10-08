@@ -9,6 +9,8 @@ Checks, in order:
   tracked    the config is committed (a config only one machine can see protects nobody)
   version    every install that applies here (user scope + this repo's project scope) vs the
              `plugin_version` the repo expects, naming the copy this session runs (LANES-25)
+  release tag     the pinned version's `<name>--v<version>` tag is on the plugin's remote (LANES-33):
+                  CI that checks out the pinned release cannot find an untagged one
   stubs      the three extension-point files exist
   backlog    the backlog directory exists; `--check` runs when the tracker ships with the plugin
   views      the generated INDEX.md / index.html are gitignored (a tracked copy conflicts at every rebase)
@@ -47,6 +49,7 @@ from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
 import guard_commit as gc              # noqa: E402
 import view_hooks as vh                # noqa: E402
+import release_tag as rt               # noqa: E402
 
 OK, WARN, FAIL, SKIP = "OK", "WARN", "FAIL", "SKIP"
 
@@ -188,6 +191,25 @@ def check_version(cfg: dict, root: Optional[Path] = None) -> Check:
     fixes = [f"`claude plugin update {k} --scope {r.get('scope')}`" for k, r in stale]
     return Check(WARN, "version", f"this repo expects {expected} but the " + ", the ".join(parts)
                  + f" — {'; '.join(fixes)}, then restart" + (f"; {runs}" if runs else ""))
+
+
+def check_release_tag(cfg: dict) -> Check:
+    """The pin names a release, and a release has a tag (LANES-33). One `git ls-remote`;
+    a remote that does not answer is a SKIP, not a warning: offline is not drift."""
+    expected = cfg.get("plugin_version")
+    if not expected:
+        return Check(SKIP, "release tag", "no `plugin_version` pinned")
+    tag, remote = rt.tag_name(expected), rt.release_remote()
+    if remote is None:
+        return Check(SKIP, "release tag", f"lookup off ({rt.REMOTE_ENV} is empty, or the manifest names no repository)")
+    found = rt.tag_on_remote(expected, remote)
+    if found is None:
+        return Check(SKIP, "release tag", f"could not ask {remote} for {tag}")
+    if found:
+        return Check(OK, "release tag", f"{tag} is on {remote}")
+    return Check(WARN, "release tag", f"{tag} is not on {remote} — CI that checks out the pinned release fails on every "
+                                      "push until it exists; from the plugin checkout, `python3 scripts/release_tag.py "
+                                      "--ensure --push`")
 
 
 def check_stubs(root: Path) -> Check:
@@ -527,6 +549,7 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     checks.append(cfg_check)
     checks.append(check_tracked(root, loaded))
     checks.append(check_version(cfg, root))
+    checks.append(check_release_tag(cfg))
     checks.append(check_stubs(root))
     checks.extend(check_backlog(root, cfg))
     checks.extend(check_claims(root, cfg, now))

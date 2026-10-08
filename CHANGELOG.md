@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.33 — every release is tagged; an untagged pin does not land (2026-10-08)
+
+- **The release mints its tag** (LANES-33). `scripts/release_tag.py --ensure --push` tags HEAD
+  `lanes--v<version>` (annotated, with the release commit's subject) unless that version is
+  already tagged on the remote. `.github/workflows/release-tag.yml` runs it on every push to
+  `main` and `next`. It is a separate workflow from `ci.yml`, which cancels in-progress runs on
+  `next`, and it does not wait for the tests. Releases 0.4.10 to 0.4.30 went out untagged after
+  releases moved to `next` (LANES-14), so a consumer CI that checks out the pinned tag was red for
+  about 250 pushes.
+- **`lanes_land.py` refuses a pin to an untagged version.** A landing that moves
+  `plugin_version` asks the plugin's remote (the manifest's `repository`) for the tag. It waits
+  up to 90 seconds for the release CI to mint it, then refuses and touches nothing. A landing that
+  leaves the pin alone asks nothing.
+- **`/lanes:doctor` has a `release tag` check**: OK when the pin's tag is on the remote, WARN when
+  it is not, SKIP when the remote cannot be asked.
+- `LANES_RELEASE_REMOTE` overrides the remote both ask. Set but empty, it turns the lookup off
+  (offline machines, tests).
+
 ## 0.4.32 — the backlog view is a bookmark (2026-10-08)
 
 - **`backlog.view_mode = "file"` is the default** (LANES-11), replacing INFRA-43's served view. The
