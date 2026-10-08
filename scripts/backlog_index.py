@@ -408,15 +408,17 @@ def lane_name(ln):
 
 
 def lane_label(ln):
-    """How every view describes a lane: its slice name, then where the head issue is."""
+    """How every view describes a lane: its slice name, and a phase only when no issue is
+    being worked. Worktree and branch names stay in the marker for the doctor; on the
+    operator's row they are noise the slice name already covers (LANES-28)."""
     head = ln["head"].get("_marker") or {}
     if head.get("worktree"):
-        where = head["worktree"]
+        phase = None
     elif head.get("state") == "pending":
-        where = "worktree pending"
+        phase = "worktree pending"
     else:
-        where = "between issues" if len(ln["members"]) > 1 else "not started"
-    return {"name": lane_name(ln), "where": where, "branch": head.get("branch"),
+        phase = "between issues" if len(ln["members"]) > 1 else "not started"
+    return {"name": lane_name(ln), "phase": phase,
             "machine": head.get("machine") or head.get("who"), "claimed": ln["claimed"],
             "key": ln["key"]}
 
@@ -1184,7 +1186,7 @@ def _md_lanes(lanes):
     out = ["", f"## In progress — {n} claimed · {len(lanes)} lane{'s' if len(lanes) != 1 else ''}"]
     for ln in lanes:
         lb = lane_label(ln)
-        bits = [f"**{lb['name']}**", f"`{lb['where']}`" + (f" (`{lb['branch']}`)" if lb["branch"] else "")]
+        bits = [f"**{lb['name']}**"] + ([f"`{lb['phase']}`"] if lb["phase"] else [])
         bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
         bits += [f"epic {e}" for e in lane_epics(ln)]
         bits.append(f"lane `{lb['key']}`")
@@ -1712,8 +1714,7 @@ def _html_lanes(lanes):
     for ln in lanes:
         lb = lane_label(ln)
         name = lb["name"]
-        branch = f' <code>{_esc(lb["where"])}</code>' + (f' <code>{_esc(lb["branch"])}</code>'
-                                                         if lb["branch"] else "")
+        phase = f' <code>{_esc(lb["phase"])}</code>' if lb["phase"] else ""
         who = " · ".join(_esc(x) for x in [lb["machine"]] + [f"epic {e}" for e in lane_epics(ln)] if x)
         when = (f'claimed <time data-ts="{_esc(ln["claimed"])}">{_esc(ln["claimed"])}</time>'
                 if ln["claimed"] else "claim time unreadable")
@@ -1729,7 +1730,7 @@ def _html_lanes(lanes):
                 f'<a class="id" href="{_esc(_href(m))}">{_esc(m["id"])}</a>'
                 f'<span class="t">{_esc(m["_title"])}{pri}{after}</span></li>')
         cards.append(
-            f'<article class="lane" title="lane {_esc(ln["key"])}"><header><span class="ln">{_esc(name)}{branch}</span>'
+            f'<article class="lane" title="lane {_esc(ln["key"])}"><header><span class="ln">{_esc(name)}{phase}</span>'
             f'<span>{who + " · " if who else ""}{when}</span></header>'
             f'<ol>{"".join(items)}</ol></article>')
     n = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
@@ -1859,7 +1860,7 @@ def render_report(issues, who):
               f" (claims are walls: route around every issue here)\n{'='*100}")
         for ln in lanes:
             lb = lane_label(ln)
-            bits = [lb["name"], lb["where"] + (f" [{lb['branch']}]" if lb["branch"] else "")]
+            bits = [lb["name"]] + ([lb["phase"]] if lb["phase"] else [])
             bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
             bits += [f"epic {e}" for e in lane_epics(ln)]
             print("  " + " · ".join(bits + [f"lane {lb['key']}"]))

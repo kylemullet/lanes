@@ -187,7 +187,8 @@ reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` 
 `resolution:` that disagrees with the status, and a lane problem: a `lane:` on an open, blocked
 or paused issue (a release deletes it), a value that is not `<ID>@<YYYY-MM-DD>`, or two
 ACTIVE/PENDING issues in one lane. The views and `--report` open with **In progress**, one group per
-lane named after its slice (`LANES-20/21/9`), its landed issues shown beside the live ones until the
+lane, labelled by its slice (`LANES-20/21/9`) alone. The worktree and branch names stay in the ⏳
+marker, where the doctor reads them. Its landed issues are shown beside the live ones until the
 last one lands and the lane disappears. `lanes_claim.py` writes the `lane:` field, which stays on an
 issue after it lands; a claim made before it existed is grouped from its ⏳ marker under the same key. `--backfill` closes verified issues by the exact
 commit subject their Resolution cites, and only on a machine whose operator row certifies (solo

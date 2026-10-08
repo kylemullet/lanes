@@ -394,8 +394,10 @@ def test_render_html_shows_lanes_on_top_and_each_claim_once():
               _issue("UI-2", status="closed", closed="2026-09-01")]
     page = bidx.render_html(issues)
     assert page.index("In progress") < page.index("Open queue")
-    assert "lanes-lanes-20" in page and "lanes-20-work" in page and "kyle-mac@Air" in page
-    assert '<span class="ln">LANES-20/21 <code>lanes-lanes-20</code>' in page
+    assert "kyle-mac@Air" in page
+    # LANES-28: the card names the slice alone, never the worktree or branch
+    assert '<span class="ln">LANES-20/21</span>' in page
+    assert "lanes-lanes-20" not in page and "lanes-20-work" not in page
     assert '<time data-ts="2026-10-07 02:40">' in page
     assert page.index(">LANES-20</a>") < page.index(">LANES-21</a>")
     for iid in ("LANES-20", "LANES-21", "UI-1", "UI-2"):
@@ -492,7 +494,7 @@ def test_the_recorded_lane_keeps_a_slice_together_after_its_lead_lands():
     assert ln["key"] == lane and [m["id"] for m in ln["members"]] == ["LANES-20", "LANES-21", "LANES-9"]
     assert bidx.lane_member_state(ln["members"][0]) == "landed"
     assert bidx.lane_member_note(ln, ln["members"][1]) == ""     # its lead is right there
-    assert bidx.lane_label(ln)["name"] == "LANES-20/21/9" and bidx.lane_label(ln)["where"] == "between issues"
+    assert bidx.lane_label(ln)["name"] == "LANES-20/21/9" and bidx.lane_label(ln)["phase"] == "between issues"
     # a lead that landed before the field existed is not in the lane: the reservation says so
     issues[2] = _issue("LANES-20", status="verified")
     (ln,) = bidx.lanes_in_flight(issues)
@@ -515,7 +517,8 @@ def test_the_card_is_named_by_the_active_issue_even_when_it_is_not_the_lead():
     (ln,) = bidx.lanes_in_flight(issues)
     assert ln["head"]["id"] == "LANES-21"
     lb = bidx.lane_label(ln)
-    assert lb["name"] == "LANES-20/21/9" and lb["where"] == "lanes-lanes-21" and lb["branch"] == "lanes-21-work"
+    assert lb["name"] == "LANES-20/21/9" and lb["phase"] is None
+    assert "where" not in lb and "branch" not in lb
 
 
 def test_index_md_and_report_group_claims_by_lane_and_list_each_once(capsys):
@@ -525,7 +528,8 @@ def test_index_md_and_report_group_claims_by_lane_and_list_each_once(capsys):
               _issue("UI-1")]
     md = bidx.render_index(issues)
     assert "## In progress — 2 claimed · 1 lane" in md
-    assert "**LANES-20/21** · `lanes-lanes-20` (`lanes-20-work`)" in md and f"lane `{lane}`" in md
+    assert "**LANES-20/21** · kyle-mac@Air" in md and f"lane `{lane}`" in md
+    assert "lanes-lanes-20" not in md and "lanes-20-work" not in md
     assert md.index("## In progress") < md.index("## Open / blocked / paused")
     assert md.count("[LANES-21](") == 1 and md.index("- active · [LANES-20]") < md.index("- reserved · [LANES-21]")
     for i in issues:
@@ -533,8 +537,22 @@ def test_index_md_and_report_group_claims_by_lane_and_list_each_once(capsys):
     bidx.render_report(issues, "kyle")
     out = capsys.readouterr().out
     assert out.index("IN PROGRESS — 2 claimed · 1 lane") < out.index("BACKLOG (kyle)")
-    assert "LANES-20/21 · lanes-lanes-20 [lanes-20-work]" in out and f"lane {lane}" in out
+    assert "LANES-20/21 · kyle-mac@Air" in out and f"lane {lane}" in out
+    assert "lanes-lanes-20" not in out and "lanes-20-work" not in out
     assert out.count("reserved    LANES-21") == 1 and "     LANES-21 " not in out.split("BACKLOG (kyle)")[1]
+
+
+def test_a_lane_with_no_worktree_still_names_its_phase(capsys):
+    """LANES-28 drops the worktree and branch names; the phase words stay, because they
+    say something the slice name does not."""
+    issues = [_claimed("LANES-22", PENDING_MK, lane="LANES-22@2026-10-07")]
+    (ln,) = bidx.lanes_in_flight(issues)
+    assert bidx.lane_label(ln)["phase"] == "worktree pending"
+    assert "**LANES-22** · `worktree pending` · kyle-mac@Air" in bidx.render_index(issues)
+    assert '<span class="ln">LANES-22 <code>worktree pending</code></span>' in bidx.render_html(issues)
+    issues[0]["_age"] = None
+    bidx.render_report(issues, "kyle")
+    assert "LANES-22 · worktree pending · kyle-mac@Air" in capsys.readouterr().out
 
 
 def test_a_lane_is_named_after_its_slice():

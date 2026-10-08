@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.30 — the lane row names the slice, not the worktree (2026-10-08)
+
+- **The In progress row drops the worktree and branch names** (LANES-28) in `--report`, `INDEX.md` and
+  the HTML card. `LANES-5/7/4/24 · readlines-lanes-4 + lanes-lanes-4 [lanes-4-work]` is now
+  `LANES-5/7/4/24 · kyle-mac@… · claimed …`. The names meant nothing to the operator and, once a slice
+  moved past its first issue, looked out of step with it. They stay in the ⏳ marker, where the doctor
+  reads them as evidence. A lane with no worktree still says so: `worktree pending`, `between issues`,
+  `not started`. `lane_label()` returns `phase` (None while an issue is being worked) in place of
+  `where` and `branch`.
+
 ## 0.4.29 — retired operators (2026-10-08)
 
 - **`retired = true` on an operator row** (plus optional `retired_on = "YYYY-MM-DD"`, LANES-27). A
