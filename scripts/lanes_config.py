@@ -57,6 +57,7 @@ DEFAULTS: dict[str, Any] = {
         "main_branch": "main",
         "land_requires_ok": True,
         "main_direct_paths": ["docs/", ".claude/lanes/", "*.md"],
+        "ok_free_paths": None,               # None -> [backlog.dir + "/"] (LANES-5)
     },
     "tests": {
         "command": "pytest -q",
@@ -81,7 +82,8 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "claim_marker_exempt": (list, False), "resolution_required_from": (str, False),
         "view_port": (int, False),
     },
-    "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False)},
+    "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False),
+            "ok_free_paths": (list, False)},
     "tests": {"command": (str, False), "required_before_land": (bool, False), "rebase_rerun_command": (str, False)},
     "worktrees": {"port_command": (str, False)},
     "lanes": {"code": (list, False), "code_owner": (str, False)},
@@ -358,6 +360,12 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
     docs_lane = merged["backlog"]["docs_lane_prefixes"]
     if docs_lane is None:
         docs_lane = list(merged["git"]["main_direct_paths"])
+    # What may reach the main branch with no operator OK (LANES-5): the backlog alone by
+    # default. Deliberately NOT main_direct_paths -- the standing docs are main-direct too,
+    # but they change rules every session reads as ground truth, so they keep the OK.
+    ok_free = merged["git"]["ok_free_paths"]
+    if ok_free is None:
+        ok_free = [merged["backlog"]["dir"].strip("/") + "/"]
     return {
         "plugin_version": merged["plugin_version"],
         "backlog_dir": merged["backlog"]["dir"],
@@ -374,6 +382,7 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
         "main_branch": merged["git"]["main_branch"],
         "land_requires_ok": merged["git"]["land_requires_ok"],
         "main_direct_paths": list(merged["git"]["main_direct_paths"]),
+        "ok_free_paths": list(ok_free),
         "test_command": merged["tests"]["command"],
         "tests_required_before_land": merged["tests"]["required_before_land"],
         "rebase_rerun_command": merged["tests"]["rebase_rerun_command"],

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.22 — a backlog-only push needs no OK, behind one guard (2026-10-07)
+
+- **`scripts/push_guard.py`** (LANES-5). The claim push and the backfill close each carried
+  their own copy of the "may this reach main without an OK" rule; every other backlog write
+  (a staleness fix, a released claim, an issue minted mid-session) waited for the next OK'd
+  push, invisible to other machines until then. One guard, two modes: `--ok-free` (every path
+  ahead of origin under `git.ok_free_paths`, `--check` green, no commit edits a claim marker
+  another machine wrote) and `--claim` (every path main-direct, unchanged). `--push` pushes and
+  converges on a rejection by rebasing; `--add <paths> -m <subject>` commits exactly those
+  paths first. `lanes_claim.py` and `backlog_index.py --backfill --push` now call it.
+- **`git.ok_free_paths`**, default `[<backlog.dir>/]`. Deliberately not `main_direct_paths`:
+  the standing docs change rules every session treats as ground truth, so they keep the OK.
+  `[]` restores "every main-branch push waits for an OK".
+- **The claim-marker check sees machines, not sessions.** A marker names
+  `<Short>'s session on <machine>@<host>`; an edit to one naming another machine is refused.
+  Two sessions on one machine share the id, so that half of "never write to another
+  session's claim" stays a prohibition in the skills.
+- **`backlog_new.py --push`** commits the minted issue alone and publishes it; refused from a
+  lane worktree before anything is minted. **`/lanes:new`** publishes after writing the
+  Context, through `push_guard.py --add`, in the main clone only.
+- **Skills:** the branch-policy sections name the rule once; startup's staleness fix,
+  worktree-increment's ACTIVE flip and closeout's release of unreached claims publish through
+  the guard. The backfill close's guard skips the `--check` leg: a SKIPPED verified issue
+  leaves `--check` red and must not hold back the closes that are right.
+
 ## 0.4.21 — /lanes:new mints an issue the operator raises (2026-10-07)
 
 - **`/lanes:new`** (LANES-2). It runs `backlog_new.py` through the launcher, then reads the

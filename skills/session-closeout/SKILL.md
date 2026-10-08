@@ -135,8 +135,7 @@ current understanding. At every closeout, either operator:
 
   A lane landed through `lanes_land.py` closed its own issue; this catches the rest — a
   lane landed by hand, or by another session — so `verified` rows do not sit until the
-  next startup. Use `--commit` instead where the project does not let a backlog-only
-  push reach the main branch without an OK. A SKIPPED issue is a finding: fix its
+  next startup. Use `--commit` instead where the project set `git.ok_free_paths = []`. A SKIPPED issue is a finding: fix its
   Resolution (session-startup step 2d) rather than leaving it for the next session.
 - **Queue what this session surfaced:** one issue per new item —
 
@@ -144,7 +143,14 @@ current understanding. At every closeout, either operator:
   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py <PROJECT> "<title>" --type=… --priority=… --assignee=… --reported-by=…
   ```
 
-  then write its Context. `--reported-by` is REQUIRED and has no default: the operator's
+  then write its Context, and publish it (from the main clone; an issue minted in a lane
+  worktree rides in that lane's commit):
+
+  ```bash
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <issue file> -m "docs(backlog): open <ID> — <title>"
+  ```
+
+  `--reported-by` is REQUIRED and has no default: the operator's
   short when they raised it, `claude` when this session did. **Producer decomposes** —
   whatever the OTHER operator must act on becomes an issue with their `assignee`, not
   prose in a session asset; their next startup reads the queue and there is no
@@ -169,7 +175,12 @@ current understanding. At every closeout, either operator:
 
   ```bash
   grep -rln "RESERVED, NOT STARTED" <backlog.dir>
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <released files> -m "docs(backlog): release <IDs> — claimed, not reached"
   ```
+
+  The release is a backlog-only push and needs no OK. The guard refuses a commit that
+  edits a marker another machine wrote, which catches the cross-machine half of the rule
+  above; two sessions on one machine share an id, so that half stays yours to keep.
 - **Run the backlog check:**
 
   ```bash
@@ -269,7 +280,10 @@ Non-code operators: the gate doesn't apply *because code never changes on their 
   <branch>:<main_branch>`.
 
 Docs, backlog issues and session assets (`git.main_direct_paths`) land on the main
-branch directly, from every machine. Code lands from its branch, and only from a
+branch directly, from every machine. **A push whose every commit is backlog-only needs no
+OK** — `push_guard.py --ok-free --push` decides it mechanically (`git.ok_free_paths`,
+`--check` green, no edit to another machine's claim; LANES-5). Anything else that moves
+the main branch, the standing docs included, still waits for the OK. Code lands from its branch, and only from a
 certifying machine (step 5).
 
 **Always `git pull --rebase` immediately before landing** — another machine may have

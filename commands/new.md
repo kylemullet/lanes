@@ -1,7 +1,7 @@
 ---
 description: Mint a backlog issue you are raising — next free ID, reported by you, Context written from what you said
 argument-hint: "<PROJECT> \"<title>\" [--type=…] [--priority=…] [--assignee=…] [--epic=ID] — or just describe it"
-allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py:*), Read, Edit'
+allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py:*), Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py:*), Read, Edit'
 ---
 
 Create a backlog issue the user is raising, then fill it in.
@@ -28,5 +28,16 @@ Create a backlog issue the user is raising, then fill it in.
    what the user said: the problem, where it shows, and any fix they suggested, in their
    terms. Leave Current status and Resolution as written. Do not change the frontmatter.
 
-4. Tell the user the new ID, its title and its path. The issue is a local file until it
-   is committed and pushed; say so, and do not commit or push it yourself unless asked.
+4. Publish it, so the other machines see it now rather than at the next OK'd push. From
+   the main clone on the main branch, commit that one file and push it under the OK-free
+   guard (a backlog-only push needs no OK, LANES-5):
+
+   ```bash
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <path> -m "docs(backlog): open <ID> — <title>"
+   ```
+
+   Inside a lane worktree, skip this: the issue rides in the lane's own commit. If the
+   guard refuses (other work on local main), the issue is committed and stays local;
+   relay the reason.
+
+5. Tell the user the new ID, its title and its path, and whether it was pushed.

@@ -65,6 +65,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
+import push_guard                      # noqa: E402
 
 # ---- protocol constants: read by name below and in the skills; never config ----
 STATUSES = tuple(lc.STATUSES)
@@ -115,6 +116,7 @@ def settings(root=None, raw=None):
         "CLAIM_MARKER_EXEMPT": set(cfg["claim_marker_exempt"]),
         "VIEW_PORT": cfg["view_port"],
         "MAIN_BRANCH": cfg["main_branch"],
+        "OK_FREE_PATHS": tuple(cfg["ok_free_paths"]),
         "MACHINE": machine,
         "SOLO": cfg["solo"],
         "CERTIFIER_LABEL": certifier_label,
@@ -1030,45 +1032,31 @@ def sync_main():
             "then re-run the backfill")
 
 
-def unpushed_non_backlog_paths():
-    """Paths in commits ahead of origin/<main> that are NOT under the backlog dir."""
-    rc, out, _ = _git_run("log", f"origin/{MAIN_BRANCH}..HEAD", "--name-only", "--format=")
-    if rc:
-        return ["(git log failed)"]
-    prefix = BACKLOG_REL.rstrip("/") + "/"
-    return sorted({p for p in out.splitlines() if p and not p.startswith(prefix)})
+def guard_cfg():
+    """The slice of the resolved config `push_guard` reads, from this module's globals --
+    so `isolated()`'s repointing carries over to the guard too."""
+    return {"main_branch": MAIN_BRANCH, "ok_free_paths": list(OK_FREE_PATHS),
+            "main_direct_paths": [], "backlog_dir": BACKLOG_REL, "machine": MACHINE}
 
 
 def push_backfill(attempts=3):
     """Push the main branch after a backfill commit, converging on a rejected push.
 
-    Pushes only when every commit ahead of origin touches the backlog dir alone (the
-    claim push's guard): anything else on local main is work that needs the operator's
-    OK, so the backfill commit stays local. On a rejection -- another certifying
-    machine pushed first -- fetch and rebase: an identical close merges cleanly or
-    drops out as already upstream. A real conflict aborts the rebase and leaves the
-    commit local. Never forces. Returns (ok, message)."""
-    upstream = f"origin/{MAIN_BRANCH}"
-    for _ in range(attempts):
-        stray = unpushed_non_backlog_paths()
-        if stray:
-            return False, (f"not pushed — local `{MAIN_BRANCH}` carries commits outside "
-                           f"{BACKLOG_REL}/ ({stray[0]}" + (f" +{len(stray) - 1} more" if len(stray) > 1 else "")
-                           + "); push them with the operator's OK")
-        if _ancestor("HEAD", upstream):
-            return True, f"nothing to push — {upstream} already has these closes"
-        rc, _, err = _git_run("push", "-q", "origin", f"HEAD:{MAIN_BRANCH}")
-        if rc == 0:
-            return True, f"pushed to {upstream}"
-        rc, _, ferr = _git_run("fetch", "-q", "origin", MAIN_BRANCH)
-        if rc:
-            return False, f"push rejected and the re-fetch failed: {ferr or err}"
-        rc, _, rerr = _git_run("rebase", "-q", "--autostash", upstream)
-        if rc:
-            _git_run("rebase", "--abort")
-            return False, (f"push rejected; rebasing onto {upstream} conflicted ({rerr.splitlines()[0] if rerr else 'conflict'}) "
-                           "— rebase aborted, the backfill commit is local")
-    return False, f"push rejected {attempts} times — the backfill commit is local; pull and re-run"
+    The OK-free push guard (`push_guard.py --ok-free`, LANES-5): every commit ahead of
+    origin must sit under `git.ok_free_paths`, and none may edit another machine's
+    claim; anything else on local main needs the operator's OK, so the backfill commit
+    stays local. On a rejection -- another certifying machine pushed first -- fetch and
+    rebase: an identical close merges cleanly or drops out as already upstream. Never
+    forces. Returns (ok, message).
+
+    The guard's `--check` leg is skipped HERE: the backfill already refused on any
+    structural problem, and a verified issue it SKIPPED leaves `--check` red for a reason
+    that must not hold back the closes that are right. The skip is reported on its own."""
+    code, msg = push_guard.push(ROOT, guard_cfg(), push_guard.OK_FREE, attempts=attempts,
+                                run_check=False)
+    if code == push_guard.REFUSED:
+        return False, f"not pushed — {msg}; push them with the operator's OK"
+    return code == 0, msg
 
 
 def isolated(fn):

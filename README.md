@@ -110,8 +110,17 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check      # exit
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # aged view for this machine's operator (--who <short>|both)
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # the HTML view on backlog.view_port, re-parsed per request
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit | --push]
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short>
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short> [--push]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free [--push] [--add <paths> -m "<subject>"]
 ```
+
+`push_guard.py` is the one rule for a push to the main branch that needs no operator OK
+(LANES-5). `--ok-free`: every path ahead of `origin/<main>` is under `git.ok_free_paths`
+(default: the backlog dir alone), `--check` is green, and no commit edits a claim marker
+another machine wrote. `--claim`: every path is main-direct (the claim push's rule). The
+backfill close, `backlog_new.py --push`, a staleness fix, the ACTIVE flip and closeout's
+release of an unreached claim all go through it; `--add` commits exactly the named paths
+first. Exit 0 passed (and pushed) · 1 refused, nothing pushed · 2 passed, push failed.
 
 One for the start of a slice, run in the main clone on the operator's directive (also
 `/lanes:claim`):
@@ -175,6 +184,7 @@ annotated reference; the short version:
 | `git.main_branch` | `main` | |
 | `git.land_requires_ok` | `true` | the operator-OK gate is on landing, never on a branch push |
 | `git.main_direct_paths` | `["docs/", ".claude/lanes/", "*.md"]` | may reach the main branch with no branch and no suite run; the hook's carve-out |
+| `git.ok_free_paths` | `[<backlog.dir>/]` | may reach the main branch with no operator OK (`push_guard.py --ok-free`); deliberately narrower than `main_direct_paths` — `[]` makes every main-branch push wait for the OK |
 | `tests.command` | `pytest -q` | |
 | `tests.required_before_land` | `true` | |
 | `tests.rebase_rerun_command` | — | prints the test args for a scoped post-rebase re-run; absent = full suite |
@@ -216,7 +226,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md, claim.md, new.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, guard_position.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, push_guard.py, guard_position.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md

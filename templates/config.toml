@@ -28,6 +28,8 @@ land_requires_ok = true                       # the operator-OK gate is on LANDI
 main_direct_paths = ["docs/", ".claude/lanes/", "*.md"]   # may reach main_branch with no branch and no suite run;
                                               # the position-guard hook's carve-out reads the same list.
                                               # .claude/lanes/ is in by default so adopting lanes is itself main-direct
+# ok_free_paths = ["docs/backlog/"]           # may reach main_branch with NO operator OK (push_guard.py --ok-free).
+                                              # Default: backlog.dir alone. [] = every main-branch push waits for the OK
 
 [tests]
 command = "pytest -q"

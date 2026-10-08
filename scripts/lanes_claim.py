@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import lanes_config as lc              # noqa: E402
-from guard_position import is_main_direct  # noqa: E402
+import push_guard                      # noqa: E402
 
 NOT_CLAIMED, NOT_PUSHED = 1, 2
 PENDING, RESERVED = "WORKTREE PENDING", "RESERVED, NOT STARTED"
@@ -261,9 +261,7 @@ class Claim:
         return proc.returncode == 0, (proc.stdout + proc.stderr).strip()
 
     def stray(self):
-        _, out, _ = git("log", f"{self.upstream}..HEAD", "--name-only", "--format=", cwd=self.root)
-        direct = self.cfg["main_direct_paths"]
-        return sorted({p for p in out.splitlines() if p and not is_main_direct(p, direct)})
+        return push_guard.stray_paths(self.root, self.cfg, push_guard.CLAIM)
 
     def push(self, attempts=3):
         for _ in range(attempts):

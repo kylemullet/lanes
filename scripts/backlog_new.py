@@ -7,6 +7,7 @@ Usage:
   python3 backlog_new.py INFRA "add fixtures" --type=story --assignee=<short> --reported-by=claude
   python3 backlog_new.py CORE "invite-only registration" --epic=CORE-14 --reported-by=<short>
   python3 backlog_new.py CORE "a title" --reported-by=me     # this machine's operator (/lanes:new)
+  python3 backlog_new.py CORE "a title" --reported-by=me --push   # commit it alone and push (main clone only)
 
 Projects, types, priorities, assignees and reporters come from the lanes config
 (`backlog_index` resolves it once at import). `--reported-by` is REQUIRED: a default
@@ -40,6 +41,13 @@ Not airtight, and does not need to be: the residual window is two lanes minting
 before either commits. Commit-then-mint is the common case.
 
 Regenerates the local (gitignored) views afterwards.
+
+`--push` (LANES-5) commits the new file by explicit path and pushes it under the
+OK-free guard (`push_guard.py --ok-free`): an issue minted mid-session used to wait for
+"the next push", invisible to every other machine until then. Only from the main clone
+on the main branch -- an issue a lane mints rides in the lane's own commit -- and
+refused BEFORE anything is minted when that position is wrong. When the guard refuses
+(other work on local main), the issue is committed and stays local: exit 2.
 """
 import argparse, datetime, re, subprocess, sys
 from pathlib import Path
@@ -47,6 +55,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _console import use_utf8_console  # noqa: E402
 import backlog_index as bidx           # noqa: E402
+import push_guard                      # noqa: E402
 
 ROOT = bidx.ROOT
 ME = "me"   # --reported-by=me: this machine's operator short (LANES-2, /lanes:new)
@@ -276,7 +285,14 @@ def main(argv=None):
     ap.add_argument("--links", default=None, help="comma-separated issue IDs")
     ap.add_argument("--epic", default=None, metavar="ID",
                     help="parent epic (an existing issue with type: epic)")
+    ap.add_argument("--push", action="store_true",
+                    help="commit the new issue alone and push it under the OK-free guard "
+                         "(main clone, main branch only)")
     args = ap.parse_args(argv)
+    if args.push:
+        where = push_guard.position(ROOT, bidx.MAIN_BRANCH)
+        if where:
+            ap.error(f"--push: {where} — mint without --push; the issue rides in the lane's commit")
     if args.reported_by == ME:
         # Explicit, never a default: the operator typed /lanes:new, so the reporter is the
         # operator row this machine resolves to. An unknown machine in a multi-operator
@@ -293,8 +309,27 @@ def main(argv=None):
                         opened=args.opened or datetime.date.today().isoformat(),
                         links=[x.strip() for x in args.links.split(",")] if args.links else None,
                         epic=args.epic)
-    print(f"created {path.relative_to(ROOT)}")
+    rel = path.relative_to(ROOT).as_posix()
+    print(f"created {rel}")
+    if args.push:
+        return publish(rel, "-".join(path.name.split("-", 2)[:2]), args.title)
     return 0
+
+
+def publish(rel, iid, title):
+    """Commit `rel` alone and push it under the OK-free guard. 0 pushed · 2 committed, local."""
+    err = push_guard.commit_paths(ROOT, [rel], f"docs(backlog): open {iid} — {title}")
+    if err:
+        print(f"not committed — {err}; stage it by path: git add -- {rel}", file=sys.stderr)
+        return 2
+    cfg = push_guard.load_cfg(ROOT)
+    code, msg = push_guard.push(ROOT, cfg, push_guard.OK_FREE)
+    if code == 0:
+        print(f"committed and {msg}")
+        return 0
+    print(f"committed, not pushed — {msg}. It rides with the next push the operator OKs.",
+          file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

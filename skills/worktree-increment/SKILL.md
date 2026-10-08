@@ -27,7 +27,9 @@ Ground rules that apply the whole way through:
   how the increment survives the machine and travels to a certifying one. `git push
   <branch>:<main_branch>` — the landing — always needs the operator's explicit OK while
   `git.land_requires_ok` is true. The step-1 claim push is a main-branch push
-  pre-authorized by the directive that started the work, under the main-direct guard.
+  pre-authorized by the directive that started the work, under the main-direct guard;
+  the ACTIVE flip in step 2 is a backlog-only push, which needs no OK at all
+  (`push_guard.py --ok-free --push`, LANES-5).
 - **Only a machine whose operator row `certifies` lands code** (solo mode: this one). Its
   green run of `tests.command` is the whole pre-landing gate. A lane never ends at
   "awaiting another machine".
@@ -190,7 +192,11 @@ Then:
 - Confirm the worktree HEAD == the main tip you just synced.
 - **Flip the marker to `ACTIVE LANE` and push it — immediately, before any other setup.**
   In the MAIN CHECKOUT, rewrite the marker from `WORKTREE PENDING` to `ACTIVE LANE` with
-  the worktree and branch names, commit by explicit path, run the step-1.4 guard, push.
+  the worktree and branch names, then commit and push it in one call:
+
+  ```bash
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <issue file> -m "docs(backlog): <ID> claim → ACTIVE LANE (worktree <name>, branch <branch>)"
+  ```
 - **Then push the topic branch straight away, while it is still empty:**
 
   ```bash

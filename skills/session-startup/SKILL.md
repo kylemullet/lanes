@@ -93,8 +93,8 @@ anything slow overlaps with the rest of startup. The protocol skill never carrie
 **The backstop.** A lane landed through `lanes_land.py` closes its own issue on landing,
 and `session-closeout` sweeps the rest, so on a healthy day this finds nothing. It runs
 anyway: a lane landed by hand, a close that could not push, a session that ended early.
-Run it and report the result; it needs no OK where the project lets a backlog-only push
-through, so it is never offered as a question.
+Run it and report the result; a backlog-only push needs no OK (the branch policy below),
+so it is never offered as a question.
 
 A worktree lane ends with its issue at `status: verified`, Resolution filled, `commit:`
 null — the lane cannot know its resolving commit's hash (the close rides in that commit,
@@ -111,17 +111,17 @@ For every `verified` issue it finds the resolving commit on HEAD by the exact su
 Resolution cites in backticks, fills `commit:`, sets `status: closed` (+ `closed:` = the
 resolving commit's date if the lane left it null), and — with `--commit` — stages ONLY
 those issue files and commits `docs(backlog): close <IDs> — backfill resolving commit
-hash`. `--commit` does not push: the commit rides to origin with the next push. Mention
-it in the Brief.
+hash`. `--commit` does not push: the commit rides to origin with the next push the
+operator OKs. Mention it in the Brief.
 
 **`--push`** is `--commit` made safe for several certifying machines at once. It fetches and
 fast-forwards first, so it closes only what origin still shows as verified. It pushes only
-when everything ahead of origin is under the backlog dir; otherwise the commit stays local
+when the OK-free guard passes (`push_guard.py --ok-free`: everything ahead of origin under
+`git.ok_free_paths`, no edit to another machine's claim); otherwise the commit stays local
 for the operator's OK. On a rejected push it rebases and retries, never forces. The close is
 deterministic (commit date, fixed 7-character hash), so two machines closing one issue
-write identical files, and the second one's commit merges cleanly or drops out. Use it where
-the project lets a backlog-only push go to the main branch without an OK; elsewhere use
-`--commit`.
+write identical files, and the second one's commit merges cleanly or drops out. Use it by default;
+`--commit` is for a project that set `git.ok_free_paths = []` (every push waits for an OK).
 
 Rules:
 
@@ -269,7 +269,12 @@ older than ~14 days against the newest session assets and `git log --oneline -20
 later commit already closed it, or cleared the gate it names? Mark those `⚠️` in the
 report. Never silently drop one — if an item no longer reproduces, *correcting the issue
 file IS the deliverable*, and it is a Quick win (`status: closed`, `resolution: wont-do`
-or `done`, Resolution filled).
+or `done`, Resolution filled). Publish a correction the moment it is written, not with the
+next OK'd push — it is a backlog-only commit:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <issue file> -m "docs(backlog): <ID> — <what was stale>"
+```
 
 ### 7. Render the report — five blocks, everything in tables
 
@@ -447,8 +452,16 @@ and the generated views are gitignored so they cannot conflict. Solo mode: no la
   on every machine. Nothing in this skill's own writes goes on a branch.
 - The operator-OK gate is on **landing on the main branch**, not on `git push`. Branch
   pushes are free; nothing that moves `origin/<main_branch>` happens without the OK —
-  except the claim push (8b), where the directive is the OK and the main-direct guard is
-  the safety.
+  with two exceptions, each behind a mechanical guard (`push_guard.py`, LANES-5):
+  - **the claim push (8b)** — the directive is the OK; every path ahead of origin must be
+    main-direct (`--claim`);
+  - **a backlog-only push** — the backfill close, a staleness fix, a released claim, an
+    issue minted mid-session. No OK: every path ahead of origin must be under
+    `git.ok_free_paths` (default: the backlog dir alone), `backlog_index.py --check` green,
+    and no commit may edit a claim marker another machine wrote (`--ok-free`). The
+    standing docs are main-direct but NOT ok-free: they change rules every session reads
+    as ground truth, so they keep the OK. When the guard refuses, the commit stays local
+    and rides with the next push the operator OKs; say so.
 
 ## What this skill is NOT
 
