@@ -1135,6 +1135,79 @@ def test_report_rolls_each_live_epic_up_into_one_line(capsys):
     assert "PROD-99" not in out.split("Epics — child roll-up")[1]
 
 
+# --- the derived epic state (LANES-31) -----------------------------------------
+
+def _epic_tree():
+    lane = "LANES-20@2026-10-07"
+    return [_issue("PROD-16", type="epic"),
+            _issue("PROD-14", type="epic", epic="PROD-16"),
+            _claimed("LANES-20", ACTIVE_MK, lane=lane, epic="PROD-14"),
+            _claimed("LANES-21", _reserved("LANES-20"), lane=lane, epic="PROD-14"),
+            _issue("UI-51", epic="PROD-14"),
+            _issue("PROD-15", type="epic"),
+            _issue("UI-60", epic="PROD-15"),
+            _issue("PROD-99", type="epic", status="closed"),
+            _claimed("UI-70", PENDING_MK, epic="PROD-99")]
+
+
+def test_an_epic_reads_in_progress_through_a_claimed_child_or_grandchild():
+    act = bidx.epic_activity(_epic_tree())
+    assert act == {"PROD-14": ["LANES-20/21"], "PROD-16": ["LANES-20/21"]}
+    assert "PROD-15" not in act, "no claimed child: its own status"
+    assert "PROD-99" not in act, "a closed epic keeps its own status"
+    by = {i["id"]: i for i in _epic_tree()}
+    assert bidx.shown_status(by["PROD-14"], act) == "in-progress"
+    assert bidx.shown_status(by["PROD-15"], act) == "open"
+    assert bidx.shown_status(by["UI-51"], act) == "open"
+
+
+def test_epic_activity_survives_an_epic_cycle():
+    a = _issue("X-1", type="epic", epic="X-2")
+    b = _issue("X-2", type="epic", epic="X-1")
+    c = _claimed("X-3", ACTIVE_MK, epic="X-1")
+    assert bidx.epic_activity([a, b, c]) == {"X-1": ["X-3"], "X-2": ["X-3"]}
+
+
+def test_check_refuses_a_claimed_epic():
+    out = bidx.epic_claim_problems([_issue("PROD-14", type="epic", status="in-progress"),
+                                    _claimed("UI-1", ACTIVE_MK)])
+    assert len(out) == 1 and "PROD-14" in out[0] and "never claimed" in out[0]
+
+
+def test_report_shows_the_derived_state_in_the_row_rollup_and_lane(capsys):
+    issues = _epic_tree()
+    for i in issues:
+        i["_age"] = 3
+    bidx.render_report(issues, "kyle")
+    out = capsys.readouterr().out
+    row = next(l for l in out.split("BACKLOG (kyle)")[1].splitlines() if l.strip().startswith("PROD-14 "))
+    assert "in-progress" in row and "▶ lane LANES-20/21" in row
+    roll = next(l for l in out.splitlines() if l.strip().startswith("PROD-14") and "children" in l)
+    assert "▶ IN PROGRESS: lane LANES-20/21" in roll
+    other = next(l for l in out.splitlines() if l.strip().startswith("PROD-15") and "children" in l)
+    assert "IN PROGRESS" not in other
+    head = next(l for l in out.splitlines() if l.startswith("  LANES-20/21"))
+    assert "epic PROD-14" in head
+
+
+def test_html_and_index_show_the_derived_state():
+    issues = _epic_tree()
+    page = bidx.render_html(issues)
+    row = next(r for r in page.split("<tr ") if '>PROD-14</a>' in r)
+    assert 'data-status="in-progress"' in row and "▶ lane LANES-20/21" in row
+    assert 'title="derived: a child is claimed"' in row
+    assert 'class="why via"' in row, "not the blocked-on line: its CSS prefixes 'blocked on'"
+    plain = next(r for r in page.split("<tr ") if '>PROD-15</a>' in r)
+    assert 'data-status="open"' in plain and "▶ lane" not in plain
+    assert "epic PROD-14" in page.split('class="lanes"')[1].split("</section>")[0]
+    # the status chips follow the shown status, or the filter would hide the epic's row
+    status_facet = page.split('data-field="status"')[1].split("</fieldset>")[0]
+    assert 'value="in-progress"' in status_facet
+    md = bidx.render_index(issues)
+    assert "| in-progress (lane LANES-20/21) |" in md
+    assert "epic PROD-14" in md.split("## In progress")[1].split("## Open")[0]
+
+
 def test_report_has_no_rollup_section_without_a_live_epic(capsys):
     issues = [_issue("PIPE-1")]
     issues[0]["_age"] = 1

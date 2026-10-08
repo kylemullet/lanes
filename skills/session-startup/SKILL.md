@@ -225,6 +225,10 @@ surface it as a **question**, never a takeover: the issue file is left byte-for-
 alone and the operator answers. 🚫 **A session never writes to another issue's claim**,
 including to release, re-date or correct it.
 
+**An epic is never claimed.** It reads `in-progress` in every view while any child is
+claimed: derived, never written. So an epic showing in progress is not itself a wall.
+Its claimed children are, and step 5b's exclusion set lists those, not the epic.
+
 ### 5b. In-flight lanes — build the exclusion set BEFORE choosing anything
 
 `in-progress` is a claim. Whoever holds it — another session, the other operator, or a

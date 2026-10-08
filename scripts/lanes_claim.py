@@ -217,6 +217,9 @@ class Claim:
                 problems.append(f"{issue_id}: already claimed — never write to another session's claim")
             elif status in CLOSED_STATES:
                 problems.append(f"{issue_id}: is `{status}`")
+            elif meta.get("type") == "epic":
+                problems.append(f"{issue_id}: is an epic — claim its children; the epic reads in "
+                                "progress while any of them is claimed (LANES-31)")
             elif git("status", "--porcelain", "--", rel, cwd=self.root)[1]:
                 problems.append(f"{issue_id}: {rel} has uncommitted changes")
         if self.behind:

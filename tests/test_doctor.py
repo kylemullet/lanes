@@ -200,6 +200,15 @@ def test_old_active_claim_without_worktree_or_branch_is_a_candidate(repo):
     assert c.status == ld.WARN and "STALE-CLAIM CANDIDATE" in c.detail and "never a takeover" in c.detail
 
 
+def test_a_claim_names_its_epic(repo):
+    """LANES-31: the epic reads in progress through this claim, so the claim line says which."""
+    p = write_issue(repo, "docs/backlog", "CORE", "CORE-3", "in-progress",
+                    f"⏳ IN-PROGRESS ({stamp(3)}, T's session, worktree w, branch b) — **ACTIVE LANE.** x")
+    p.write_text(p.read_text(encoding="utf-8").replace("status: in-progress\n", "status: in-progress\nepic: CORE-9\n"),
+                 encoding="utf-8")
+    assert _claims(repo)["claim CORE-3"].detail.endswith(" · epic CORE-9")
+
+
 def test_old_active_claim_with_branch_is_live(repo):
     git("branch", "core-3-work", cwd=repo)
     write_issue(repo, "docs/backlog", "CORE", "CORE-3", "in-progress",

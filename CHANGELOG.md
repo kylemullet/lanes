@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.27 — an epic reads in progress while a child is claimed (2026-10-08)
+
+- **Derived, never written** (LANES-31). `backlog_index.epic_activity()` maps every live epic that
+  has a claimed child, or a claimed child of a nested child epic, to the lanes doing the work.
+  `--report`, the served view and `INDEX.md` show that epic as `in-progress`, with
+  `▶ lane <slice>` in its row. The report's roll-up line gains `▶ IN PROGRESS: lane …`, the view's
+  status pill carries a "derived" tooltip, and its status filter and sort follow the shown state.
+  A closed epic keeps its own status.
+- **Every lane names its epics** in the In progress block (report, view, INDEX.md), and the
+  doctor's claim line ends with ` · epic <ID>`.
+- **An epic is never a claim.** `lanes_claim.py` refuses an epic ID, and `--check` fails an epic
+  with `status: in-progress`. Hand-marking one would read as a claim with no worktree, and go stale
+  the moment the lane landed.
+
 ## 0.4.26 — the commit guard: the position rule at git's pre-commit (2026-10-08)
 
 - **New `scripts/guard_commit.py`** (LANES-1). The edit-tool hook never sees a file written

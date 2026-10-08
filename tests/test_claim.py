@@ -246,3 +246,16 @@ def test_with_claim_replaces_a_stale_lane_line_instead_of_adding_one():
     text = _issue("CORE-1").replace("status: open\n", "status: open\nlane: OLD-1@2026-01-01\n")
     out = lcl.with_claim(text, "⏳ IN-PROGRESS (x) — **WORKTREE PENDING.** y", "CORE-1@2026-10-07")
     assert out.count("\nlane:") == 1 and "lane: CORE-1@2026-10-07" in out
+
+
+def test_an_epic_is_never_claimed(setup, tmp_path, capsys):
+    """LANES-31: claim the children; the epic reads in progress through them."""
+    origin, clone, _ = setup
+    p = clone / "docs/backlog/CORE/CORE-7-thing.md"
+    p.write_text(_issue("CORE-7").replace("type: story", "type: epic"), encoding="utf-8")
+    git("add", str(p.relative_to(clone)), cwd=clone)
+    git("commit", "-q", "-m", "docs(backlog): an epic", cwd=clone)
+    git("push", "-q", "origin", "main", cwd=clone)
+    assert lcl.main(["CORE-1", "CORE-7"]) == lcl.NOT_CLAIMED
+    assert "CORE-7: is an epic" in capsys.readouterr().err
+    assert "status: open" in (clone / "docs/backlog/CORE/CORE-1-thing.md").read_text(encoding="utf-8")

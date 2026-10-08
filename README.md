@@ -171,7 +171,7 @@ Current status, Resolution. `--check` is the integrity gate: duplicate or misnam
 out-of-vocabulary values, a `status: in-progress` without its body claim marker (or the
 reverse), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
 issue whose Resolution does not cite a commit subject on HEAD, a `verified` issue whose change
-reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, a
+reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, an epic with `status: in-progress`, a
 `resolution:` that disagrees with the status, and a lane problem: a `lane:` on an open, blocked
 or paused issue (a release deletes it), a value that is not `<ID>@<YYYY-MM-DD>`, or two
 ACTIVE/PENDING issues in one lane. The views and `--report` open with **In progress**, one group per
@@ -181,6 +181,12 @@ issue after it lands; a claim made before it existed is grouped from its ⏳ mar
 commit subject their Resolution cites, and only on a machine whose operator row certifies (solo
 mode: every machine). The close is deterministic, so several certifying machines may run it at once; `--push`
 fetches first, pushes a backlog-only result, and converges on a rejected push by rebasing.
+
+**An epic is never claimed; it reads in progress.** `lanes_claim.py` refuses an epic, and `--check` fails one
+marked `in-progress`. Instead, every view derives it: a live epic with a claimed child (or grandchild, through
+a nested epic) shows `in-progress` with the lanes doing the work (`▶ lane LANES-1/25/31/27`) in its row and its
+roll-up line. Each lane names the epics its issues sit under, and the doctor's claim line names the claim's epic.
+Nothing is written to the epic's file, so the state cannot go stale when the lane lands.
 
 ## Configuration
 

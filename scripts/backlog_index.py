@@ -408,6 +408,15 @@ def lane_label(ln):
             "key": ln["key"]}
 
 
+def lane_epics(ln):
+    """The epics a lane's issues sit under, in slice order (LANES-31)."""
+    out = []
+    for m in ln["members"]:
+        if m.get("epic") and m["epic"] not in out:
+            out.append(m["epic"])
+    return out
+
+
 def lane_member_state(m):
     """active / pending / reserved for a claim; landed / closed for a member that is done."""
     if m.get("status") == "verified":
@@ -735,6 +744,62 @@ def epic_rollup(issues, epic_id):
         s: n for s, n in counts.items() if s not in STATUSES}
 
 
+# --- the derived epic state (LANES-31) -------------------------------------
+
+def epic_activity(issues):
+    """{epic ID: [lane names]} for every live epic with a claimed descendant.
+
+    An epic is never a claim (`epic_claim_problems`), so it never carries
+    `status: in-progress` itself. It READS in progress while any child, or any
+    child of a child epic, is claimed. Computed every render, never written, so it
+    cannot go stale when the lane lands. The value names the lanes doing the work.
+    """
+    lane_of = {}
+    for ln in lanes_in_flight(issues):
+        for m in ln["members"]:
+            if m.get("status") == "in-progress":
+                lane_of[m["id"]] = lane_name(ln)
+    kids = {}
+    for it in issues:
+        if it.get("epic"):
+            kids.setdefault(it["epic"], []).append(it)
+
+    def lanes_under(epic_id, seen):
+        found = []
+        for child in sorted(kids.get(epic_id, []), key=sort_key):
+            if child.get("id") in seen:
+                continue
+            if child.get("status") == "in-progress":
+                name = lane_of.get(child["id"], child["id"])
+                if name not in found:
+                    found.append(name)
+            if child.get("type") == "epic":
+                for name in lanes_under(child["id"], seen | {child["id"]}):
+                    if name not in found:
+                        found.append(name)
+        return found
+
+    out = {}
+    for it in issues:
+        if it.get("type") == "epic" and it.get("status") in LIVE_STATUSES and it.get("id"):
+            names = lanes_under(it["id"], {it["id"]})
+            if names:
+                out[it["id"]] = names
+    return out
+
+
+def shown_status(it, activity):
+    """The status a view shows: `in-progress` for an epic with claimed work under it."""
+    return "in-progress" if it.get("id") in activity else it.get("status")
+
+
+def epic_claim_problems(issues):
+    """`--check`: an epic is never a claim. Its children are; the epic's state derives."""
+    return [f"{it['_path']}: `status: in-progress` on an epic — an epic is never claimed; claim its "
+            "children and it reads in progress while any of them is (LANES-31)"
+            for it in issues if it.get("type") == "epic" and it.get("status") == "in-progress"]
+
+
 # --- the doc loop (INFRA-41) ---------------------------------------------
 
 DOCS_LINE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?Docs:", re.M)
@@ -879,7 +944,8 @@ def check_problems(issues, problems):
     """Everything --check and the test suite assert, as one list of strings."""
     return (list(problems) + orphaned_claims(issues) + orphaned_commit_citations(issues)
             + unresolvable_verified(issues) + undocumented_verified(issues)
-            + dangling_epics(issues) + resolution_problems(issues) + lane_problems(issues))
+            + dangling_epics(issues) + epic_claim_problems(issues) + resolution_problems(issues)
+            + lane_problems(issues))
 
 
 # --- the backfill (ADMIN-8) ---------------------------------------------
@@ -1107,6 +1173,7 @@ def _md_lanes(lanes):
         lb = lane_label(ln)
         bits = [f"**{lb['name']}**", f"`{lb['where']}`" + (f" (`{lb['branch']}`)" if lb["branch"] else "")]
         bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
+        bits += [f"epic {e}" for e in lane_epics(ln)]
         bits.append(f"lane `{lb['key']}`")
         out += ["", " · ".join(bits), ""]
         for m in ln["members"]:
@@ -1115,6 +1182,12 @@ def _md_lanes(lanes):
             out.append(f"- {state} · [{m['id']}]({m['_path'].as_posix().replace(BACKLOG_REL + '/', '')}) "
                        f"— {m['_title']}" + (f" _({note})_" if note else ""))
     return out
+
+
+def _md_status(i, activity):
+    if i.get("id") in activity:
+        return f"in-progress (lane {', '.join(activity[i['id']])})"
+    return i.get("status")
 
 
 def render_index(issues):
@@ -1144,13 +1217,14 @@ def render_index(issues):
         "| ID | Type | Status | Pri | Assignee | Opened | Epic | Blocked on | Title |",
         "| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |",
     ]
+    activity = epic_activity(issues)
     # A claimed issue is listed once, under its lane, not again in the queue.
     for i in sorted((i for i in open_issues if i.get("status") != "in-progress"), key=sort_key):
         title = i["_title"]
         title = title if len(title) <= 90 else title[:89] + "…"
         lines.append(
             f"| [{i['id']}]({i['_path'].as_posix().replace(BACKLOG_REL + '/', '')}) "
-            f"| {_cell(i.get('type'))} | {_cell(i.get('status'))} | {_cell(i.get('priority'))} "
+            f"| {_cell(i.get('type'))} | {_cell(_md_status(i, activity))} | {_cell(i.get('priority'))} "
             f"| {_cell(i.get('assignee'))} | {_cell(i.get('opened'))} | {_cell(i.get('epic'))} "
             f"| {_cell(i.get('blocked_on'))} | {title} |")
     lines += ["", "## Verified — landed, awaiting close", ""]
@@ -1339,6 +1413,7 @@ td.title a{display:block}
      display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;line-clamp:1;
      overflow-wrap:anywhere}
 .why::before{content:"blocked on ";color:var(--faint)}
+.why.via::before{content:"claimed under it: ";color:var(--faint)}
 td.num,td.date{white-space:nowrap;font-variant-numeric:tabular-nums}
 td.commit{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
 .pill{display:inline-block;border-radius:20px;padding:1px 8px 2px;font-size:11px;
@@ -1506,14 +1581,16 @@ def _href(i):
     return i["_path"].as_posix().replace(BACKLOG_REL + "/", "")
 
 
-def _html_row(i, cols):
+def _html_row(i, cols, activity=None):
+    activity = activity or {}
+    status = shown_status(i, activity)
     href = _href(i)
     title = i["_title"]
     age = i.get("_age")
     haystack = norm_join(i)
     attrs = {
         "project": i.get("project") or "", "type": i.get("type") or "",
-        "status": i.get("status") or "", "priority": i.get("priority") or "",
+        "status": status or "", "priority": i.get("priority") or "",
         "assignee": i.get("assignee") or "—",
         "resolution": i.get("resolution") or "",
         "id": _sort_id(i), "opened": i.get("opened") or "", "closed": i.get("closed") or "",
@@ -1523,17 +1600,23 @@ def _html_row(i, cols):
         "epics": _epic_family(i),
         "age": str(age if age is not None else -1),
         "priority-rank": str(PRIORITY_RANK.get(i.get("priority"), 9)),
-        "status-rank": str(STATUS_RANK.get(i.get("status"), 9)),
+        "status-rank": str(STATUS_RANK.get(status, 9)),
         "haystack": haystack,
     }
     why = i.get("blocked_on")
     why_html = (f'<div class="why" title="{_esc(why)}">{_esc(why)}</div>'
                 if why and i.get("status") in LIVE_STATUSES else "")
+    if i.get("id") in activity:
+        lanes_txt = "lane " + ", ".join(activity[i["id"]])
+        why_html += f'<div class="why via" title="a child is claimed: {_esc(lanes_txt)}">▶ {_esc(lanes_txt)}</div>'
+    status_pill = _pill("s", status)
+    if i.get("id") in activity:
+        status_pill = status_pill.replace('<span class="pill', '<span title="derived: a child is claimed" class="pill', 1)
     cells = {
         "id": ("id", f'<a href="{_esc(href)}">{_esc(i["id"])}</a>'),
         "title": ("title", f'<a href="{_esc(href)}">{_esc(title)}</a>{why_html}'),
         "priorityRank": ("", _pill("p", i.get("priority"))),
-        "statusRank": ("", _pill("s", i.get("status"))),
+        "statusRank": ("", status_pill),
         "type": ("", _esc(i.get("type"))),
         "assignee": ("", _esc(i.get("assignee") or "—")),
         "opened": ("date", _esc(i.get("opened") or "—")),
@@ -1584,14 +1667,14 @@ def _col_class(key):
     return "col-sec" if key in SECONDARY_COLS else "col-age" if key == "age" else ""
 
 
-def _html_table(issues, cols, empty):
+def _html_table(issues, cols, empty, activity=None):
     if not issues:
         return f'<p class="empty">{empty}</p>'
     head = "".join(
         f'<th data-key="{key}" data-num="{num}"'
         + (f' class="{_col_class(key)}"' if _col_class(key) else "") + f'>{_esc(label)}</th>'
         for label, key, num in cols)
-    rows = "\n".join(_html_row(i, cols) for i in issues)
+    rows = "\n".join(_html_row(i, cols, activity) for i in issues)
     return f'<table class="issues"><thead><tr>{head}</tr></thead><tbody>\n{rows}\n</tbody></table>'
 
 
@@ -1618,7 +1701,7 @@ def _html_lanes(lanes):
         name = lb["name"]
         branch = f' <code>{_esc(lb["where"])}</code>' + (f' <code>{_esc(lb["branch"])}</code>'
                                                          if lb["branch"] else "")
-        who = _esc(lb["machine"] or "")
+        who = " · ".join(_esc(x) for x in [lb["machine"]] + [f"epic {e}" for e in lane_epics(ln)] if x)
         when = (f'claimed <time data-ts="{_esc(ln["claimed"])}">{_esc(ln["claimed"])}</time>'
                 if ln["claimed"] else "claim time unreadable")
         items = []
@@ -1663,7 +1746,11 @@ def render_html(issues, problems=(), position=None):
                     key=lambda x: (x.get("closed") or "", x.get("id") or ""), reverse=True)
     tabled = open_issues + verified + closed
 
+    activity = epic_activity(issues)
     present = lambda field, vocab: [v for v in vocab if any(i.get(field) == v for i in tabled)]
+    # The status chips follow the SHOWN status: a row whose data-status no chip names is
+    # filtered out, so an active epic needs its in-progress chip (LANES-31).
+    shown = [s for s in STATUSES if any(shown_status(i, activity) == s for i in tabled)]
     assignees = sorted({i.get("assignee") or "—" for i in tabled})
     epics = sorted({i["id"] for i in issues if i.get("type") == "epic" and i.get("id")}
                    | {i["epic"] for i in issues if i.get("epic")},
@@ -1673,7 +1760,7 @@ def render_html(issues, problems=(), position=None):
         live_by_proj[i.get("project")] = live_by_proj.get(i.get("project"), 0) + 1
     facets = "".join((
         _facet("project", present("project", PROJECTS), live_by_proj),
-        _facet("status", present("status", STATUSES)),
+        _facet("status", shown),
         _facet("priority", present("priority", PRIORITIES)),
         _facet("assignee", assignees),
         _facet("epic", epics + ["—"]) if epics else "",
@@ -1722,7 +1809,7 @@ def render_html(issues, problems=(), position=None):
 <div id="facets" class="facets" hidden>{facets}</div>
 <details class="sec" open>
   <summary>Open queue <span class="n">{len(open_issues)}</span></summary>
-  {_html_table(open_issues, OPEN_COLS, "No open issues.")}
+  {_html_table(open_issues, OPEN_COLS, "No open issues.", activity)}
 </details>
 <details class="sec" {"open" if verified else ""}>
   <summary>Verified — landed, awaiting {html.escape(CERTIFIER_LABEL, quote=False)} close <span class="n">{len(verified)}</span></summary>
@@ -1761,6 +1848,7 @@ def render_report(issues, who):
             lb = lane_label(ln)
             bits = [lb["name"], lb["where"] + (f" [{lb['branch']}]" if lb["branch"] else "")]
             bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
+            bits += [f"epic {e}" for e in lane_epics(ln)]
             print("  " + " · ".join(bits + [f"lane {lb['key']}"]))
             for m in ln["members"]:
                 state = lane_member_state(m)
@@ -1768,13 +1856,15 @@ def render_report(issues, who):
                 # Full titles: the lane block is short, and the title is what the eye reads.
                 print(f"      {state:<9} {m['id']:>10}  {m['_title']}" + (f"  ({note})" if note else ""))
         print()
+    activity = epic_activity(issues)
     print(f"{'='*100}\nBACKLOG ({who}) — {len(mine)} live\n{'='*100}")
     for i in sorted((i for i in mine if i.get("status") != "in-progress"),
                     key=lambda x: (x["_age"] is None, -(x["_age"] or 0))):
         age = f"{i['_age']}d" if i["_age"] is not None else "undated"
         blocked = f"  ⛔ {i['blocked_on']}" if i.get("blocked_on") else ""
-        print(f"{i['id']:>10} {i.get('type') or '?':>8} {i.get('status') or '?':>11} "
-              f"{i.get('priority') or '?':>8} [{age:>7}] {i['_title'][:80]}{blocked}")
+        lanes_txt = f"  ▶ lane {', '.join(activity[i['id']])}" if i.get("id") in activity else ""
+        print(f"{i['id']:>10} {i.get('type') or '?':>8} {shown_status(i, activity) or '?':>11} "
+              f"{i.get('priority') or '?':>8} [{age:>7}] {i['_title'][:80]}{blocked}{lanes_txt}")
     sc = {s: sum(1 for i in mine if i.get("status") == s) for s in STATUSES}
     pc = {p: sum(1 for i in mine if i.get("priority") == p and i.get("status") != "closed") for p in PRIORITIES}
     ages = [i["_age"] for i in mine if i["_age"] is not None
@@ -1788,7 +1878,8 @@ def render_report(issues, who):
         for e in sorted(epics, key=sort_key):
             roll = epic_rollup(issues, e["id"])
             summary = " · ".join(f"{s} {n}" for s, n in roll.items()) or "no children yet"
-            print(f"    {e['id']:>10}  {e['_title'][:58]:<58}  {sum(roll.values()):>2} children: {summary}")
+            active = f"  ▶ IN PROGRESS: lane {', '.join(activity[e['id']])}" if e["id"] in activity else ""
+            print(f"    {e['id']:>10}  {e['_title'][:58]:<58}  {sum(roll.values()):>2} children: {summary}{active}")
     if waiting:
         print(f"\n  Blocked on YOU — the other operator's issues your work unblocks ({len(waiting)}):")
         for i in sorted(waiting, key=sort_key):

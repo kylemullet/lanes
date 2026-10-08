@@ -287,7 +287,10 @@ def check_claims(root: Path, cfg: dict, now: Optional[datetime] = None) -> list:
         issue_id = fm.get("id") or path.stem.split("-")[0]
         if issue_id in exempt:
             continue
-        out.append(classify_claim(issue_id, text, now, root, worktrees, (cfg.get("machine") or {}).get("id")))
+        check = classify_claim(issue_id, text, now, root, worktrees, (cfg.get("machine") or {}).get("id"))
+        if fm.get("epic"):
+            check.detail += f" · epic {fm['epic']}"   # the epic reads in progress through this claim (LANES-31)
+        out.append(check)
     if not out:
         return [Check(OK, "claims", "no in-progress issues")]
     return out
