@@ -305,3 +305,48 @@ def test_the_new_command_passes_me_and_fills_the_context():
     text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
     assert "--reported-by=me" in text and "--reported-by=claude" in text
     assert "Context" in text and "$ARGUMENTS" in text
+
+
+# --- the scan fetches first: another MACHINE's pushed issue counts (LANES-4) ---------------
+
+def _two_machines(tmp_path):
+    """A bare origin holding INFRA-1, and two clones of it; clone B pushes INFRA-2."""
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", str(origin))
+    seed = _repo(tmp_path)
+    _git(seed, "push", "-q", str(origin), "HEAD:refs/heads/main")
+    a, b = tmp_path / "a", tmp_path / "b"
+    _git(tmp_path, "clone", "-q", "-b", "main", str(origin), str(a))
+    _git(tmp_path, "clone", "-q", "-b", "main", str(origin), str(b))
+    _issue(b, "INFRA", 2, slug="from-the-other-machine")
+    _git(b, "add", "-A")
+    _git(b, "commit", "-qm", "INFRA-2")
+    _git(b, "push", "-q", "origin", "main")
+    return a
+
+
+def test_refs_max_fetches_first_and_sees_an_issue_pushed_from_another_machine(tmp_path):
+    a = _two_machines(tmp_path)
+    assert bn.refs_max("INFRA", a, fetch=False) == 1            # the pre-LANES-4 view: never fetched
+    assert bn.refs_max("INFRA", a) == 2
+
+
+def test_create_issue_does_not_reuse_another_machines_id(tmp_path, monkeypatch):
+    a = _two_machines(tmp_path)
+    monkeypatch.setattr(bidx, "regenerate", lambda: None)
+    path = bn.create_issue("INFRA", "minted here", reported_by="claude", backlog=a / "docs" / "backlog")
+    assert path.name.startswith("INFRA-3-")
+
+
+def test_a_failed_fetch_warns_once_and_still_mints(tmp_path, capsys):
+    a = _two_machines(tmp_path)
+    _git(a, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    assert bn.refs_max("INFRA", a) == 1
+    err = capsys.readouterr().err
+    assert err.count("warning: could not fetch origin") == 1
+
+
+def test_no_origin_is_not_a_warning(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert bn.refs_max("INFRA", repo) == 1
+    assert capsys.readouterr().err == ""

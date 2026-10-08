@@ -1236,7 +1236,7 @@ def test_clone_position_reports_without_fetching_and_uses_the_main_branch(served
 def test_backlog_new_accepts_verified(tmp_path, monkeypatch):
     monkeypatch.setattr(bnew, "BACKLOG", tmp_path)
     monkeypatch.setattr(bnew, "ROOT", tmp_path)
-    monkeypatch.setattr(bnew, "refs_max", lambda project, repo=None: 0)
+    monkeypatch.setattr(bnew, "refs_max", lambda project, repo=None, fetch=True: 0)
     p = bnew.create_issue("UI", "x", status="verified", regen_index=False)
     assert bidx.parse_frontmatter(p.read_text(encoding="utf-8"))[0]["status"] == "verified"
     assert bidx.RESOLUTION_STUB in bnew.BODY_STUB

@@ -37,8 +37,15 @@ ID must stay RETIRED, or a renumber would free the old number and re-manufacture
 exact collision it escaped. `--no-renames` makes a rename list both sides whatever
 the operator's `diff.renames` setting is.
 
+Scan 2 fetches `origin` first (LANES-4). `--all` sees only refs this clone has
+FETCHED, so an issue another MACHINE pushed since the last fetch -- a canary bug on its
+branch, the other operator's new issue -- was invisible, and its number was handed out
+again. The fetch is bounded (FETCH_TIMEOUT seconds, no credential prompt); when it fails,
+the scan runs on the refs already here and one warning line says so, because minting
+must still work offline. `--no-fetch` skips it on purpose.
+
 Not airtight, and does not need to be: the residual window is two lanes minting
-before either commits. Commit-then-mint is the common case.
+before either commits (or pushes). Commit-then-mint is the common case.
 
 Regenerates the local (gitignored) views afterwards.
 
@@ -49,7 +56,7 @@ on the main branch -- an issue a lane mints rides in the lane's own commit -- an
 refused BEFORE anything is minted when that position is wrong. When the guard refuses
 (other work on local main), the issue is committed and stays local: exit 2.
 """
-import argparse, datetime, re, subprocess, sys
+import argparse, datetime, os, re, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -105,7 +112,32 @@ def local_max(project, backlog=None):
     return n
 
 
-def refs_max(project, repo=None):
+FETCH_TIMEOUT = 20
+
+
+def fetch_origin(repo=None):
+    """`git fetch -q origin`, bounded and prompt-free. None on success or when there is no
+    `origin` to ask; otherwise the one-line reason (the caller warns and scans what it has).
+    Never `--prune`: a deleted branch's refs are what keep a renumbered-away ID retired."""
+    cwd = repo or ROOT
+    try:
+        has = subprocess.run(["git", "remote"], cwd=cwd, capture_output=True, text=True,
+                             encoding="utf-8", timeout=10)
+        if has.returncode != 0 or "origin" not in has.stdout.split():
+            return None
+        proc = subprocess.run(["git", "fetch", "-q", "origin"], cwd=cwd, capture_output=True,
+                              text=True, encoding="utf-8", timeout=FETCH_TIMEOUT,
+                              env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    except subprocess.TimeoutExpired:
+        return f"timed out after {FETCH_TIMEOUT}s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return str(e)
+    if proc.returncode != 0:
+        return (proc.stderr.strip().splitlines() or ["git fetch failed"])[-1]
+    return None
+
+
+def refs_max(project, repo=None, fetch=True):
     """Highest ID for `project` ever seen on ANY ref. 0 when git can't answer.
 
     `repo` is the checkout to ask (default: this clone). A worktree shares its
@@ -120,7 +152,15 @@ def refs_max(project, repo=None):
     Returns 0 rather than raising on any git failure. ID assignment must keep
     working on a plain checkout, on a machine with no venv, and outside a repo
     entirely; degrading to the local glob is the documented fallback.
+
+    `fetch` (default on) fetches `origin` first, so another machine's pushed issues
+    count (LANES-4); a failed fetch warns once and scans what is here.
     """
+    if fetch:
+        why = fetch_origin(repo)
+        if why:
+            print(f"warning: could not fetch origin ({why}); numbering from the refs already "
+                  "fetched — an issue another machine pushed since may share this ID", file=sys.stderr)
     try:
         proc = subprocess.run(
             ["git", "log", "--all", "--no-renames", "--name-only",
@@ -142,9 +182,9 @@ def refs_max(project, repo=None):
     return n
 
 
-def next_number(project, backlog=None):
+def next_number(project, backlog=None, fetch=True):
     """Next free ID: one past the highest this tree OR any ref has ever used."""
-    seen = refs_max(project, _repo_of(backlog)) if backlog else refs_max(project)
+    seen = refs_max(project, _repo_of(backlog) if backlog else None, fetch=fetch)
     return max(local_max(project, backlog), seen) + 1
 
 
@@ -191,7 +231,7 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
                  status="open", blocked_on=None, opened=None, closed=None,
                  commit=None, links=None, body=None,
                  regen_index=True, backlog=None, epic=None, reported_by=None,
-                 resolution=None):
+                 resolution=None, fetch=True):
     """Write the issue file and return its Path. Raises on invalid enums.
 
     `assignee` defaults to the configured default (the solo operator, or the first
@@ -235,7 +275,7 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
             raise ValueError(f"epic {epic!r} is a {parents[epic].get('type')!r}, not an epic")
     pdir = (backlog or BACKLOG) / project
     pdir.mkdir(parents=True, exist_ok=True)
-    iid = f"{project}-{next_number(project, backlog)}"
+    iid = f"{project}-{next_number(project, backlog, fetch=fetch)}"
     meta = {
         "id": iid, "project": project, "type": type_, "status": status,
         "priority": priority, "blocked_on": blocked_on, "assignee": assignee,
@@ -285,6 +325,8 @@ def main(argv=None):
     ap.add_argument("--links", default=None, help="comma-separated issue IDs")
     ap.add_argument("--epic", default=None, metavar="ID",
                     help="parent epic (an existing issue with type: epic)")
+    ap.add_argument("--no-fetch", dest="fetch", action="store_false",
+                    help="number from the refs already fetched; skip `git fetch origin` (offline)")
     ap.add_argument("--push", action="store_true",
                     help="commit the new issue alone and push it under the OK-free guard "
                          "(main clone, main branch only)")
@@ -308,7 +350,7 @@ def main(argv=None):
                         blocked_on=args.blocked_on,
                         opened=args.opened or datetime.date.today().isoformat(),
                         links=[x.strip() for x in args.links.split(",")] if args.links else None,
-                        epic=args.epic)
+                        epic=args.epic, fetch=args.fetch)
     rel = path.relative_to(ROOT).as_posix()
     print(f"created {rel}")
     if args.push:

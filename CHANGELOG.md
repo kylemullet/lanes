@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.24 — issue numbering sees the other machines (2026-10-08)
+
+- **`backlog_new.py` fetches `origin` before it scans the refs** (LANES-4). `git log --all`
+  saw only refs this clone had fetched, so an issue another machine pushed since the last
+  fetch (a canary bug on its branch, the other operator's new issue) was invisible and its
+  number could be minted twice. The fetch is bounded (20s, no credential prompt) and never
+  prunes, because a deleted branch's refs keep a renumbered-away ID retired. A failed fetch
+  prints one warning and numbers from the refs already here: minting still works offline.
+  A clone with no `origin` is not a warning. `--no-fetch` skips the fetch on purpose.
+
 ## 0.4.23 — claims carry the machine; a lane can follow its operator (2026-10-08)
 
 - **The doctor judges evidence by machine** (LANES-7). A marker already named its owner

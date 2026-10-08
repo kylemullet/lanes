@@ -114,6 +114,10 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free [--push] [--add <paths> -m "<subject>"]
 ```
 
+`backlog_new.py` numbers from the local tree and every ref, after a bounded `git fetch origin`, so an issue
+another machine pushed since this clone's last fetch is not handed out again (LANES-4). A failed fetch
+warns and numbers from what is here; `--no-fetch` skips it.
+
 `push_guard.py` is the one rule for a push to the main branch that needs no operator OK
 (LANES-5). `--ok-free`: every path ahead of `origin/<main>` is under `git.ok_free_paths`
 (default: the backlog dir alone), `--check` is green, and no commit edits a claim marker
