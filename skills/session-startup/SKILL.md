@@ -1,6 +1,6 @@
 ---
 name: session-startup
-description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. Pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants (or reads it from the trigger, e.g. "GA quick wins"), and offers 2–3 proposals for that mode — then STOPS and waits for the operator to name the work.
+description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. Pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator (or reads it from the trigger, e.g. "GA housekeeping"), and offers 2–3 proposals for that mode — then STOPS and waits for the operator to name the work.
 ---
 
 # Session startup
@@ -210,7 +210,7 @@ request, so refreshing the page is the regeneration:
 curl -s -m 2 http://127.0.0.1:<backlog.view_port>/ >/dev/null || sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve
 ```
 
-**The view's link is block II of the report, on its own line.** It is the operator's
+**The view's link is the report's `Sortable backlog` section, on its own line.** It is the operator's
 whole queue — sortable, filterable, linking into each issue file — and it carries the
 weight of "let me see everything and overrule the slice". Do NOT pass `--open` unless
 asked; a browser window stealing focus every session is noise.
@@ -305,7 +305,7 @@ Backlog entries outlive their own resolution. Check the urgent candidates and an
 older than ~14 days against the newest session assets and `git log --oneline -20`: has a
 later commit already closed it, or cleared the gate it names? Mark those `⚠️` in the
 report. Never silently drop one — if an item no longer reproduces, *correcting the issue
-file IS the deliverable*, and it is a Quick win (`status: closed`, `resolution: wont-do`
+file IS the deliverable*, and it is a Housekeeping pick (`status: closed`, `resolution: wont-do`
 or `done`, Resolution filled). Publish a correction the moment it is written, not with the
 next OK'd push — it is a backlog-only commit:
 
@@ -315,9 +315,11 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add
 
 ### 7. Render the Brief and the view link
 
-Two blocks, every time. Keep item text to a short noun phrase.
+Two sections, every time, each under a plain header — `Brief`, then `Sortable backlog` —
+with no numerals, and then the mode question (step 8). Keep item text to a short noun
+phrase.
 
-**I — Brief.** Bullets, one line each: sync result; what landed since last session;
+**Brief.** Bullets, one line each: sync result; what landed since last session;
 anything needing a decision right now; the backfill result ("closed N verified: IDs —
 commit pending push" / "N verified awaiting the certifying machine's close"); whatever
 `preflight.md` asked to report; unlanded branches from step 2; **the in-flight lanes from
@@ -333,32 +335,46 @@ critical: N — <ID> <noun phrase>, <ID> <noun phrase>, …        (or `critical
 Timely and urgent only: a red canary row, something blocking someone (the other operator
 above all), something needing a decision now, something actively costing. Not a priority
 dump. **It is in the Brief so that no mode answer can hide it**: the operator who asks for
-quick wins still sees the red row. Step 6's `⚠️` staleness marks ride on whatever line
+Housekeeping still sees the red row. Step 6's `⚠️` staleness marks ride on whatever line
 cites the issue.
 
-**II — Sortable backlog.** The view's link alone on its own line, immediately after the
+**Sortable backlog.** The view's link alone on its own line, immediately after the
 Brief — the `file://` path the generator printed (the main clone's, never a worktree's), or
-`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. Nothing else in the block. It is the operator's escape hatch from every
-proposal below.
+`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. Nothing else in the section.
+It is the operator's escape hatch from every proposal below.
 
-**There is no full-backlog table**, and no fixed Critical / Quick wins / Slice blocks
+**There is no full-backlog table**, and no fixed Critical / Quick-wins / Slice sections
 (LANES-24): the operator usually acts on one of them, so analysis spent on all three was
-mostly spent on blocks nobody read. Step 8 puts it into the one mode the operator wants.
+mostly spent on sections nobody read. Step 8 puts it into the one mode the operator wants.
 (`incidents.md` → "The full table that oscillated".)
 
-### 8. Ask the mode, then propose 2–3 — by operator
+### 8. Ask the mode, then propose 2–3
 
-**The mode question.** Skip it when the trigger already names a mode (`GA autonomous`,
-`startup quick wins`, `GA LANES-12`). Otherwise ask with the question tool (2–4 options +
-Other), after the Brief. **The menu comes from this machine's operator row:**
+**The mode question.** Skip it when the trigger already names a mode (`GA housekeeping`,
+`startup ops`, `GA LANES-12`). Otherwise ask with the question tool, right after the
+`Sortable backlog` section, with these four options in this order (the tool adds "Other").
+The line under each option is quoted from this table verbatim: the menu the operator sees
+and the rule the session follows are the same words, so they cannot drift.
 
-| Operator | Options |
+| Option | Line under it |
 | :-- | :-- |
-| may edit code (`may_edit_code`, the default; solo mode) | **Critical / unblocking** · **Quick wins** · **Deep (epic or project)** · **Autonomous** |
-| does not edit code | **Authoring** (fixtures, docs, session assets) · **Decisions** (ratify, rule, product calls) · **Quick wins** |
+| **Critical** | Urgent issues and blockers |
+| **Deep Dive** | A single-context slice, project, or epic. Research or spike. |
+| **Housekeeping** | Issue-clearing, audits, and quick wins |
+| **Ops** | Decisions, accounts, and outreach |
 
-"Other" takes free text: a project prefix, an epic ID, a theme. Treat it as Deep scoped to
-what they named.
+**One menu for every operator** (LANES-36). The split underneath it is who does the work:
+Deep Dive and Housekeeping are what the session does and the operator verifies; Ops is
+what the operator does, with the session preparing and recording. The order is also the
+recommended default for a long session — what is on fire, then the big work while fresh,
+then clearing, then what only the operator can do — so "whatever you think" proposes in
+that order. An operator whose row does not edit code (`may_edit_code` false) gets the same
+four options; their Deep Dive and Housekeeping proposals draw from docs-lane issues only
+(`backlog.docs_lane_prefixes`), and a code change they need is queued as an issue for the
+code owner. **Solo mode** gets the same menu.
+
+"Other" takes free text: a project prefix, an epic ID, a theme. Treat it as Deep Dive
+scoped to what they named.
 
 **The proposals: 2–3, never one.** Each is a short table, so the operator chooses between
 them rather than taking or overruling one. Every proposal is drawn only from step 5b's
@@ -375,27 +391,29 @@ First action: … · Parked: …
 
 What each mode optimizes:
 
-- **Critical / unblocking** — the `critical:` items that are pickable, plus whatever
-  unblocks the other operator or a waiting lane. Unblocking is mostly a subset of
-  critical. Proposals differ by which blocker they clear first.
-- **Quick wins** — self-contained, closable in one sitting, no upstream dependency; step
-  6's staleness corrections go here. Proposals are batches of 2–4 by shared context.
-- **Deep** — the context-switching enemy: one project, or a machinery-sharing cluster in
-  it, where ≥2 open issues touch the same files, so one context load closes several.
-  Prefer the cluster that ends in something for the other operator to author, verify or
-  ratify. Proposals are alternative clusters.
-- **Autonomous** — work that can run with nobody watching. Until the backlog carries an
-  `autonomy:` field, an issue qualifies only when ALL of these hold: no operator decision
-  in `blocked_on`; no visual or UX verdict needed (automated tests are the verdict
-  otherwise); no legal or product judgment; acceptance criteria a test can check. Say
-  which rubric line a borderline issue passes. An autonomous slice tells the operator to
-  keep the machine awake, or calls the host's keep-awake tool where one exists:
-  unattended runs die when the laptop sleeps.
-- **Authoring / Decisions** (non-code operator) — 1–3 independent picks that are
-  genuinely theirs, batched by context, with an honest `Est` (measured numbers where they
-  exist, estimates labelled as estimates).
+- **Critical** — the `critical:` items that are pickable, plus whatever blocks a lane, a
+  person or a deploy. Urgency wins over the other three: an Ops item with a deadline is
+  Critical. Proposals differ by which blocker they clear first.
+- **Deep Dive** — the context-switching enemy: one project, or a machinery-sharing
+  cluster in it, where ≥2 open issues touch the same files, so one context load closes
+  several; or an epic's children in order. Research and spikes are Deep Dive too — a spike
+  is a lane whose deliverable is a write-up. Proposals are alternative clusters.
+- **Housekeeping** — issue-clearing, audits and quick wins: step 6's staleness
+  corrections, qa issues, doctor warnings, a doc audit, the self-contained closes.
+  Proposals are batches of 2–4 by shared context, each with an honest `Est` — an audit
+  can run an hour, so never imply one sitting.
+- **Ops** — decisions, accounts and outreach: the backlog's `decision` issues, sign-ups
+  and credentials only the operator may hold, applications, emails and follow-ups,
+  counsel items. The session lays out the options with a recommendation, drafts the
+  text, and writes the ruling or the outcome into the issue; the operator acts.
+  Proposals are 1–3 independent picks batched by context, with an honest `Est`
+  (measured numbers where they exist, estimates labelled as estimates).
 
-**Solo mode** gets the code-operator menu; there is no other operator to give runway to.
+**Autonomous was retired** (LANES-36). Under step 8a's rule 4 a session never opens a
+second issue while one waits on a verdict, and `git.land_requires_ok` makes every landing
+wait, so an "autonomous slice" was always one lane and then a stall. Unattended
+throughput is a protocol change — landing a class of issues on green without the per-lane
+OK — not a menu option. An unattended suite run still needs the machine kept awake.
 
 **Then STOP and wait.** A proposal is a recommendation, not an assignment — startup does
 NOT begin work. End the message by asking which proposal (or what else) the operator

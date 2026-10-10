@@ -90,8 +90,8 @@ directive is the OK, and the main-direct path guard is the safety.
 The brief's full-backlog table was made mandatory because it kept silently not appearing
 and the operator was doing the extra step by hand. The sortable HTML view shipped the
 same day and superseded it; the next day the operator asked to drop the table in favour
-of the link. The link is block II, high in the report, so it is not re-litigated a third
-time.
+of the link. The link is the report's second section, `Sortable backlog`, so it is not re-litigated
+a third time.
 
 ## Why the views are generated and gitignored (2026-09-01)
 

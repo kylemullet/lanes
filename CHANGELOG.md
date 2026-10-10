@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.35 — one four-mode menu: Critical, Deep Dive, Housekeeping, Ops (2026-10-10)
+
+- **One menu for every operator** (LANES-36). `session-startup` step 8 asks four options in a
+  fixed order — **Critical** (urgent issues and blockers), **Deep Dive** (a single-context slice,
+  project, or epic; research or spike), **Housekeeping** (issue-clearing, audits, and quick wins),
+  **Ops** (decisions, accounts, and outreach) — and the line under each option is quoted from the
+  skill's table verbatim, so the menu the operator sees and the rule the session follows cannot
+  drift. The split is who does the work: Deep Dive and Housekeeping are the session's, Ops is the
+  operator's with the session preparing and recording; urgency wins, so an Ops item with a deadline
+  is Critical. The order is the recommended default for a long session. The non-code operator's
+  menu (Authoring · Decisions · Quick wins) is gone: same four options, and their Deep Dive and
+  Housekeeping proposals draw from docs-lane issues only.
+- **Autonomous is retired.** Under `worktree-increment`'s rule 4 a session never opens a second
+  issue while one waits on a verdict, and `git.land_requires_ok` makes every landing wait, so an
+  "autonomous slice" was always one lane and then a stall. Unattended throughput is a protocol
+  change, not a menu option. The rubric went with it.
+- **The report is two headed sections, no numerals.** `Brief`, then `Sortable backlog`, then the
+  mode question. Nothing mechanical read the `I —` / `II —` numerals.
+
 ## 0.4.34 — a lane lands on its own green (2026-10-08)
 
 - **A clean rebase re-runs nothing** (LANES-34). `worktree-increment` 6.1 used to re-run

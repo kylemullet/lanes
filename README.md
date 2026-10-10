@@ -114,7 +114,7 @@ stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualen
 
 | Skill | When | What it does |
 | :-- | :-- | :-- |
-| `session-startup` | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief (always with a `critical:` line), ask the session mode (or read it from the trigger: `GA quick wins`), offer 2–3 proposals for it; **stop** |
+| `session-startup` | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief (always with a `critical:` line), ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator (or read it from the trigger: `GA housekeeping`) — and offer 2–3 proposals for it; **stop** |
 | `worktree-increment` | "do CORE-7", "run the slice", "go" | claim the whole slice up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator, close the doc loop, push the branch freely, land only with the OK, on the lane's own green (a rebase re-runs tests only after a hand-resolved logic conflict) |
 | `session-closeout` | "let's wrap", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
 

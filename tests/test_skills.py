@@ -138,15 +138,33 @@ def test_startup_always_carries_the_critical_line():
     assert "critical: N — <ID> <noun phrase>" in text and "critical: none" in text
 
 
-def test_startup_asks_the_mode_with_a_menu_per_operator_and_no_fixed_blocks():
+def test_startup_asks_the_mode_with_one_four_option_menu_and_no_fixed_blocks():
+    """LANES-36: one menu for every operator, four options in a fixed order, Autonomous retired."""
     text = _startup()
-    for mode in ("Critical / unblocking", "Quick wins", "Deep (epic or project)", "Autonomous",
-                 "Authoring", "Decisions"):
-        assert f"**{mode}**" in text, mode
-    assert "`may_edit_code`" in text                                    # the menu comes from the row
-    assert "GA quick wins" in text or "startup quick wins" in text      # a mode named in the trigger
+    menu = [
+        ("Critical", "Urgent issues and blockers"),
+        ("Deep Dive", "A single-context slice, project, or epic. Research or spike."),
+        ("Housekeeping", "Issue-clearing, audits, and quick wins"),
+        ("Ops", "Decisions, accounts, and outreach"),
+    ]
+    rows = [f"| **{opt}** | {line} |" for opt, line in menu]
+    for row in rows:
+        assert row in text, row
+    assert [text.index(r) for r in rows] == sorted(text.index(r) for r in rows)   # the order is the rule
+    for retired in ("**Autonomous**", "**Authoring**", "**Quick wins**", "**Decisions**",
+                    "**Critical / unblocking**", "**Deep (epic or project)**"):
+        assert retired not in text, retired
+    assert "One menu for every operator" in text and "`may_edit_code`" in text  # non-code: same menu, docs-lane picks
+    assert "GA housekeeping" in text                                    # a mode named in the trigger
     assert "five blocks" not in text and "five-block" not in text
     assert "**III — Critical" not in text and "**V — Recommended slice" not in text
+
+
+def test_startup_report_is_two_headed_sections_without_numerals():
+    """LANES-36: `Brief` and `Sortable backlog` as plain headers, no `I —` / `II —`, then the question."""
+    text = _startup()
+    assert "**Brief.**" in text and "**Sortable backlog.**" in text
+    assert "**I — Brief" not in text and "**II — Sortable" not in text and "block II" not in text
 
 
 def test_startup_proposals_keep_the_invariants():
@@ -154,6 +172,5 @@ def test_startup_proposals_keep_the_invariants():
     assert "2–3, never one" in text
     assert "no `in-progress` issue, nothing in the exclusion set, in any mode" in text
     assert "Then STOP and wait." in text
-    for line in ("no operator decision", "no visual or UX verdict", "no legal or product judgment",
-                 "acceptance criteria a test can check"):
-        assert line in text, line                                      # the autonomous rubric
+    assert "Autonomous was retired" in text                           # and its rubric went with it
+    assert "acceptance criteria a test can check" not in text
