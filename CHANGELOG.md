@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.37 — the pull reads a mirror-delivered tree before refusing (2026-10-10)
+
+- **`lanes_pull.py` replaces the bare `git pull` in every skill** (LANES-38). A directory that is
+  both git-tracked and mirrored by a file-sync client receives a landing's bytes before the next
+  pull, so every other machine sees modified and untracked files that are byte-identical to
+  origin, and `git pull --rebase` refuses on "unstaged changes". The first session on a second
+  certifying machine sat 318 commits behind on exactly that, and the tool-permission classifier
+  refused the hand fixes (`reset --hard`, a pointer-only `update-ref`) as destructive. The script
+  fetches, compares each dirty path to `origin/<main>` by blob hash (through the path's clean
+  filters, so a line-ending phantom counts as identical), reconciles the identical ones **without
+  writing them** — the branch ref moves and only the index resets, so the mirror sees no change and
+  nothing ripples back to the other machines — checks out only what origin changed that the mirror
+  had not delivered, carries a new local file origin lacks as untracked, and refuses only on a path
+  that genuinely differs, naming each one. Local commits are rebased first in a throwaway worktree
+  so the dirty tree is never asked to be clean; a conflict aborts and moves nothing. `--ff-only`
+  refuses local commits (the increment's step-1 pull), `--dry-run` prints the plan, `ORIG_HEAD` is
+  set as a pull would. A stash was ruled out: it deletes the untracked files for a moment and the
+  mirror propagates that delete. `session-startup` step 2, `worktree-increment` steps 1.1 and 10.3
+  and `session-closeout`'s pre-landing pull all run it; `tests/test_skills.py` holds them to it.
+
 ## 0.4.36 — one marker, one reading (2026-10-10)
 
 - **The view reads a claim header with a parenthesis in it** (LANES-37). `backlog_index.py`'s

@@ -3,6 +3,22 @@
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
 
+## The clone the mirror had already updated (2026-10-10)
+
+A directory in the repository is both git-tracked and mirrored by a file-sync client, so
+the same bytes travel on two channels — and the mirror is faster than the next pull. The
+first session on the second certifying machine after another machine had landed fixtures
+found two modified files and sixteen untracked ones under the mirrored directory, every
+one byte-identical to origin, and `git pull --rebase` refused on "unstaged changes". The
+session could not clear it either: the tool-permission classifier refused `git reset
+--hard` and a pointer-only `git update-ref` as destructive, so the clone sat 318 commits
+behind until the operator ran the reset by hand. It had never bitten before because one
+machine both pulled and committed every fixture; with two, the failure is symmetric. A
+stash was ruled out — it deletes the untracked files for a moment, and the mirror
+propagates that delete to every other machine. The pull is now a script that compares
+each dirty path to origin by blob hash, reconciles the identical ones without writing
+them, carries a new local file, and refuses only on what genuinely differs, by name.
+
 ## The slice claimed by hand (2026-10-06, 2026-10-07)
 
 A directive named four issues. The claim commit covered one; the second was reserved 35

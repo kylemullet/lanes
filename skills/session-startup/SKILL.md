@@ -73,12 +73,25 @@ determines which queue to surface; the **machine** determines which gates fire.
 ### 2. Pull FIRST — before reading any state
 
 ```bash
-git pull --rebase
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py
 ```
 
+It fetches and fast-forwards the main branch, rebasing any local commits on it, and it
+**reads a dirty tree before refusing** (LANES-38). A repository can carry a directory that
+is both git-tracked and mirrored by a file-sync client, and the mirror usually delivers a
+landing's bytes before the next pull: every other machine then sees modified and untracked
+files that are byte-identical to origin, and a plain `git pull --rebase` refuses on them.
+The script reconciles those paths without writing a single file (a write would ripple back
+through the mirror as a change), carries a new local file origin lacks (an uncommitted
+session asset stays untracked, as a pull would leave it), and refuses only on paths that
+genuinely differ, naming each one. Never substitute `git stash` for it: a stash deletes
+the untracked files for a moment, and the mirror propagates that delete to every other
+machine. (`incidents.md` → "The clone the mirror had already updated".)
+
 Another machine may have landed since this one last synced; that is routine. If the pull
-conflicts, resolve it WITH the operator before anything else — a session must not
-proceed on a diverged clone. Note what came in: `git log ORIG_HEAD..HEAD --oneline`.
+refuses, resolve the named paths WITH the operator before anything else — a session must
+not proceed on a diverged clone. Note what came in: `git log ORIG_HEAD..HEAD --oneline`
+(the script sets `ORIG_HEAD` as a pull would).
 
 **Then check for unlanded branches from this machine:**
 

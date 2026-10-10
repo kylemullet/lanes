@@ -286,8 +286,14 @@ OK** — `push_guard.py --ok-free --push` decides it mechanically (`git.ok_free_
 the main branch, the standing docs included, still waits for the OK. Code lands from its branch, and only from a
 certifying machine (step 5).
 
-**Always `git pull --rebase` immediately before landing** — another machine may have
-landed mid-session. Per-issue files rarely conflict; the generated views cannot (they are
+**Always pull immediately before landing** — another machine may have landed mid-session:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py      # in the main checkout; the sync startup runs
+```
+
+It reconciles files a file-sync mirror has already delivered instead of refusing on them
+(LANES-38). Per-issue files rarely conflict; the generated views cannot (they are
 gitignored). For a shared standing-context doc, each author is authoritative for their
 own edits; merge both.
 

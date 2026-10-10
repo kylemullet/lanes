@@ -135,7 +135,17 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # view
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit | --push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short> [--push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free [--push] [--add <paths> -m "<subject>"]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py [--ff-only] [--dry-run]           # sync the main branch; reconciles a mirror-delivered tree
 ```
+
+`lanes_pull.py` is the pull every skill runs on the main branch (LANES-38). A directory that is both
+git-tracked and mirrored by a file-sync client receives a landing's bytes before the next pull, so the
+other machines see modified and untracked files identical to origin and `git pull --rebase` refuses on
+them. The script compares each dirty path to `origin/<main>` by blob hash: identical ones are reconciled
+without a write (the branch ref moves and only the index resets, so the mirror sees no change), a new
+local file origin lacks stays untracked, and only a path that genuinely differs refuses, by name. Local
+commits are rebased in a throwaway worktree first (`--ff-only` refuses them instead); `ORIG_HEAD` is set
+as a pull would. Exit 0 synced or up to date · 1 refused, nothing moved.
 
 **The view is a bookmark, not a server** (LANES-11). `index.html` always lives in the main clone and
 renders the main clone's files, whichever checkout runs the script, so `file://<main clone>/<backlog.dir>/index.html`
@@ -285,7 +295,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md, claim.md, new.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md

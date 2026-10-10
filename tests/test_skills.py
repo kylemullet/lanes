@@ -174,3 +174,15 @@ def test_startup_proposals_keep_the_invariants():
     assert "Then STOP and wait." in text
     assert "Autonomous was retired" in text                           # and its rubric went with it
     assert "acceptance criteria a test can check" not in text
+
+
+def test_every_main_branch_pull_runs_through_the_pull_script():
+    """LANES-38: a bare `git pull` refused on a tree a file-sync mirror had already updated,
+    and the session could not clear it. The script reconciles; the skills must run it."""
+    for name in SKILLS:
+        text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        assert 'scripts/lanes.sh" lanes_pull.py' in text, name
+        assert not re.search(r"^git pull", text, re.M), f"{name}: a bare `git pull` as a command"
+    assert "lanes_pull.py --ff-only" in (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    assert "never substitute `git stash`" in _startup().lower()
+    assert (ROOT / "scripts" / "lanes_pull.py").is_file()

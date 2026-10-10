@@ -125,8 +125,10 @@ around a refusal: a refusal means the work is in the wrong place. Move it to the
 
 Work happens in the MAIN checkout before the worktree exists:
 
-1. `git pull --ff-only` on the main branch. If it won't fast-forward, stop and surface —
-   someone left local commits on the main branch.
+1. `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py --ff-only` on the main branch
+   (a `git pull --ff-only` that first reconciles files a file-sync mirror has already
+   delivered, LANES-38). If it won't fast-forward, stop and surface — someone left local
+   commits on the main branch.
 
    **Then obtain the BASELINE for that tip:** the collected test counts (passed / failed
    / skipped) at this exact commit, which step 4 compares against so the lane can tell its
@@ -538,8 +540,9 @@ step fails the push gate.
    Lost one anyway? `git fsck --unreachable --no-reflogs` lists the dangling commits;
    `git log --no-walk <sha>…` and a subject grep find the lane's, and a new branch on it
    restores it (`incidents.md` → "The clean-up that ran after a failed landing").
-3. Optionally `git pull --ff-only` the main checkout so it is not left stale (skip if
-   another session is active in it — theirs pulls at startup).
+3. Optionally `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py --ff-only` in the
+   main checkout so it is not left stale (skip if another session is active in it — theirs
+   pulls at startup).
 
 **Housekeeping that needs no OK is done and reported, never offered.** The post-landing
 close, the branch push, the claim pushes: run them, then say what they did. Asking
