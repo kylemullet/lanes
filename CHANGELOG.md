@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.36 — one marker, one reading (2026-10-10)
+
+- **The view reads a claim header with a parenthesis in it** (LANES-37). `backlog_index.py`'s
+  `MARKER_RE` closed the header at the first `)`, so a hand-written
+  `(…, worktree readlines-lanes-36 + lanes-lanes-36 (lanes repo, off origin/next), branch …)` left it
+  with no kind and the view rendered a live lane as `not started · claim time unreadable · UNKNOWN`,
+  while `lanes_doctor.py`, which anchors on the date and reads the kind from the bold span, read the
+  same marker as `ACTIVE LANE 9 min ago`. The header is now read up to the `) — **<kind>` that
+  closes it.
+- **A marker the view cannot read fails `--check`** (`unreadable_markers`). `orphaned_claims` only
+  asked whether a marker was present; a present one that `parse_marker` rejects passed the gate
+  while the view showed UNKNOWN. The view is the operator's whole picture of the lanes, so a
+  marker no reader can parse is a failure, and the doctor's claim line says so too (`… by this
+  reader, but the view cannot read the marker`) instead of reporting a lane the view does not show.
+
 ## 0.4.35 — one four-mode menu: Critical, Deep Dive, Housekeeping, Ops (2026-10-10)
 
 - **One menu for every operator** (LANES-36). `session-startup` step 8 asks four options in a

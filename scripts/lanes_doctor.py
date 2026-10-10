@@ -50,6 +50,7 @@ import lanes_config as lc              # noqa: E402
 import guard_commit as gc              # noqa: E402
 import view_hooks as vh                # noqa: E402
 import release_tag as rt               # noqa: E402
+import backlog_index as bidx          # noqa: E402  (its parse_marker: the view's read, LANES-37)
 
 OK, WARN, FAIL, SKIP = "OK", "WARN", "FAIL", "SKIP"
 
@@ -276,6 +277,14 @@ def classify_claim(issue_id: str, text: str, now: datetime, root: Path, worktree
         # the floor it passed as "live by rule" and surfaced only at minute 15 (LANES-19).
         return Check(WARN, f"claim {issue_id}", f"marker ({age_txt}) has no PENDING / RESERVED / ACTIVE "
                                                 "kind opening its bold span; ask the owner")
+    if bidx.parse_marker(body) is None:
+        # The doctor anchors on the date and reads the kind from the bold span, so it can
+        # classify a marker the view's single regex cannot close -- which is how one marker
+        # read `ACTIVE LANE 9 min ago` here and `UNKNOWN` in the view (LANES-37). `--check`
+        # fails it; this line says why before the operator goes looking.
+        return Check(WARN, f"claim {issue_id}", f"{kind} ({age_txt}) by this reader, but the view cannot read "
+                                                "the marker (backlog --check fails it) — rewrite it to the "
+                                                "canonical shape; ask the owner")
     floor = timedelta(minutes=lc.CLAIM_AGE_FLOOR_MINUTES)
     if hhmm and age < floor:
         return Check(OK, f"claim {issue_id}", f"{kind} {age_txt} ago — younger than the "

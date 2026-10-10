@@ -289,6 +289,29 @@ def test_a_kind_less_marker_warns_at_any_age(repo, minutes):
     assert c.status == ld.WARN and "no PENDING / RESERVED / ACTIVE kind" in c.detail
 
 
+def test_a_nested_parenthesis_marker_is_read_alike_by_the_doctor_and_the_view(repo):
+    """LANES-37: one string, one reading."""
+    import backlog_index as bidx
+    mk = (f"⏳ IN-PROGRESS ({stamp(3)}, T's session on t-box@host, worktree proj-core-7 + lanes-core-7 "
+          "(lanes repo, off origin/next), branch core-7-work) — **ACTIVE LANE.** Expected files: x")
+    write_issue(repo, "docs/backlog", "CORE", "CORE-7", "in-progress", mk)
+    c = _claims(repo)["claim CORE-7"]
+    assert c.status == ld.OK and c.detail.startswith("ACTIVE LANE")
+    assert bidx.parse_marker(mk)["state"] == "active"
+
+
+def test_a_marker_the_view_cannot_read_warns_even_when_the_doctor_can_classify_it(repo):
+    """The doctor's lenient kind read must not report a lane the view does not show."""
+    write_issue(repo, "docs/backlog", "CORE", "CORE-8", "in-progress",
+                f"⏳ IN-PROGRESS ({stamp(3)}, T's session) — **ACTIVE LANE, readlines leg.** x — see [[CORE-1]]")
+    c = _claims(repo)["claim CORE-8"]
+    assert c.status == ld.OK, "sanity: this paraphrase IS readable by both"
+    write_issue(repo, "docs/backlog", "CORE", "CORE-9", "in-progress",
+                f"⏳ IN-PROGRESS ({stamp(3)}, T's session) **ACTIVE LANE.** no dash between header and kind")
+    c = _claims(repo)["claim CORE-9"]
+    assert c.status == ld.WARN and "the view cannot read the marker" in c.detail
+
+
 # --- every install scope, not one (LANES-25) -------------------------------------------
 
 def _installs(plugins, rows):

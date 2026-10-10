@@ -194,7 +194,7 @@ One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontm
 `closed`, `commit`, `resolution`, `links`, optional `epic`, and `lane` while claimed) and three H2 sections: Context,
 Current status, Resolution. `--check` is the integrity gate: duplicate or misnamed IDs,
 out-of-vocabulary values, a `status: in-progress` without its body claim marker (or the
-reverse), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
+reverse) or with one the view cannot read (LANES-37), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
 issue whose Resolution does not cite a commit subject on HEAD, a `verified` issue whose change
 reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, an epic with `status: in-progress`, a
 `resolution:` that disagrees with the status, and a lane problem: a `lane:` on an open, blocked

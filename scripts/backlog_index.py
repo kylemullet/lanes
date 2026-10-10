@@ -251,9 +251,14 @@ def load_issues():
 # old lead and a new reservation behind it still land in one lane:
 #   ⏳ IN-PROGRESS (<YYYY-MM-DD HH:MM>, <who>'s session[ on <machine>][, worktree <w>, branch <b>])
 #      — **ACTIVE LANE.** | **WORKTREE PENDING.** | **RESERVED, NOT STARTED.** … queued behind <ID>
-# A marker this cannot read still yields a lane of one, never a dropped issue.
+# A marker this cannot read still yields a lane of one, never a dropped issue --
+# and fails `--check` (unreadable_markers), since the view is the operator's only
+# picture of the lanes. The header is read up to the `) — **<kind>` that closes
+# it, not up to the first `)`: a parenthesis inside it (`worktree a + b (lanes
+# repo, off origin/next)`) made the view read a live lane as UNKNOWN while the
+# doctor, which anchors on the date, read it fine (LANES-37).
 
-MARKER_RE = re.compile(r"⏳ IN-PROGRESS \(([^)]*)\)\s*[—–-]+\s*\*\*\s*"
+MARKER_RE = re.compile(r"⏳ IN-PROGRESS \((.*?)\)\s*[—–-]+\s*\*\*\s*"
                        r"(ACTIVE LANE|WORKTREE PENDING|RESERVED, NOT STARTED)")
 MARKER_STATES = {"ACTIVE LANE": "active", "WORKTREE PENDING": "pending",
                  "RESERVED, NOT STARTED": "reserved"}
@@ -490,6 +495,29 @@ def orphaned_claims(issues):
         if has_marker != claimed:
             out.append(f"{it['_path']}: status={it.get('status')!r} but body marker "
                        f"{'present' if has_marker else 'absent'} — claim and marker must agree")
+    return out
+
+
+def unreadable_markers(issues):
+    """Claimed issues whose body carries an IN-PROGRESS marker the view cannot
+    parse (LANES-37). `orphaned_claims` only asks whether a marker is PRESENT;
+    a present marker that `parse_marker` rejects -- no kind opening its bold
+    span, a header the regex cannot close -- rendered the lane as
+    `not started · claim time unreadable · UNKNOWN` while the doctor read it as
+    live, and `--check` passed it. A marker no reader can parse is a failure,
+    because the view is the operator's whole picture of the lanes."""
+    out = []
+    for it in issues:
+        if it.get("status") != "in-progress" or it.get("id") in CLAIM_MARKER_EXEMPT:
+            continue
+        if it.get("_marker") is not None:
+            continue
+        if IN_PROGRESS_MARKER not in (ROOT / it["_path"]).read_text(encoding="utf-8"):
+            continue  # orphaned_claims reports the missing marker
+        out.append(f"{it['_path']}: the ⏳ IN-PROGRESS marker is not readable by the view — expected "
+                   "`⏳ IN-PROGRESS (<YYYY-MM-DD HH:MM>, <who>'s session…) — **ACTIVE LANE.** | "
+                   "**WORKTREE PENDING.** | **RESERVED, NOT STARTED.** …`; rewrite it to that shape "
+                   "(lanes_claim.py writes it; never by hand)")
     return out
 
 
@@ -960,8 +988,8 @@ def undocumented_verified(issues, subjects=None, dirty=None, touched=None):
 
 def check_problems(issues, problems):
     """Everything --check and the test suite assert, as one list of strings."""
-    return (list(problems) + orphaned_claims(issues) + orphaned_commit_citations(issues)
-            + unresolvable_verified(issues) + undocumented_verified(issues)
+    return (list(problems) + orphaned_claims(issues) + unreadable_markers(issues)
+            + orphaned_commit_citations(issues) + unresolvable_verified(issues) + undocumented_verified(issues)
             + dangling_epics(issues) + epic_claim_problems(issues) + resolution_problems(issues)
             + lane_problems(issues))
 

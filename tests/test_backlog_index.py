@@ -352,6 +352,36 @@ def test_parse_marker_reads_every_field_the_skills_write():
     assert bidx.parse_marker("no marker here") is None
 
 
+NESTED_MK = ("⏳ IN-PROGRESS (2026-10-10 09:55, Kyle's session on kyle-mac@Air, worktree readlines-lanes-36 "
+             "+ lanes-lanes-36 (lanes repo, off origin/next), branch lanes-36-work) — **ACTIVE LANE.** Expected files: x")
+KINDLESS_MK = "⏳ IN-PROGRESS (2026-10-10 09:55, Kyle's session on kyle-mac@Air) — **ACTIVE, readlines leg.** x"
+
+
+def test_parse_marker_reads_a_header_with_a_parenthesis_inside_it():
+    """LANES-37: the header closes at `) — **<kind>`, not at the first `)`. The doctor read this
+    marker as a live lane; the view rendered UNKNOWN."""
+    mk = bidx.parse_marker(NESTED_MK)
+    assert mk["state"] == "active" and mk["claimed"] == "2026-10-10 09:55"
+    assert mk["worktree"] == "readlines-lanes-36 + lanes-lanes-36 (lanes repo"
+    assert mk["branch"] == "lanes-36-work" and mk["machine"] == "kyle-mac@Air"
+    assert bidx.parse_marker(KINDLESS_MK) is None, "no kind opening the bold span is still unreadable"
+
+
+def test_check_fails_a_claim_marker_the_view_cannot_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "BACKLOG", tmp_path / "docs" / "backlog")
+    put(tmp_path, "UI-1", status="in-progress", status_body=KINDLESS_MK)
+    put(tmp_path, "UI-2", status="in-progress", status_body=NESTED_MK)
+    put(tmp_path, "UI-3", status="in-progress", status_body=ACTIVE_MK)
+    issues, problems = bidx.load_issues()
+    assert bidx.orphaned_claims(issues) == [], "the marker is PRESENT — that rule is not the one that fires"
+    bad = bidx.unreadable_markers(issues)
+    assert len(bad) == 1 and "UI-1" in bad[0] and "not readable by the view" in bad[0]
+    assert any("UI-1" in p for p in bidx.check_problems(issues, problems))
+    monkeypatch.setattr(bidx, "CLAIM_MARKER_EXEMPT", {"UI-1"})
+    assert bidx.unreadable_markers(issues) == [], "the configured exemption applies here as to orphaned_claims"
+
+
 def test_load_issues_parses_the_marker_only_on_claimed_issues(tmp_path, monkeypatch):
     monkeypatch.setattr(bidx, "ROOT", tmp_path)
     monkeypatch.setattr(bidx, "BACKLOG", tmp_path / "docs" / "backlog")
