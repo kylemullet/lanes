@@ -10,7 +10,7 @@ if str(SCRIPTS) not in sys.path:
 
 
 def git(*args, cwd):
-    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8").stdout.strip()
 
 
 @pytest.fixture(autouse=True)

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.38 — the suite runs green on Windows (2026-10-10)
+
+- **21 Windows reds at 0.4.36, none of them the protocol** (LANES-39). The suite had only ever
+  run on macOS; the first run on a Windows machine failed 21 of 395. Four causes, three of
+  them in the tests: `tests/conftest.py`'s `git()` and two calls in `test_guard_commit.py`
+  ran `subprocess` with `text=True` and no `encoding`, so git output carrying an em dash (a
+  commit subject, an issue title) decoded as cp1252 and the reader thread died
+  (`UnicodeDecodeError … byte 0x8f`, surfacing as `AttributeError: 'NoneType' … strip`) —
+  that alone was 11 of the 21; `test_backlog_index` filtered `resolution_problems()` paths
+  with a `/` pattern that never matches a Windows path. One was real: **`lanes_land.py` exits 2
+  on Windows after every landing** because its own process was launched from inside the
+  worktree it then removes — the `git worktree remove` subprocess ran with the main clone as
+  cwd, but Windows refuses to delete any process's current directory, so the clean-up failed
+  with `Permission denied` after the landing had already happened. It now `os.chdir`s to the
+  main clone first. One more decode fixed in passing: the view header's git helper in
+  `backlog_index.py` had no `encoding`, so a tip commit with an em dash would have crashed the
+  view on Windows. Every `text=True` subprocess call in `scripts/` and `tests/` now names
+  `utf-8`.
+
 ## 0.4.37 — the pull reads a mirror-delivered tree before refusing (2026-10-10)
 
 - **`lanes_pull.py` replaces the bare `git pull` in every skill** (LANES-38). A directory that is

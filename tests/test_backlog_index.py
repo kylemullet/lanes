@@ -1053,7 +1053,7 @@ def test_resolution_rules_follow_status_commit_and_cutover(monkeypatch):
         _issue("UI-7", status="closed", closed="2026-09-27", resolution="done", commit="abc1234"),
         _issue("UI-8", status="closed", closed=None, resolution=None),
     ]
-    hits = lambda out, iid: [p for p in out if f"/{iid}-x.md" in p]
+    hits = lambda out, iid: [p for p in out if f"/{iid}-x.md" in p.replace("\\", "/")]   # OS-native separators on Windows
     # default: always required
     out = bidx.resolution_problems(issues)
     assert len(hits(out, "UI-1")) == 1 and "open issue" in hits(out, "UI-1")[0]

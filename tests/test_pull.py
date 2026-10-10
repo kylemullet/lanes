@@ -69,7 +69,7 @@ def status(repo):
     """Dirty paths; read raw, since the first porcelain row starts with a significant space."""
     import subprocess
     out = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo,
-                         check=True, capture_output=True, text=True).stdout
+                         check=True, capture_output=True, text=True, encoding="utf-8").stdout
     return sorted(line[3:] for line in out.splitlines() if line)
 
 

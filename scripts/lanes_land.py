@@ -55,7 +55,7 @@ close did not complete (the startup backfill is the backstop).
 
 The operator's OK is the skill's gate, not this script's: run it after the OK.
 """
-import argparse, subprocess, sys, time, tomllib
+import argparse, os, subprocess, sys, time, tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -259,6 +259,11 @@ def main(argv=None):
         print(f"NOT LANDED — {reason}. Nothing was removed or deleted.", file=sys.stderr)
         return NOT_LANDED
     print(f"landed: {p['branch']} @ {short} is on {p['upstream']}")
+    # Step out of the worktree before removing it. Windows refuses to delete a directory
+    # that is any process's current directory, and this process was launched from inside
+    # the lane (LANES-39): with cwd still there, `git worktree remove` fails with
+    # "Permission denied" after the landing has already happened, every time.
+    os.chdir(p["main_clone"])
     status = 0
     if args.keep:
         print("kept: the worktree and the branch (--keep)")

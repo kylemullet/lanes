@@ -85,7 +85,7 @@ def _commit(cwd, *paths, verify=True, msg="m"):
         f.write_text(f"{p} {f.stat().st_mtime_ns if f.exists() else 0}\n", encoding="utf-8")
     subprocess.run(["git", "add", *paths], cwd=cwd, check=True, capture_output=True)
     args = ["git", "commit", "-q", "-m", msg] + ([] if verify else ["--no-verify"])
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
 
 @needs_git
@@ -127,7 +127,7 @@ def test_commit_during_a_rebase_on_main_is_judged_as_main(repo, tmp_path):
     (repo / "docs" / "c.md").write_text("main\n", encoding="utf-8")
     git("add", "docs/c.md", cwd=repo)
     git("commit", "-q", "-m", "main", cwd=repo)
-    stopped = subprocess.run(["git", "rebase", "side"], cwd=repo, capture_output=True, text=True)
+    stopped = subprocess.run(["git", "rebase", "side"], cwd=repo, capture_output=True, text=True, encoding="utf-8")
     assert stopped.returncode != 0, "the rebase must stop on the conflict for this test to mean anything"
     w = gc.where(str(repo))
     assert w.branch == "main"

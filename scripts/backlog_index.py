@@ -2036,7 +2036,7 @@ def clone_position():
     """
     def git(*args):
         return subprocess.run(["git", "-C", str(ROOT), *args],
-                              capture_output=True, text=True, check=True).stdout.strip()
+                              capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
     try:
         head = git("rev-parse", "--short", "HEAD")
         behind = git("rev-list", "--count", f"HEAD..origin/{MAIN_BRANCH}")
