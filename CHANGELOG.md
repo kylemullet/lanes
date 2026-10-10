@@ -3,7 +3,7 @@
 ## 0.4.35 — one four-mode menu: Critical, Deep Dive, Housekeeping, Ops (2026-10-10)
 
 - **One menu for every operator** (LANES-36). `session-startup` step 8 asks four options in a
-  fixed order — **Critical** (urgent issues and blockers), **Deep Dive** (a single-context slice,
+  fixed order — **Critical** (urgent issues and blockers), **Deep Dive** (a single-context issue slice,
   project, or epic; research or spike), **Housekeeping** (issue-clearing, audits, and quick wins),
   **Ops** (decisions, accounts, and outreach) — and the line under each option is quoted from the
   skill's table verbatim, so the menu the operator sees and the rule the session follows cannot

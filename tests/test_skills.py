@@ -143,7 +143,7 @@ def test_startup_asks_the_mode_with_one_four_option_menu_and_no_fixed_blocks():
     text = _startup()
     menu = [
         ("Critical", "Urgent issues and blockers"),
-        ("Deep Dive", "A single-context slice, project, or epic. Research or spike."),
+        ("Deep Dive", "A single-context issue slice, project, or epic. Research or spike."),
         ("Housekeeping", "Issue-clearing, audits, and quick wins"),
         ("Ops", "Decisions, accounts, and outreach"),
     ]

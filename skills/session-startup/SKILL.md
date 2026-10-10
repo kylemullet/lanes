@@ -359,7 +359,7 @@ and the rule the session follows are the same words, so they cannot drift.
 | Option | Line under it |
 | :-- | :-- |
 | **Critical** | Urgent issues and blockers |
-| **Deep Dive** | A single-context slice, project, or epic. Research or spike. |
+| **Deep Dive** | A single-context issue slice, project, or epic. Research or spike. |
 | **Housekeeping** | Issue-clearing, audits, and quick wins |
 | **Ops** | Decisions, accounts, and outreach |
 
