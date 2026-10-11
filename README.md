@@ -82,7 +82,10 @@ launcher takes the first of `$LANES_PYTHON`, `python3`, `python` and `py` that p
 Python 3.11+, and exits 2 when none does. That matters on Windows, where `python3` can be the Microsoft
 Store alias: it exits 49, and a `PreToolUse` hook that exits anything but 2 lets the write through, so a
 guard that cannot find Python would otherwise fail open. Set `LANES_PYTHON` to pin the interpreter on a
-machine; it is per machine, so it is an environment variable and not a config key.
+machine; it is per machine, so it is an environment variable and not a config key. The guards hold the same
+line one layer down: when git itself cannot run from the hook's PATH, or fails for any reason other than
+"not a git repository", the position guard answers `BLOCK` and the commit guard refuses the commit, each
+naming the cause — a guard that cannot ask git never waves a write through (LANES-42).
 
 ## Commands
 

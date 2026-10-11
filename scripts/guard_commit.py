@@ -71,13 +71,27 @@ LAUNCHER = Path(__file__).resolve().parent / "lanes.sh"
 SHOWN = 8   # staged paths named in a refusal before "and N more"
 
 
-def _git(args, cwd) -> Optional[str]:
+def _git(args, cwd, *, position=False) -> Optional[str]:
+    """stdout of `git <args>`, or None when git answered non-zero.
+
+    Raises gp.GitUnavailable when git could not run at all -- not on the hook's
+    PATH, not executable, hung (LANES-42): the hook's PATH can lack git even though
+    git is what invoked the hook (LANES-32), and None here used to read as "not a
+    repository" and ALLOW. With `position=True` (the rev-parse calls that place the
+    commit) a non-zero exit is also a refusal unless git said "not a git repository";
+    without it a non-zero exit is an ordinary answer (`git config --get` of an unset
+    key exits 1)."""
     try:
         done = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=15)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise gp.GitUnavailable(f"`git {' '.join(args)}` could not run: {exc}") from exc
+    if done.returncode == 0:
+        return done.stdout.rstrip("\n")
+    if not position or gp.NOT_A_REPO in done.stderr:
         return None
-    return done.stdout.rstrip("\n") if done.returncode == 0 else None
+    raise gp.GitUnavailable(f"`git {' '.join(args)}` exited {done.returncode}: "
+                            f"{done.stderr.strip() or '(no message)'}")
 
 
 # ------------------------------------------------------------------ position
@@ -102,12 +116,12 @@ def _branch_being_rebased(git_dir: str) -> Optional[str]:
 
 
 def where(cwd: str) -> Optional[Where]:
-    toplevel = _git(["rev-parse", "--show-toplevel"], cwd)
+    toplevel = _git(["rev-parse", "--show-toplevel"], cwd, position=True)
     if not toplevel:
         return None
-    common = _git(["rev-parse", "--git-common-dir"], toplevel)
-    git_dir = _git(["rev-parse", "--absolute-git-dir"], toplevel)
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], toplevel)
+    common = _git(["rev-parse", "--git-common-dir"], toplevel, position=True)
+    git_dir = _git(["rev-parse", "--absolute-git-dir"], toplevel, position=True)
+    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], toplevel, position=True)
     if common is None or git_dir is None or branch is None:
         return None
     main_clone = os.path.dirname(os.path.realpath(os.path.join(toplevel, common)))
@@ -170,7 +184,13 @@ def decide(staged: list, w: Where, rules: gp.Rules) -> tuple[int, str]:
 
 
 def evaluate(cwd: str) -> tuple[int, str]:
-    w = where(cwd)
+    try:
+        w = where(cwd)
+    except gp.GitUnavailable as exc:
+        return BLOCK, (f"lanes commit guard: it cannot ask git where this commit would land ({exc}). "
+                       f"A guard that cannot run git refuses rather than waving the commit through "
+                       f"(LANES-42). The hook runs with its own PATH, which can differ from the "
+                       f"shell's (LANES-32): put git on it, or fix what git reported, then commit again.")
     if w is None:
         return ALLOW, "lanes commit guard: cannot read the repository's position; not checking"
     if not enabled(w.main_clone):
@@ -279,7 +299,11 @@ def main(argv=None) -> int:
             print(why, file=sys.stderr)
         return code
 
-    w = where(cwd)
+    try:
+        w = where(cwd)
+    except gp.GitUnavailable as exc:
+        print(f"commit guard: cannot run git ({exc})", file=sys.stderr)
+        return 1
     if w is None:
         print("commit guard: not inside a git repository", file=sys.stderr)
         return 1

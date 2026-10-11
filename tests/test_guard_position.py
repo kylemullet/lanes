@@ -370,3 +370,57 @@ def test_script_is_stdlib_only_apart_from_the_plugins_own_modules():
             mods.add(n.module.split(".")[0])
     assert mods <= {"__future__", "fnmatch", "json", "os", "subprocess", "sys", "dataclasses",
                     "pathlib", "typing", "_console", "lanes_config"}, mods
+
+
+# --- git itself cannot run (LANES-42) ------------------------------------------
+
+def _no_seams():
+    """Every fake-environment seam blank: the real git path."""
+    return {k: "" for k in (gp.ENV_TOPLEVEL, gp.ENV_MAIN_CLONE, gp.ENV_BRANCH, gp.ENV_IGNORED,
+                            gp.ENV_PROJECT_MAIN_CLONE, gp.ENV_MAIN_BRANCH, gp.ENV_MAIN_DIRECT)}
+
+
+def test_a_path_without_git_refuses(tmp_path, monkeypatch):
+    """A hook's PATH can lack git (LANES-32). The guard must not read that as "no
+    repository here" and allow -- the launcher exits 2 for a Python it cannot run,
+    and the guard refuses the same way one layer down."""
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    code, why = gp.evaluate(_payload(tmp_path / "modules" / "x.py"), env=_no_seams())
+    assert code == gp.BLOCK
+    assert "cannot ask git" in why and "could not run" in why and "LANES-42" in why
+
+
+def test_a_git_that_fails_for_another_reason_refuses(tmp_path, monkeypatch):
+    """`fatal: detected dubious ownership …`, a hung or broken git: non-zero, but not
+    "not a git repository", so not an allow."""
+    def fake_run(cmd, **kw):
+        return subprocess.CompletedProcess(
+            cmd, 128, stdout="", stderr="fatal: detected dubious ownership in repository at 'x'")
+    monkeypatch.setattr(gp.subprocess, "run", fake_run)
+    code, why = gp.evaluate(_payload(tmp_path / "modules" / "x.py"), env=_no_seams())
+    assert code == gp.BLOCK
+    assert "exited 128" in why and "dubious ownership" in why
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+def test_not_a_repository_still_passes(tmp_path):
+    """The one non-zero git answer that means "not this guard's business"."""
+    code, why = gp.evaluate(_payload(tmp_path / "modules" / "x.py"), env=_no_seams())
+    assert code == gp.ALLOW and "no git repository" in why
+
+
+def test_explain_reports_a_git_that_cannot_run(tmp_path):
+    """The dry run says BLOCK and why, exit 2, like the hook."""
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    e = dict(os.environ, **_no_seams())
+    e["PATH"] = str(empty)
+    e.pop("PYTHONWARNINGS", None)
+    done = subprocess.run(
+        [sys.executable, str(SCRIPT), "--explain", str(tmp_path / "modules" / "x.py")],
+        capture_output=True, text=True, encoding="utf-8", env=e, cwd=str(REPO),
+    )
+    assert done.returncode == gp.BLOCK
+    assert done.stdout.startswith("BLOCK: ") and "cannot ask git" in done.stdout

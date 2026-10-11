@@ -101,6 +101,13 @@ EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 PATH_KEYS = ("file_path", "notebook_path")
 
 ALLOW, BLOCK = 0, 2
+NOT_A_REPO = "not a git repository"
+
+
+class GitUnavailable(Exception):
+    """git could not be asked (LANES-42): not on the hook's PATH, not executable,
+    hung, or failed for a reason other than "not a git repository". A guard that
+    cannot ask git refuses; it never waves the write through."""
 
 ENV_TOPLEVEL = "LANES_GUARD_TOPLEVEL"
 ENV_MAIN_CLONE = "LANES_GUARD_MAIN_CLONE"
@@ -200,16 +207,28 @@ def target_path(tool_input: dict) -> Optional[str]:
 
 
 def _git(args, cwd) -> Optional[str]:
+    """stdout of `git <args>`; None when git says `cwd` is not inside a repository.
+
+    Raises GitUnavailable when git could not run at all, or failed for any other
+    reason. None used to cover every failure, and decide() read it as "no repo
+    here" and ALLOWED -- so a hook whose PATH had no git (LANES-32: it can differ
+    from the interactive shell's) waved through a code write in the main clone on
+    `main`, the one write this guard exists to refuse (LANES-42). The launcher
+    already exits 2 for a Python it cannot run; the guard now does the same one
+    layer down."""
     try:
         done = subprocess.run(
             ["git", *args], cwd=cwd, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=10,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise GitUnavailable(f"`git {' '.join(args)}` could not run: {exc}") from exc
+    if done.returncode == 0:
+        return done.stdout.strip()
+    if NOT_A_REPO in done.stderr:
         return None
-    if done.returncode != 0:
-        return None
-    return done.stdout.strip()
+    raise GitUnavailable(f"`git {' '.join(args)}` exited {done.returncode}: "
+                         f"{done.stderr.strip() or '(no message)'}")
 
 
 def _nearest_existing_dir(path: str) -> str:
@@ -344,10 +363,20 @@ def evaluate(payload: dict, env=None) -> tuple[int, str]:
     path = target_path(tool_input) if isinstance(tool_input, dict) else None
     if not path:
         return ALLOW, "no target path in tool_input"
-    pos = position_of(path, env)
+    try:
+        pos = position_of(path, env)
+        foreign = pos is not None and is_foreign(pos, env)
+    except GitUnavailable as exc:
+        return BLOCK, (
+            f"Blocked by the lanes position guard: it cannot ask git where `{path}` would land "
+            f"({exc}). A guard that cannot run git refuses rather than waving the write through "
+            f"(LANES-42), as the launcher does for a Python it cannot run. The hook runs with its "
+            f"own PATH, which can differ from the shell's (LANES-32): put git on it, or fix what "
+            f"git reported, then retry the edit."
+        )
     if pos is None:
         return ALLOW, "no git repository visible from the target; not this guard's business"
-    if is_foreign(pos, env):
+    if foreign:
         return ALLOW, f"foreign repository ({pos.main_clone}); not this guard's business"
     rel = relative_to_toplevel(path, pos.toplevel)
     if rel is None:

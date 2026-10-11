@@ -208,3 +208,40 @@ def test_doctor_reports_the_shim(repo):
     assert "guard_commit.py --install" in doc.check_commit_guard(repo).detail
     gc.install(str(repo))
     assert doc.check_commit_guard(repo).status == doc.OK
+
+
+# --- git itself cannot run (LANES-42) -----------------------------------------------
+
+def test_a_path_without_git_refuses_the_commit(tmp_path, monkeypatch):
+    """git invoked the hook, but the hook's PATH can still lack git (LANES-32). The
+    guard must not read that as "not a repository" and allow."""
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    code, why = gc.evaluate(str(tmp_path))
+    assert code == gc.BLOCK
+    assert "cannot ask git" in why and "could not run" in why and "LANES-42" in why
+
+
+def test_a_git_that_fails_for_another_reason_refuses_the_commit(tmp_path, monkeypatch):
+    def fake_run(cmd, **kw):
+        return subprocess.CompletedProcess(
+            cmd, 128, stdout="", stderr="fatal: detected dubious ownership in repository at 'x'")
+    monkeypatch.setattr(gc.subprocess, "run", fake_run)
+    code, why = gc.evaluate(str(tmp_path))
+    assert code == gc.BLOCK and "exited 128" in why and "dubious ownership" in why
+
+
+@needs_git
+def test_outside_any_repository_is_still_not_checked(tmp_path):
+    """The one non-zero git answer that keeps the old allow: not a repository."""
+    code, why = gc.evaluate(str(tmp_path))
+    assert code == gc.ALLOW and "not checking" in why
+
+
+def test_install_and_status_report_a_git_that_cannot_run(tmp_path, monkeypatch, capsys):
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    assert gc.main(["--status", "--root", str(tmp_path)]) == 1
+    assert "cannot run git" in capsys.readouterr().err

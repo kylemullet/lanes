@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.40 — a guard that cannot ask git refuses (2026-10-10)
+
+- **`guard_position.py` and `guard_commit.py` fail closed when git itself cannot run** (LANES-42).
+  Both guards' git helper returned `None` for "git is not on PATH / not executable / hung" exactly
+  as for "not a git repository", and the caller read `None` as "no repo here" and ALLOWED — so a
+  hook whose PATH had no git (the hook's PATH can differ from the interactive shell's, LANES-32)
+  waved through a code write in the main clone on `main`, the one write the guard exists to
+  refuse; LANES-18's probe on a Windows machine with no git on PATH answered `ALLOW: no git
+  repository visible from the target`. The launcher was fixed for the same shape in LANES-17 (a
+  Python it cannot run exits 2); the guards now do the same one layer down: git that cannot run
+  raises `GitUnavailable`, the position guard answers `BLOCK` (exit 2) and the commit guard refuses
+  the commit, each naming the cause and the `--explain` form. For the position queries (the
+  `rev-parse` calls) a non-zero exit is also a refusal unless git said "not a git repository" —
+  `fatal: detected dubious ownership` is not "no repo". An ordinary non-zero answer elsewhere
+  (`git config --get` of an unset key) is unchanged. `--install` and `--status` report a git they
+  cannot run and exit 1. Tests: a PATH without git, a git that exits 128 for another reason, and
+  the one answer that still passes ("not a git repository"), for both guards and for `--explain`.
+
 ## 0.4.39 — a landing on Windows runs from the main clone (2026-10-10)
 
 - **`lanes_land.py --path <worktree>`, and on Windows a refusal from inside the lane** (LANES-44).
