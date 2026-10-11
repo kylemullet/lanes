@@ -269,7 +269,32 @@ class Pull:
         if residual:
             out(f"pull: {len(residual)} path(s) still differ from HEAD after the sync -- read them: "
                 + ", ".join(residual[:8]) + (" …" if len(residual) > 8 else ""))
+        refresh_view(self.root, out)
         return 0
+
+
+def refresh_view(root: Path, out) -> None:
+    """Regenerate the main clone's bookmarked view after a sync (LANES-40).
+
+    The sync is an `update-ref`, an index reset and a file checkout -- never a merge or
+    a rewrite -- so the view hooks `post-merge` and `post-rewrite` do not fire for it, and
+    `post-checkout` fires only when a path was checked out (a sync the mirror delivered in
+    full checks out nothing). The hooks' promise, a view regenerated after ANY pull
+    (LANES-11), is kept here, by the same call `view_hooks.py --hook` makes. Off when
+    `backlog.view_mode = "serve"` or the repo has no backlog dir; never fails the sync."""
+    try:
+        import view_hooks as vh
+        import backlog_index as bidx
+        if not vh.enabled(str(root)):
+            return
+        bidx.configure(root)
+        if not (root / bidx.BACKLOG_REL).is_dir():
+            return
+        html = bidx.refresh_main_view()
+        if html:
+            out(f"pull: backlog view refreshed ({html})")
+    except Exception as e:                                    # noqa: BLE001 -- a view is never worth a failed sync
+        out(f"pull: backlog view not refreshed ({e})")
 
 
 def main(argv=None):

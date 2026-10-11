@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.42 — the pull regenerates the bookmarked view itself (2026-10-10)
+
+- **`lanes_pull.py` refreshes the main clone's view after every sync** (LANES-40). The sync is an
+  `update-ref`, an index reset and a file checkout — never a merge or a rewrite — so the view hooks
+  `post-merge` and `post-rewrite` never fire for it, and `post-checkout` fires only when a path was
+  checked out: a sync the mirror had delivered in full checks out nothing, and the bookmark kept its
+  pre-sync header. Reproduced on a Mac the same day: after a nine-commit fast-forward the view
+  still read the old tip, and a landed, closed lane was read as active off the bookmark. The pull
+  now makes the same `refresh_main_view` call the hooks make, once the sync has moved the branch,
+  and says so (`pull: backlog view refreshed (…)`); off under `backlog.view_mode = "serve"` and in
+  a repo with no backlog dir; a refresh that fails never fails the sync. Tests: a sync the mirror
+  delivered in full (`0 path(s) checked out`) still re-renders the view with the new tip's stamp.
+
 ## 0.4.41 — the repository is LF everywhere (2026-10-10)
 
 - **`.gitattributes`: `* text=auto eol=lf`, `*.png binary`** (LANES-41). The lanes repo had no

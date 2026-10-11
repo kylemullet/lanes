@@ -12,7 +12,7 @@ import shutil
 import pytest
 
 import lanes_pull as lp
-from conftest import git
+from conftest import git, write_issue
 
 
 def _clone(origin, path):
@@ -235,3 +235,44 @@ def test_refuses_inside_a_rebase(pair, capsys):
     assert lp.main([]) == lp.NOT_SYNCED
     assert "in progress" in capsys.readouterr().err
     subprocess.run(["git", "rebase", "--abort"], cwd=mirror, capture_output=True)
+
+
+# --- the bookmarked view (LANES-40) ----------------------------------------------
+
+VIEWS = "docs/backlog/INDEX.md\ndocs/backlog/index.html\n"
+
+
+def _land_issue(lander, issue_id):
+    write_issue(lander, "docs/backlog", "CORE", issue_id, "open", "x")
+    git("add", "docs/backlog", cwd=lander)
+    git("commit", "-q", "-m", issue_id, cwd=lander)
+    git("push", "-q", "origin", "main", cwd=lander)
+    return f"docs/backlog/CORE/{issue_id}-thing.md"
+
+
+def test_a_sync_regenerates_the_bookmarked_view_even_when_nothing_is_checked_out(pair, capsys):
+    """The sync is no merge and no rewrite, so the view hooks never fire for it; a sync
+    the mirror delivered in full checks out nothing at all. The pull regenerates the
+    main clone's view itself, so the LANES-11 promise holds for this pull too."""
+    origin, lander, mirror = pair
+    land(lander, {".gitignore": VIEWS}, "ignore the views")
+    _land_issue(lander, "CORE-1")
+    assert lp.main([]) == 0                                   # paths checked out
+    view = mirror / "docs" / "backlog" / "index.html"
+    assert ">CORE-1</a>" in view.read_text(encoding="utf-8")
+
+    rel = _land_issue(lander, "CORE-2")
+    deliver(lander, mirror, [rel])                            # the mirror delivered everything
+    assert lp.main([]) == 0
+    out = capsys.readouterr().out
+    assert "0 path(s) checked out" in out and "backlog view refreshed" in out
+    page = view.read_text(encoding="utf-8")
+    assert ">CORE-2</a>" in page
+    assert git("rev-parse", "--short", "HEAD", cwd=mirror) in page   # the header names the new tip
+
+
+def test_a_repo_without_a_backlog_dir_syncs_silently(pair, capsys):
+    origin, lander, mirror = pair
+    land(lander, {"fixtures/b.txt": "b\n"})
+    assert lp.main([]) == 0
+    assert "backlog view" not in capsys.readouterr().out
