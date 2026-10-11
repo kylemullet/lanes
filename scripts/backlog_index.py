@@ -223,6 +223,13 @@ def load_issues():
             value = meta.get(field)
             if value is not None and value not in allowed and not (field == "assignee" and value in RETIRED_SHORTS):
                 problems.append(f"{rel}: {field}={value!r} not in {allowed} (or null)")
+        # `due:` is optional and written only when set (LANES-46): a date the issue stops
+        # being movable. The gate checks the SHAPE alone -- an overdue live issue is a
+        # report finding, never a failed push.
+        due = meta.get("due")
+        if due is not None and not valid_date(due):
+            problems.append(f"{rel}: due={due!r} is not a YYYY-MM-DD calendar date")
+        meta.setdefault("due", None)
         meta.setdefault("assignee", None)
         meta.setdefault("reported_by", None)
         meta.setdefault("resolution", None)
@@ -1230,6 +1237,20 @@ def _md_lanes(lanes):
     return out
 
 
+def _md_due(issues):
+    """INDEX.md's Due section: every dated live or verified issue, soonest first (LANES-46)."""
+    dated = due_issues(issues)
+    if not dated:
+        return []
+    overdue = overdue_count(dated)
+    out = ["", f"## Due — {len(dated)} dated" + (f" · {overdue} overdue" if overdue else ""), "",
+           "| Due | When | ID | Status | Pri | Title |", "| :-- | :-- | :-- | :-- | :-- | :-- |"]
+    for i in dated:
+        out.append(f"| {i['due']} | {due_label(_days_until(i['due']))} | [{i['id']}]({_href(i)}) "
+                   f"| {_cell(i.get('status'))} | {_cell(i.get('priority'))} | {i['_title']} |")
+    return out
+
+
 def _md_status(i, activity):
     if i.get("id") in activity:
         return f"in-progress (lane {'; '.join(activity[i['id']])})"
@@ -1256,6 +1277,7 @@ def render_index(issues):
     lines.append(f"**{len(open_issues)} live** ({counts}) · {len(verified)} verified "
                  f"(landed, awaiting close) · {len(closed)} closed")
     lines += _md_lanes(lanes_in_flight(issues))
+    lines += _md_due(issues)
     lines += [
         "",
         "## Open / blocked / paused",
@@ -1310,6 +1332,55 @@ def _age(datestr):
         return None
 
 
+# --- due dates (LANES-46) -------------------------------------------------
+#
+# `due: YYYY-MM-DD` is the one date on an issue that is not derived: the day it stops
+# being movable -- a deadline, a dated event. One optional field, not a by/date pair,
+# because the table reads the same either way; a target the operator would merely
+# like to hit is priority, not a date. Every view opens with the dated issues in
+# calendar order with a countdown, and a closed issue drops out.
+
+def _days_until(datestr):
+    """Days from today to a `due:` date: 0 today, negative overdue, None when unset."""
+    if not datestr:
+        return None
+    try:
+        return (datetime.date.fromisoformat(str(datestr)) - datetime.date.today()).days
+    except ValueError:
+        return None
+
+
+def valid_date(datestr):
+    """True when `datestr` is a real calendar date spelled YYYY-MM-DD."""
+    if not isinstance(datestr, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", datestr):
+        return False
+    try:
+        datetime.date.fromisoformat(datestr)
+    except ValueError:
+        return False
+    return True
+
+
+def due_label(days):
+    """The countdown a dated row carries: `today`, `in 3d`, `3d OVERDUE`."""
+    if days is None:
+        return "—"
+    if days == 0:
+        return "today"
+    return f"in {days}d" if days > 0 else f"{-days}d OVERDUE"
+
+
+def due_issues(issues):
+    """Live and verified issues with a `due:` date, soonest first. A closed issue drops out;
+    a verified one stays until its close, since the date has not passed into history yet."""
+    dated = [i for i in issues if i.get("due") and i.get("status") in (*LIVE_STATUSES, "verified")]
+    return sorted(dated, key=lambda i: (str(i["due"]), _sort_id_str(i.get("id"))))
+
+
+def overdue_count(dated):
+    return sum(1 for i in dated if (d := _days_until(i["due"])) is not None and d < 0)
+
+
 # --- the browsable HTML view (INFRA-14) ---------------------------------
 #
 # Same data as INDEX.md, same regeneration, but sortable and filterable, which
@@ -1324,14 +1395,18 @@ def _age(datestr):
 # table: Age sorts identically and says it in fewer characters.
 OPEN_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank", 1),
              ("Status", "statusRank", 1), ("Type", "type", 0), ("Assignee", "assignee", 0),
-             ("Epic", "epic", 0), ("Age", "age", 1))
+             ("Epic", "epic", 0), ("Due", "due", 0), ("Age", "age", 1))
 CLOSED_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank", 1),
                ("Type", "type", 0), ("Assignee", "assignee", 0), ("Closed", "closed", 0),
                ("Resolution", "resolution", 0), ("Commit", "commit", 0))
 VERIFIED_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank", 1),
-                 ("Type", "type", 0), ("Assignee", "assignee", 0), ("Age", "age", 1))
+                 ("Type", "type", 0), ("Assignee", "assignee", 0), ("Due", "due", 0), ("Age", "age", 1))
+# The Due section (LANES-46): calendar order, the countdown beside the date.
+DUE_COLS = (("Due", "due", 0), ("When", "dueIn", 1), ("ID", "id", 0), ("Title", "title", 0),
+            ("Pri", "priorityRank", 1), ("Status", "statusRank", 1), ("Type", "type", 0),
+            ("Assignee", "assignee", 0))
 # Dropped first on a narrow screen, so a phone still gets ID / title / pri / status.
-SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution")
+SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution", "due")
 
 HTML_STYLE = """
 :root{color-scheme:light dark;
@@ -1366,6 +1441,11 @@ h1 .repo{color:var(--mut);font-weight:450}
         font-variant-numeric:tabular-nums}
 .stat.crit b{color:#c0352b}
 @media (prefers-color-scheme:dark){.stat.crit b{color:#ff8a80}}
+.due{white-space:nowrap}
+.due.soon{color:var(--pend);font-weight:600}
+.due.overdue,tr.overdue td.date{color:#c0352b;font-weight:600}
+details.sec>summary .od{color:#c0352b;font-weight:500;font-size:12px}
+@media (prefers-color-scheme:dark){.due.overdue,tr.overdue td.date,details.sec>summary .od{color:#ff8a80}}
 .callout{background:var(--warn-bg);color:var(--warn-fg);border:1px solid var(--warn-line);
          border-radius:10px;padding:9px 13px;margin:0 0 14px;font-size:12.5px}
 .callout summary{cursor:pointer;font-weight:600}
@@ -1518,8 +1598,10 @@ function applyFilter(){
   let shown = 0, total = 0;
   tables().forEach(t => {
     let n = 0;
+    // The Due table repeats rows the queue already counts (LANES-46).
+    const dup = t.classList.contains('dup');
     bodyRows(t).forEach(r => {
-      total++;
+      if (!dup) total++;
       const d = r.dataset;
       // An epic row lists itself AND its parent, a child lists its parent, so
       // one chip shows the whole family (INFRA-52). A repo with no epics has no
@@ -1529,7 +1611,7 @@ function applyFilter(){
               && (!f.epic.any || d.epics.split(' ').some(e => f.epic.on.has(e)))
               && (!q || d.haystack.includes(q));
       r.hidden = !ok;
-      if (ok) { n++; shown++; }
+      if (ok) { n++; if (!dup) shown++; }
     });
     t.closest('details').querySelector('.n').textContent = n;
   });
@@ -1633,6 +1715,7 @@ def _html_row(i, cols, activity=None):
     href = _href(i)
     title = i["_title"]
     age = i.get("_age")
+    days = _days_until(i.get("due"))
     haystack = norm_join(i)
     attrs = {
         "project": i.get("project") or "", "type": i.get("type") or "",
@@ -1645,6 +1728,8 @@ def _html_row(i, cols, activity=None):
         "epic": _sort_id({"id": i.get("epic")}) if i.get("epic") else "~",
         "epics": _epic_family(i),
         "age": str(age if age is not None else -1),
+        "due": i.get("due") or "~",
+        "due-in": str(days if days is not None else 10 ** 6),
         "priority-rank": str(PRIORITY_RANK.get(i.get("priority"), 9)),
         "status-rank": str(STATUS_RANK.get(status, 9)),
         "haystack": haystack,
@@ -1671,6 +1756,8 @@ def _html_row(i, cols, activity=None):
         "resolution": ("", _esc(i.get("resolution") or "—")),
         "age": ("num", f"{age}d" if age is not None else "—"),
         "epic": ("id", _esc(i.get("epic") or "—")),
+        "due": ("date", _esc(i.get("due") or "—")),
+        "dueIn": ("num", f'<span class="due{_due_class(days)}">{_esc(due_label(days))}</span>'),
     }
 
     def td(key):
@@ -1679,7 +1766,14 @@ def _html_row(i, cols, activity=None):
         return f'<td class="{classes}">{inner}</td>' if classes else f"<td>{inner}</td>"
 
     attr_str = " ".join(f'data-{k}="{_esc(v)}"' for k, v in attrs.items())
-    return f"<tr {attr_str}>" + "".join(td(key) for _, key, _n in cols) + "</tr>"
+    row_cls = ' class="overdue"' if days is not None and days < 0 else ""
+    return f"<tr{row_cls} {attr_str}>" + "".join(td(key) for _, key, _n in cols) + "</tr>"
+
+
+def _due_class(days):
+    if days is None:
+        return ""
+    return " overdue" if days < 0 else " soon" if days <= 7 else ""
 
 
 def norm_join(i):
@@ -1713,7 +1807,7 @@ def _col_class(key):
     return "col-sec" if key in SECONDARY_COLS else "col-age" if key == "age" else ""
 
 
-def _html_table(issues, cols, empty, activity=None):
+def _html_table(issues, cols, empty, activity=None, dup=False):
     if not issues:
         return f'<p class="empty">{empty}</p>'
     head = "".join(
@@ -1721,7 +1815,8 @@ def _html_table(issues, cols, empty, activity=None):
         + (f' class="{_col_class(key)}"' if _col_class(key) else "") + f'>{_esc(label)}</th>'
         for label, key, num in cols)
     rows = "\n".join(_html_row(i, cols, activity) for i in issues)
-    return f'<table class="issues"><thead><tr>{head}</tr></thead><tbody>\n{rows}\n</tbody></table>'
+    cls = "issues dup" if dup else "issues"
+    return f'<table class="{cls}"><thead><tr>{head}</tr></thead><tbody>\n{rows}\n</tbody></table>'
 
 
 def html_sort_key(it):
@@ -1770,6 +1865,18 @@ def _html_lanes(lanes):
             f'{lanes_word}</small></h2><div class="lane-grid">{"".join(cards)}</div></section>')
 
 
+def _html_due(issues, activity):
+    """The Due section: every dated live or verified issue in calendar order, above the
+    lanes -- a date on the calendar outranks a lane (LANES-46)."""
+    dated = due_issues(issues)
+    if not dated:
+        return ""
+    overdue = overdue_count(dated)
+    od = f' <span class="od">· {overdue} overdue</span>' if overdue else ""
+    return (f'<details class="sec" open><summary>Due <span class="n">{len(dated)}</span>{od}</summary>'
+            f'{_html_table(dated, DUE_COLS, "", activity, dup=True)}</details>')
+
+
 def _html_problems(problems):
     if not problems:
         return ""
@@ -1790,13 +1897,16 @@ def render_html(issues, problems=(), position=None):
     closed = sorted((i for i in issues if i.get("status") == "closed"),
                     key=lambda x: (x.get("closed") or "", x.get("id") or ""), reverse=True)
     tabled = open_issues + verified + closed
+    # A claimed issue with a date sits in the Due table, so its values need chips too,
+    # or the status filter hides the row (the LANES-31 shape).
+    chipped = tabled + due_issues(issues)
 
     activity = epic_activity(issues)
-    present = lambda field, vocab: [v for v in vocab if any(i.get(field) == v for i in tabled)]
+    present = lambda field, vocab: [v for v in vocab if any(i.get(field) == v for i in chipped)]
     # The status chips follow the SHOWN status: a row whose data-status no chip names is
     # filtered out, so an active epic needs its in-progress chip (LANES-31).
-    shown = [s for s in STATUSES if any(shown_status(i, activity) == s for i in tabled)]
-    assignees = sorted({i.get("assignee") or "—" for i in tabled})
+    shown = [s for s in STATUSES if any(shown_status(i, activity) == s for i in chipped)]
+    assignees = sorted({i.get("assignee") or "—" for i in chipped})
     epics = sorted({i["id"] for i in issues if i.get("type") == "epic" and i.get("id")}
                    | {i["epic"] for i in issues if i.get("epic")},
                    key=lambda e: _sort_id({"id": e}))
@@ -1813,10 +1923,14 @@ def render_html(issues, problems=(), position=None):
 
     n_claimed = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
     n_crit = sum(1 for i in live if i.get("priority") == "critical")
+    dated = due_issues(issues)
+    n_overdue = overdue_count(dated)
     stats = "".join((
         f'<div class="stat"><b>{len(live)}</b> live</div>',
         f'<div class="stat"><b>{n_claimed}</b> in progress</div>',
         f'<div class="stat crit"><b>{n_crit}</b> critical</div>' if n_crit else "",
+        f'<div class="stat"><b>{len(dated)}</b> due</div>' if dated else "",
+        f'<div class="stat crit"><b>{n_overdue}</b> overdue</div>' if n_overdue else "",
         f'<div class="stat"><b>{len(verified)}</b> verified</div>',
         f'<div class="stat"><b>{len(closed)}</b> closed</div>',
     ))
@@ -1843,6 +1957,7 @@ def render_html(issues, problems=(), position=None):
 <div class="stats">{stats}</div>
 {banner}
 {_html_problems(problems)}
+{_html_due(issues, activity)}
 {_html_lanes(lanes)}
 <div class="bar">
   <input id="q" type="search" placeholder="Filter — id, title, assignee, reporter, resolution, blocked-on, links…"
@@ -1900,6 +2015,16 @@ def render_report(issues, who):
                 note = lane_member_note(ln, m)
                 # Full titles: the lane block is short, and the title is what the eye reads.
                 print(f"      {state:<9} {m['id']:>10}  {m['_title']}" + (f"  ({note})" if note else ""))
+        print()
+    dated = due_issues(issues)
+    if dated:
+        # Every operator's dated issues: a calendar date is not routed by assignee.
+        overdue = overdue_count(dated)
+        print(f"{'='*100}\nDUE — {len(dated)} dated" + (f" · {overdue} OVERDUE" if overdue else "")
+              + f"\n{'='*100}")
+        for i in dated:
+            print(f"  {i['due']}  {due_label(_days_until(i['due'])):>12}  {i['id']:>10}  "
+                  f"{i.get('status') or '?':<11} {i.get('priority') or '?':<8} {i['_title'][:70]}")
         print()
     activity = epic_activity(issues)
     print(f"{'='*100}\nBACKLOG ({who}) — {len(mine)} live\n{'='*100}")
@@ -2143,6 +2268,7 @@ def main(argv=None):
                     help="exit 1 on structural problems, orphaned claims, orphaned commit citations, "
                          "a dangling epic: parent, a resolution: that disagrees with the "
                          "status or commit, "
+                         "a due: that is not a calendar date, "
                          "or a verified issue that is unresolvable or missing its Docs: line")
     ap.add_argument("--report", action="store_true", help="print aged operator view, don't write")
     ap.add_argument("--who", default=None,

@@ -390,3 +390,33 @@ def test_a_retired_operator_is_not_offered_for_new_issues(tmp_path, monkeypatch)
     for kw in ({"assignee": "mike"}, {"reported_by": "mike"}):
         with pytest.raises(ValueError, match=list(kw)[0]):
             bn.create_issue("PROD", "x", regen_index=False, **kw)
+
+
+# --- due dates (LANES-46) ---------------------------------------------------------
+
+def test_create_issue_writes_due_after_opened_and_only_when_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "refresh_main_view", lambda auto=True: None)
+    monkeypatch.setattr(bn, "ROOT", tmp_path)
+    bl = tmp_path / "docs" / "backlog"
+    p = bn.create_issue("UI", "dated", backlog=bl, opened="2026-10-11", due="2026-10-26", fetch=False)
+    fm = p.read_text(encoding="utf-8").split("---")[1].strip().splitlines()
+    assert fm.index("due: 2026-10-26") == fm.index("opened: 2026-10-11") + 1
+    q = bn.create_issue("UI", "undated", backlog=bl, opened="2026-10-11", fetch=False)
+    assert "due" not in q.read_text(encoding="utf-8").split("---")[1]
+    with pytest.raises(ValueError, match="due '2026-13-01' is not a YYYY-MM-DD calendar date"):
+        bn.create_issue("UI", "bad", backlog=bl, due="2026-13-01", fetch=False)
+
+
+def test_cli_due_reaches_the_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(bidx, "refresh_main_view", lambda auto=True: None)
+    monkeypatch.setattr(bn, "ROOT", tmp_path)
+    monkeypatch.setattr(bn, "BACKLOG", tmp_path / "docs" / "backlog")
+    assert bn.main(["UI", "dated", "--reported-by=kyle", "--due=2026-11-20", "--no-fetch"]) == 0
+    rel = capsys.readouterr().out.split("created ")[1].strip()
+    assert "due: 2026-11-20\n" in (tmp_path / rel).read_text(encoding="utf-8")
+
+
+def test_the_new_command_offers_due():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
+    assert "--due=YYYY-MM-DD" in text

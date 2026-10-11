@@ -205,15 +205,18 @@ consumer CI that checks out the pinned release fails on every push until the tag
 
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,
-`closed`, `commit`, `resolution`, `links`, optional `epic`, and `lane` while claimed) and three H2 sections: Context,
+`closed`, `commit`, `resolution`, `links`, optional `epic`, optional `due` — the `YYYY-MM-DD` the issue
+stops being movable, written by `backlog_new.py --due` or by hand — and `lane` while claimed) and three H2 sections: Context,
 Current status, Resolution. `--check` is the integrity gate: duplicate or misnamed IDs,
-out-of-vocabulary values, a `status: in-progress` without its body claim marker (or the
+out-of-vocabulary values, a `due:` that is not a calendar date, a `status: in-progress` without its body claim marker (or the
 reverse) or with one the view cannot read (LANES-37), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
 issue whose Resolution does not cite a commit subject on HEAD, a `verified` issue whose change
 reached outside `docs_lane_prefixes` without a `Docs:` line, a dangling `epic:` parent, an epic with `status: in-progress`, a
 `resolution:` that disagrees with the status, and a lane problem: a `lane:` on an open, blocked
 or paused issue (a release deletes it), a value that is not `<ID>@<YYYY-MM-DD>`, or two
-ACTIVE/PENDING issues in one lane. The views and `--report` open with **In progress**, one group per
+ACTIVE/PENDING issues in one lane. The views and `--report` open with **Due** — every dated live or verified issue in
+calendar order with its countdown (`in 15d`, `today`, `3d OVERDUE`); an overdue issue is a finding
+there, never a failed check — then **In progress**, one group per
 lane, labelled by its slice alone: '/' joins issues of one project (`LANES-20/21/9`) and ', '
 separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`). The worktree and branch names stay in the ⏳
 marker, where the doctor reads them. Its landed issues are shown beside the live ones until the

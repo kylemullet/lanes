@@ -195,8 +195,9 @@ def _repo_of(backlog):
 
 def format_frontmatter(meta):
     # `epic` is written only when set: an issue under no epic carries no `epic:` key.
+    # `due` sits after `opened` and, like `epic`, is written only when set (LANES-46).
     order = ("id", "project", "type", "status", "priority", "blocked_on",
-             "assignee", "reported_by", "opened", "closed", "commit", "resolution",
+             "assignee", "reported_by", "opened", "due", "closed", "commit", "resolution",
              "links", "epic")
     lines = ["---"]
     for key in order:
@@ -231,7 +232,7 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
                  status="open", blocked_on=None, opened=None, closed=None,
                  commit=None, links=None, body=None,
                  regen_index=True, backlog=None, epic=None, reported_by=None,
-                 resolution=None, fetch=True):
+                 resolution=None, fetch=True, due=None):
     """Write the issue file and return its Path. Raises on invalid enums.
 
     `assignee` defaults to the configured default (the solo operator, or the first
@@ -250,6 +251,10 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
     `epic` names the parent epic. Checked at mint time against the issues in
     `backlog`: the parent must exist and be `type: epic`, the same rule
     `backlog_index.py --check` enforces afterwards.
+
+    `due` is the YYYY-MM-DD the issue stops being movable (a deadline, a dated
+    event); written only when set, and the views open with the dated issues in
+    calendar order (LANES-46).
     """
     if assignee is None:
         assignee = bidx.DEFAULT_ASSIGNEE
@@ -267,6 +272,8 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
         raise ValueError(f"reported_by {reported_by!r} not in {'|'.join(bidx.REPORTERS)}")
     if resolution is not None and resolution not in bidx.RESOLUTIONS:
         raise ValueError(f"resolution {resolution!r} not in {'|'.join(bidx.RESOLUTIONS)}")
+    if due is not None and not bidx.valid_date(due):
+        raise ValueError(f"due {due!r} is not a YYYY-MM-DD calendar date")
     if epic:
         parents = {m.get("id"): m for m in _parse_dir(backlog or BACKLOG)}
         if epic not in parents:
@@ -282,6 +289,8 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
         "reported_by": reported_by, "opened": opened, "closed": closed,
         "commit": commit, "resolution": resolution, "links": links or [],
     }
+    if due:
+        meta["due"] = due
     if epic:
         meta["epic"] = epic
     path = pdir / f"{iid}-{slugify(title)}.md"
@@ -322,6 +331,9 @@ def main(argv=None):
     ap.add_argument("--status", choices=bidx.STATUSES, default="open")
     ap.add_argument("--blocked-on", default=None)
     ap.add_argument("--opened", default=None, help="YYYY-MM-DD (default today)")
+    ap.add_argument("--due", default=None, metavar="YYYY-MM-DD",
+                    help="the date the issue stops being movable — a deadline or a dated event; "
+                         "the views open with dated issues in calendar order")
     ap.add_argument("--links", default=None, help="comma-separated issue IDs")
     ap.add_argument("--epic", default=None, metavar="ID",
                     help="parent epic (an existing issue with type: epic)")
@@ -350,7 +362,7 @@ def main(argv=None):
                         blocked_on=args.blocked_on,
                         opened=args.opened or datetime.date.today().isoformat(),
                         links=[x.strip() for x in args.links.split(",")] if args.links else None,
-                        epic=args.epic, fetch=args.fetch)
+                        epic=args.epic, fetch=args.fetch, due=args.due)
     rel = path.relative_to(ROOT).as_posix()
     print(f"created {rel}")
     if args.push:

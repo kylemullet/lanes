@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.43 — a due date on an issue, and the views open with the calendar (2026-10-11)
+
+- **`due: YYYY-MM-DD` on an issue; a Due section at the top of every view** (LANES-46). One
+  optional frontmatter key, written only when set (like `epic`): the date the issue stops being
+  movable — a deadline, a dated event. A target the operator would merely like to hit stays
+  priority. `backlog_new.py --due` (and `/lanes:new … --due=`) writes it after `opened`; an
+  existing issue takes it by a frontmatter edit. `--check` validates the shape alone — a real
+  calendar date — and an overdue live issue is a report finding, never a failed push. The HTML
+  view, `INDEX.md` and `--report` all open with **Due**: every dated live or verified issue in
+  calendar order with a countdown (`in 15d`, `today`, `3d OVERDUE`), above the lanes, because a
+  date on the calendar outranks a lane; a closed issue drops out. The HTML view adds `Due` as a
+  sortable column in the queue, flags overdue rows, counts `due` / `overdue` in the stat chips, and
+  the Due table's rows are not double-counted by the filter. `session-startup`'s Brief carries
+  one line for anything overdue or due within seven days, from the report's `DUE` block.
+
 ## 0.4.42 — the pull regenerates the bookmarked view itself (2026-10-10)
 
 - **`lanes_pull.py` refreshes the main clone's view after every sync** (LANES-40). The sync is an

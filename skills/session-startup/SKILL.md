@@ -244,6 +244,7 @@ fix that first, by hand, in the issue file.
 | `status` | `in-progress` (claimed — someone is working it in a named worktree) · `open` · `blocked` (waiting on `blocked_on`) · `paused` (held by design) · `verified` (landed, operator-verified, awaiting the backfill close) · `closed` |
 | `priority` | from `backlog.priorities` — how much it matters, independent of status |
 | `blocked_on` | free text or an issue ID — strictly "what is this waiting on", never "what this unblocks" |
+| `due` | optional `YYYY-MM-DD` — the day the issue stops being movable (a deadline, a dated event); the views and the report open with the dated issues in calendar order. A date the operator would merely like to hit is priority, not `due` |
 
 "This unblocks the other operator" is a *reason to prioritize*, not a blocker — it
 belongs in the report's `Why now` column.
@@ -338,7 +339,9 @@ commit pending push" / "N verified awaiting the certifying machine's close"); wh
 `preflight.md` asked to report; unlanded branches from step 2; **the in-flight lanes from
 step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the slice name
 (`LANES-20/21/9`), each issue's ACTIVE/PENDING/RESERVED state, lane state, what it is
-waiting on**; the backlog stat (`N open · X critical · oldest Nd`); and, **always, the
+waiting on**; **the due line, from the report's `DUE` block: every issue overdue or due
+within seven days, as `due: <ID> <date> (<countdown>), …`** (omit the line when there is
+none); the backlog stat (`N open · X critical · oldest Nd`); and, **always, the
 critical line**:
 
 ```

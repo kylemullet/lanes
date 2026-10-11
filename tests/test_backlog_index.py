@@ -1485,3 +1485,108 @@ def test_retired_shorts_validate_on_history_but_not_on_live_work(tmp_path, monke
     ui3 = [p for p in problems if "UI-3" in p]
     assert len(ui3) == 1 and "retired operator" in ui3[0] and "reassign" in ui3[0]
     assert any("UI-5" in p and "'bob'" in p for p in problems), "a short that never existed still fails"
+
+
+# --- due dates (LANES-46) ---------------------------------------------------------
+
+def _today(days):
+    import datetime as _dt
+    return (_dt.date.today() + _dt.timedelta(days=days)).isoformat()
+
+
+def test_valid_date_is_a_real_calendar_date_spelled_iso():
+    assert bidx.valid_date("2026-10-26")
+    for bad in ("2026-13-01", "2026-02-30", "26-10-26", "2026/10/26", "soon", 20261026, None):
+        assert not bidx.valid_date(bad), bad
+
+
+def test_due_label_counts_down_and_says_overdue():
+    assert bidx.due_label(None) == "—"
+    assert bidx.due_label(0) == "today"
+    assert bidx.due_label(15) == "in 15d"
+    assert bidx.due_label(-3) == "3d OVERDUE"
+    assert bidx._days_until(_today(4)) == 4 and bidx._days_until(_today(-2)) == -2
+    assert bidx._days_until(None) is None and bidx._days_until("nope") is None
+
+
+def test_load_issues_accepts_a_due_date_and_flags_a_malformed_one(tmp_path, monkeypatch):
+    root = tmp_path / "proj"
+    (root / "docs" / "backlog" / "UI").mkdir(parents=True)
+    monkeypatch.setattr(bidx, "ROOT", root)
+    monkeypatch.setattr(bidx, "BACKLOG", root / "docs" / "backlog")
+    head = "---\nid: {iid}\nproject: UI\ntype: story\nstatus: open\npriority: normal\nassignee: kyle\nopened: 2026-10-01\n"
+    _write_issue(root, "docs/backlog/UI/UI-1-a.md", head.format(iid="UI-1") + "due: 2026-10-26\n---\n", "\n## Context\n\nx\n")
+    _write_issue(root, "docs/backlog/UI/UI-2-b.md", head.format(iid="UI-2") + "due: 2026-13-01\n---\n", "\n## Context\n\nx\n")
+    _write_issue(root, "docs/backlog/UI/UI-3-c.md", head.format(iid="UI-3") + "---\n", "\n## Context\n\nx\n")
+    issues, problems = bidx.load_issues()
+    by = {i["id"]: i for i in issues}
+    assert by["UI-1"]["due"] == "2026-10-26" and by["UI-3"]["due"] is None
+    assert problems == ["docs/backlog/UI/UI-2-b.md: due='2026-13-01' is not a YYYY-MM-DD calendar date"]
+
+
+def _dated():
+    return [_issue("BD-2", due=_today(20), priority="high"),
+            _issue("BD-1", due=_today(3)),
+            _issue("ADMIN-5", due=_today(-2), status="blocked", blocked_on="counsel"),
+            _issue("BD-9", due=_today(1), status="in-progress", _marker={"state": "active", "when": "2026-10-11 09:00",
+                                                                        "who": "Kyle's session", "worktree": "w", "branch": "b"}),
+            _issue("BD-3", due=_today(0), status="verified"),
+            _issue("BD-4", due=_today(-30), status="closed", closed="2026-09-01"),
+            _issue("UI-7")]
+
+
+def test_due_issues_are_live_or_verified_in_calendar_order_and_closed_drops_out():
+    dated = bidx.due_issues(_dated())
+    assert [i["id"] for i in dated] == ["ADMIN-5", "BD-3", "BD-9", "BD-1", "BD-2"]
+    assert bidx.overdue_count(dated) == 1
+
+
+def test_index_md_opens_with_the_due_table_in_calendar_order():
+    md = bidx.render_index(_dated())
+    assert "## Due — 5 dated · 1 overdue" in md
+    due_at = md.index("## Due"); open_at = md.index("## Open / blocked / paused")
+    assert due_at < open_at
+    rows = [l for l in md[due_at:open_at].splitlines() if l.startswith("| 20")]
+    assert [r.split("|")[3].strip().split("]")[0].lstrip("[") for r in rows] == ["ADMIN-5", "BD-3", "BD-9", "BD-1", "BD-2"]
+    assert "2d OVERDUE" in rows[0] and "| today |" in rows[1] and "in 1d" in rows[2] and "in 20d" in rows[4]
+    assert "BD-4" not in md[due_at:open_at]
+
+
+def test_html_opens_with_a_due_section_flags_overdue_and_keeps_the_claimed_issues_status_chip():
+    page = bidx.render_html(_dated())
+    due_at = page.index("<summary>Due <span class=\"n\">5</span>")
+    lanes_at = page.index('<section class="lanes">'); queue_at = page.index("<summary>Open queue")
+    assert due_at < lanes_at < queue_at
+    assert '<span class="od">· 1 overdue</span>' in page
+    assert 'class="issues dup"' in page and "const dup = t.classList.contains('dup')" in page
+    assert '<tr class="overdue" data-project="ADMIN"' in page
+    assert '<span class="due overdue">2d OVERDUE</span>' in page
+    assert '<span class="due soon">today</span>' in page and '<span class="due soon">in 3d</span>' in page
+    assert '<span class="due">in 20d</span>' in page
+    assert f'data-due="{_today(3)}"' in page and 'data-due="~"' in page and 'data-due-in="1000000"' in page
+    assert 'data-key="due"' in page and 'data-key="dueIn"' in page
+    assert '<div class="stat"><b>5</b> due</div>' in page and '<div class="stat crit"><b>1</b> overdue</div>' in page
+    # the claimed issue sits in the Due table (id + title links) and its lane card, never the
+    # queue; its status chip exists so the filter keeps the Due row
+    assert page.count('href="BD/BD-9-x.md"') == 3 and "BD-9" not in page[queue_at:]
+    assert 'value="in-progress" checked' in page
+    assert "BD-4" not in page[due_at:lanes_at]
+
+
+def test_html_without_dates_has_no_due_section_and_no_due_chip():
+    page = bidx.render_html([_issue("UI-1"), _issue("PIPE-2", status="closed", closed="2026-08-09")])
+    assert "<summary>Due" not in page and "</b> due</div>" not in page
+    assert 'data-key="due"' in page         # the sortable column is always there
+
+
+def test_report_opens_with_a_due_block_for_every_operator(capsys):
+    issues = _dated()
+    for i in issues:
+        i["_age"] = 1
+    bidx.render_report(issues, "mike")
+    out = capsys.readouterr().out
+    assert "DUE — 5 dated · 1 OVERDUE" in out
+    assert out.index("DUE —") < out.index("BACKLOG (mike)")
+    block = out[out.index("DUE —"):out.index("BACKLOG (mike)")]
+    assert block.index("ADMIN-5") < block.index("BD-3") < block.index("BD-9") < block.index("BD-1") < block.index("BD-2")
+    assert "2d OVERDUE" in block and "BD-4" not in block

@@ -1,6 +1,6 @@
 ---
 description: Mint a backlog issue you are raising — next free ID, reported by you, Context written from what you said
-argument-hint: "<PROJECT> \"<title>\" [--type=…] [--priority=…] [--assignee=…] [--epic=ID] — or just describe it"
+argument-hint: "<PROJECT> \"<title>\" [--type=…] [--priority=…] [--assignee=…] [--epic=ID] [--due=YYYY-MM-DD] — or just describe it"
 allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py:*), Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py:*), Read, Edit'
 ---
 
@@ -10,7 +10,9 @@ Create a backlog issue the user is raising, then fill it in.
    options. When the user wrote the form already, pass it through unchanged. When they
    described the issue in prose, choose the project from the configured prefixes, write
    a short title, and say which you chose. If no project fits, ask instead of guessing.
-   The arguments were: $ARGUMENTS
+   When they named a firm date — a deadline, a dated event, the day it stops being
+   movable — pass it as `--due=YYYY-MM-DD`; a date they would merely like to hit is
+   priority, not a due date. The arguments were: $ARGUMENTS
 
 2. Run it from the repository the session is in, with `--reported-by=me` added unless
    the user named a reporter:
