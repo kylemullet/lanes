@@ -1,5 +1,6 @@
 """The plugin's own CI gate stays what the README promises: pytest plus
 `claude plugin validate --strict`, on every push, per target."""
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -40,3 +41,21 @@ def test_every_push_to_main_or_next_tags_the_release():
     assert "cancel-in-progress: false" in text, (
         "a cancelled tag run is an untagged release; ci.yml cancels on next, this must not")
     assert "needs:" not in text, "the consumer installs from the branch; the tag cannot wait for the tests"
+
+
+# --- line endings (LANES-41) -----------------------------------------------------
+
+def test_gitattributes_pins_lf_and_marks_the_icon_binary():
+    """A Windows clone has core.autocrlf=false by default; without this file a CRLF
+    rewrite there commits as a whole-file diff and every other checkout gets it back."""
+    text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    rules = [l.split() for l in text.splitlines() if l.strip() and not l.startswith("#")]
+    assert ["*", "text=auto", "eol=lf"] in rules
+    assert ["*.png", "binary"] in rules
+
+
+def test_no_tracked_text_file_carries_crlf_in_the_index():
+    out = subprocess.run(["git", "ls-files", "--eol"], cwd=ROOT, capture_output=True,
+                         text=True, encoding="utf-8", check=True).stdout
+    crlf = [line for line in out.splitlines() if line.startswith("i/crlf") or line.startswith("i/mixed")]
+    assert not crlf, "renormalize these: " + "; ".join(crlf)

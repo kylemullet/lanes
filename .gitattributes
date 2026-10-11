@@ -1,0 +1,7 @@
+# Every text file is LF in the repository and in every checkout (LANES-41): a Windows
+# clone has core.autocrlf=false by default, and a file rewritten there with CRLF -- an
+# ad-hoc write_text(), an editor -- would otherwise commit as a whole-file diff and hand
+# every other checkout the same diff back. `eol=lf` keeps the working tree LF too, so
+# the shell scripts and hooks run under sh on any platform.
+* text=auto eol=lf
+*.png binary

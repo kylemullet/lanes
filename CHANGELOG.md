@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.41 — the repository is LF everywhere (2026-10-10)
+
+- **`.gitattributes`: `* text=auto eol=lf`, `*.png binary`** (LANES-41). The lanes repo had no
+  attributes file, and a Windows clone has `core.autocrlf=false` by default, so a file rewritten
+  there with CRLF — an ad-hoc `write_text()`, an editor save — would have committed as a whole-file
+  diff (the LANES-39 lane caught 8 files, 2,889 insertions / 2,865 deletions for a 32-line change,
+  only because the stat was read before the commit) and handed every Mac checkout the same diff
+  back. Now every text file is LF in the index and in every working tree, whichever machine wrote
+  it; the icon is the one binary. No tracked file carried CRLF at 0.4.40, so no renormalize commit
+  was needed, and `test_ci.py` guards the file and the index from here on. No behavior change.
+
 ## 0.4.40 — a guard that cannot ask git refuses (2026-10-10)
 
 - **`guard_position.py` and `guard_commit.py` fail closed when git itself cannot run** (LANES-42).
