@@ -187,6 +187,7 @@ And one for the end of a lane, run from its worktree after the operator's landin
 
 ```bash
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py   # land, verify it landed, THEN remove the worktree + branch and close the issue
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py --path <worktree>   # the same from the main clone — on Windows the only form that can finish (LANES-44)
 ```
 
 It never cleans up after a landing it cannot read back from the remote: exit 1 means nothing

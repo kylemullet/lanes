@@ -464,6 +464,19 @@ step fails the push gate.
    sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py
    ```
 
+   **On Windows, from the MAIN CLONE instead, naming the worktree** (LANES-44):
+
+   ```bash
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_land.py --path <worktree>
+   ```
+
+   The shell that launches the script keeps the worktree as its current directory for as
+   long as it lives, and Windows refuses to delete any process's cwd — so from inside the
+   lane the clean-up fails after the landing, every time, whatever the script does with its
+   own cwd. Run from inside the worktree on Windows, the script refuses up front, before
+   anything is pushed, and prints the `--path` form; `--keep` and `--dry-run` remove nothing
+   and run from anywhere. The `--path` form is valid on every platform.
+
    It is the landing AND step 10.2's clean-up as one operation whose order cannot be
    broken: refuse (touching nothing) from the main clone, on the main branch, with a dirty
    tree or on a machine that does not `certifies`; fetch; refuse unless

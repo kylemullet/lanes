@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.39 — a landing on Windows runs from the main clone (2026-10-10)
+
+- **`lanes_land.py --path <worktree>`, and on Windows a refusal from inside the lane** (LANES-44).
+  0.4.38 moved the script's own cwd out of the worktree before the clean-up, and both landings
+  after it on a Windows machine still ended at exit 2, `failed to delete … Permission denied`:
+  the shell that launches the script — the session's Bash call, the operator's PowerShell — keeps
+  the worktree as ITS current directory for as long as it lives, and Windows refuses to delete any
+  process's cwd, so from inside the lane the clean-up can never succeed there (an `exec` in that
+  shell did not help either; the harness's own process tree held it, and a PowerShell removal from
+  elsewhere succeeded at once). The script now takes `--path <worktree>` so it can run from the
+  main clone, and on Windows a run from inside the worktree is refused up front, before anything
+  is pushed, naming the `--path` form to use — a landing that then fails its own clean-up, every
+  time, is worse than one that says which shape to run. `--keep` and `--dry-run` remove nothing
+  and still run from anywhere; the dry run prints the note. The tests run each platform's real
+  form (POSIX from inside the worktree, Windows from the main clone with `--path`) plus the
+  refusal, the `--path` landing and the keep/dry-run cases with the platform forced either way —
+  in-process the script's own `chdir` is the only cwd there is, which is exactly why the live
+  failure never showed in the suite. `worktree-increment` step 9.7 and the README show both forms.
+
 ## 0.4.38 — the suite runs green on Windows (2026-10-10)
 
 - **21 Windows reds at 0.4.36, none of them the protocol** (LANES-39). The suite had only ever

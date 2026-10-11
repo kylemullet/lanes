@@ -8,6 +8,16 @@ Usage (from inside the lane's worktree, after the operator's landing OK):
   python3 lanes_land.py --dry-run    # every check, no push, no clean-up
   python3 lanes_land.py --onto next  # land on another integration branch than git.main_branch
   python3 lanes_land.py --no-close   # land and clean up; leave the backfill to closeout/startup
+  python3 lanes_land.py --path ../proj-core-1   # the lane's worktree, from anywhere else
+
+On Windows the last form is the only one that can finish (LANES-44): the shell that
+launches this script keeps the worktree as ITS current directory for as long as it
+lives, and Windows refuses to delete a directory any process holds -- so a landing
+started from inside the lane lands and then fails its own clean-up, every time
+(LANES-39 moved the script's own cwd first; that was not enough, the parent shell's
+cwd pins it just the same). From inside the worktree on Windows the script therefore
+refuses up front, before anything moves, naming the `--path` form to run from the
+main clone. `--keep` and `--dry-run` remove nothing and run from anywhere.
 
 `worktree-increment` step 9.7 and step 10 as one operation whose order cannot be
 broken (LANES-20). The skill used to describe them as separate prose steps, and a
@@ -65,6 +75,23 @@ import release_tag as rt               # noqa: E402
 
 NOT_LANDED, CLEANUP_INCOMPLETE = 1, 2
 TAG_WAIT_SECONDS, TAG_POLL_SECONDS = 90, 10
+WINDOWS = sys.platform == "win32"   # module-level so a test can force either answer
+
+
+def cwd_pins(top):
+    """True when, on Windows, this process sits inside the worktree it would remove
+    (LANES-44). The parent shell shares that cwd and outlives this process, and
+    Windows refuses to delete any process's current directory, so the clean-up can
+    only ever fail from here. Elsewhere a held directory can be unlinked."""
+    if not WINDOWS:
+        return False
+    cwd = Path.cwd().resolve()
+    return cwd == top or top in cwd.parents
+
+
+def from_main_clone_hint(p):
+    return (f"run it from the main clone instead: cd \"{p['main_clone']}\" && "
+            f"sh \"<plugin>/scripts/lanes.sh\" lanes_land.py --path \"{p['top']}\"")
 
 
 def git(*args, cwd):
@@ -241,19 +268,31 @@ def main(argv=None):
                     help="skip the post-landing backfill that closes the landed issue")
     ap.add_argument("--onto", default=None, metavar="BRANCH",
                     help="land on BRANCH instead of git.main_branch (a repo whose work integrates on another branch)")
+    ap.add_argument("--path", default=None, metavar="WORKTREE",
+                    help="the lane's worktree, when running from elsewhere — on Windows the only form "
+                         "whose clean-up can succeed, run from the main clone (LANES-44)")
     args = ap.parse_args(argv)
     try:
-        p = plan(Path.cwd(), args.onto)
+        p = plan(Path(args.path).resolve() if args.path else Path.cwd(), args.onto)
     except Refused as e:
         print(f"NOT LANDED — {e}. Nothing was pushed, removed or deleted.", file=sys.stderr)
         return NOT_LANDED
     short = p["head"][:7]
     if p["pin_note"]:
         print(p["pin_note"])
+    pinned = cwd_pins(p["top"])
     if args.dry_run:
         print(f"dry run: {p['branch']} @ {short} fast-forwards {p['upstream']}; would push "
               f"{p['branch']}:{p['main']}" + ("" if args.keep else ", then remove the worktree and delete the branch"))
+        if pinned and not args.keep:
+            print(f"note: on Windows this shell holds the worktree as its current directory, so the real "
+                  f"landing's clean-up would fail from here — {from_main_clone_hint(p)}")
         return 0
+    if pinned and not args.keep:
+        print(f"NOT LANDED — on Windows the shell running this keeps {p['top']} as its current directory "
+              f"and the clean-up could not remove it after the landing (LANES-44); {from_main_clone_hint(p)}. "
+              "Nothing was pushed, removed or deleted.", file=sys.stderr)
+        return NOT_LANDED
     reason = land(p)
     if reason:
         print(f"NOT LANDED — {reason}. Nothing was removed or deleted.", file=sys.stderr)

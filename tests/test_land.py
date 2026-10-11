@@ -30,8 +30,23 @@ def lane(tmp_path, monkeypatch):
     git("add", "feature.txt", cwd=wt)
     git("commit", "-q", "-m", "feat: the lane (CORE-1)", cwd=wt)
     git("push", "-q", "-u", "origin", "core-1-work", cwd=wt)
-    monkeypatch.chdir(wt)
+    global _lane_wt
+    _lane_wt = wt
+    # Each platform's real form. POSIX runs from inside the worktree (the skill's
+    # form). Windows runs from the main clone with --path, the only form whose
+    # clean-up can succeed there (LANES-44): the shell that launches the script holds
+    # the worktree as its cwd and Windows will not delete it; from inside, the script
+    # refuses before anything moves. `run()` below applies the form to each call.
+    monkeypatch.chdir(clone if ll.WINDOWS else wt)
     return origin, clone, wt
+
+
+_lane_wt = None
+
+
+def run(args):
+    """`run(args)` in this platform's real form (see the `lane` fixture)."""
+    return ll.main(["--path", str(_lane_wt), *args] if ll.WINDOWS else args)
 
 
 def _remote_heads(origin, tmp_path):
@@ -54,7 +69,7 @@ def _race(origin, tmp_path):
 def test_lands_verifies_and_cleans_up(lane, tmp_path, capsys):
     origin, clone, wt = lane
     tip = git("rev-parse", "HEAD", cwd=wt)
-    assert ll.main([]) == 0
+    assert run([]) == 0
     heads = _remote_heads(origin, tmp_path)
     assert heads["main"] == tip
     assert "core-1-work" not in heads
@@ -67,7 +82,7 @@ def test_a_lost_fast_forward_race_touches_nothing(lane, tmp_path, capsys):
     origin, clone, wt = lane
     _race(origin, tmp_path)
     before = _remote_heads(origin, tmp_path)
-    assert ll.main([]) == ll.NOT_LANDED
+    assert run([]) == ll.NOT_LANDED
     assert _remote_heads(origin, tmp_path) == before        # main not moved, lane branch still on origin
     assert wt.is_dir()                                      # worktree intact
     assert git("branch", "--list", "core-1-work", cwd=clone).strip()  # local branch intact
@@ -77,7 +92,7 @@ def test_a_lost_fast_forward_race_touches_nothing(lane, tmp_path, capsys):
 
 def test_keep_lands_and_leaves_the_worktree_and_branch(lane, tmp_path):
     origin, clone, wt = lane
-    assert ll.main(["--keep"]) == 0
+    assert run(["--keep"]) == 0
     heads = _remote_heads(origin, tmp_path)
     assert heads["main"] == git("rev-parse", "HEAD", cwd=wt)
     assert "core-1-work" in heads and wt.is_dir()
@@ -86,7 +101,7 @@ def test_keep_lands_and_leaves_the_worktree_and_branch(lane, tmp_path):
 def test_dry_run_pushes_and_removes_nothing(lane, tmp_path):
     origin, clone, wt = lane
     before = _remote_heads(origin, tmp_path)
-    assert ll.main(["--dry-run"]) == 0
+    assert run(["--dry-run"]) == 0
     assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
 
 
@@ -95,14 +110,14 @@ def test_a_dirty_worktree_is_refused_before_anything_moves(lane, tmp_path, dirt)
     origin, clone, wt = lane
     (wt / dirt).write_text("unsaved\n", encoding="utf-8")
     before = _remote_heads(origin, tmp_path)
-    assert ll.main([]) == ll.NOT_LANDED
+    assert run([]) == ll.NOT_LANDED
     assert _remote_heads(origin, tmp_path) == before and (wt / dirt).is_file()
 
 
 def test_refused_from_the_main_clone(lane, monkeypatch, tmp_path, capsys):
     origin, clone, wt = lane
     monkeypatch.chdir(clone)
-    assert ll.main([]) == ll.NOT_LANDED
+    assert ll.main([]) == ll.NOT_LANDED   # no --path on purpose: the bare form from the main clone
     assert "main clone" in capsys.readouterr().err
 
 
@@ -116,7 +131,7 @@ def test_refused_on_a_machine_that_does_not_certify(lane, tmp_path, capsys):
     git("add", ".claude/lanes/config.toml", cwd=wt)
     git("commit", "-q", "-m", "config", cwd=wt)
     before = _remote_heads(origin, tmp_path)
-    assert ll.main([]) == ll.NOT_LANDED
+    assert run([]) == ll.NOT_LANDED
     assert _remote_heads(origin, tmp_path) == before
     assert "does not certify" in capsys.readouterr().err
 
@@ -126,7 +141,7 @@ def test_onto_lands_on_another_integration_branch(lane, tmp_path):
     git("push", "-q", "origin", "main:next", cwd=clone)
     git("fetch", "-q", "origin", cwd=wt)
     tip = git("rev-parse", "HEAD", cwd=wt)
-    assert ll.main(["--onto", "next"]) == 0
+    assert run(["--onto", "next"]) == 0
     heads = _remote_heads(origin, tmp_path)
     assert heads["next"] == tip and heads["main"] != tip
 
@@ -143,9 +158,64 @@ def test_a_remote_branch_with_unlanded_commits_is_kept(lane, tmp_path, capsys):
     git("add", "more.txt", cwd=other)
     git("commit", "-q", "-m", "more work on the lane", cwd=other)
     git("push", "-q", "origin", "core-1-work", cwd=other)
-    assert ll.main([]) == ll.CLEANUP_INCOMPLETE
+    assert run([]) == ll.CLEANUP_INCOMPLETE
     assert "core-1-work" in _remote_heads(origin, tmp_path)
     assert "carries commits not on origin/main" in capsys.readouterr().err
+
+
+# --- Windows: the launching shell pins the worktree (LANES-44) ---------------
+
+def test_path_lands_from_the_main_clone(lane, monkeypatch, tmp_path, capsys):
+    """The form every platform can use, and the only one whose clean-up can succeed on
+    Windows: nothing but the script's own process ever had the worktree as its cwd."""
+    origin, clone, wt = lane
+    monkeypatch.chdir(clone)
+    tip = git("rev-parse", "HEAD", cwd=wt)
+    assert ll.main(["--path", str(wt)]) == 0
+    heads = _remote_heads(origin, tmp_path)
+    assert heads["main"] == tip and "core-1-work" not in heads
+    assert not wt.exists()
+    assert git("branch", "--list", "core-1-work", cwd=clone) == ""
+    assert "cleaned:" in capsys.readouterr().out
+
+
+def test_on_windows_a_landing_from_inside_the_worktree_is_refused_before_anything_moves(lane, monkeypatch, tmp_path, capsys):
+    """From inside the lane the parent shell holds the directory and the clean-up can
+    only fail after the landing; refusing first, with the form to use, costs nothing."""
+    origin, clone, wt = lane
+    monkeypatch.setattr(ll, "WINDOWS", True)
+    monkeypatch.chdir(wt)
+    before = _remote_heads(origin, tmp_path)
+    assert ll.main([]) == ll.NOT_LANDED
+    assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
+    assert git("branch", "--list", "core-1-work", cwd=clone).strip()
+    err = capsys.readouterr().err
+    assert "NOT LANDED" in err and "--path" in err and str(clone) in err and "LANES-44" in err
+
+
+def test_on_windows_keep_and_dry_run_still_run_from_inside_the_worktree(lane, monkeypatch, tmp_path, capsys):
+    """Neither removes the worktree, so nothing pins anything; the dry run names the
+    form the real landing will need."""
+    origin, clone, wt = lane
+    monkeypatch.setattr(ll, "WINDOWS", True)
+    monkeypatch.chdir(wt)
+    before = _remote_heads(origin, tmp_path)
+    assert ll.main(["--dry-run"]) == 0
+    assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
+    assert "--path" in capsys.readouterr().out
+    assert ll.main(["--keep"]) == 0
+    assert _remote_heads(origin, tmp_path)["main"] == git("rev-parse", "HEAD", cwd=wt) and wt.is_dir()
+
+
+def test_off_windows_the_worktree_form_is_unchanged(lane, monkeypatch, tmp_path):
+    """POSIX can unlink a held directory, so the skill's from-the-worktree form stays.
+    In-process the script's own chdir is the only cwd there is, so this passes on a
+    Windows pytest too -- which is exactly why the live failure never showed in tests."""
+    origin, clone, wt = lane
+    monkeypatch.setattr(ll, "WINDOWS", False)
+    monkeypatch.chdir(wt)
+    assert ll.main([]) == 0
+    assert not wt.exists()
 
 
 # --- close the landed issue (LANES-21) --------------------------------------
@@ -201,7 +271,7 @@ def test_landing_closes_the_landed_issue_on_origin(lane, tmp_path, capsys):
     origin, clone, wt = lane
     _verify_in_the_resolving_commit(wt)
     tip = git("rev-parse", "--short=7", "HEAD", cwd=wt)
-    assert ll.main([]) == 0
+    assert run([]) == 0
     text = _origin_issue(origin, tmp_path)
     assert "status: closed" in text and f"commit: {tip}" in text
     assert git("--git-dir", str(origin), "log", "-1", "--format=%s", "main", cwd=tmp_path).startswith(
@@ -217,14 +287,14 @@ def test_landing_closes_the_landed_issue_on_origin(lane, tmp_path, capsys):
 def test_no_close_leaves_the_issue_verified(lane, tmp_path):
     origin, clone, wt = lane
     _verify_in_the_resolving_commit(wt)
-    assert ll.main(["--no-close"]) == 0
+    assert run(["--no-close"]) == 0
     assert "status: verified" in _origin_issue(origin, tmp_path)
 
 
 def test_keep_still_closes_the_landed_issue(lane, tmp_path):
     origin, clone, wt = lane
     _verify_in_the_resolving_commit(wt)
-    assert ll.main(["--keep"]) == 0
+    assert run(["--keep"]) == 0
     assert "status: closed" in _origin_issue(origin, tmp_path) and wt.is_dir()
 
 
@@ -244,7 +314,7 @@ def test_the_close_lands_past_unpushed_commits_in_the_main_clone(lane, tmp_path)
     git("add", "local.txt", cwd=clone)
     git("commit", "-q", "-m", "local work", cwd=clone)
     head = git("rev-parse", "HEAD", cwd=clone)
-    assert ll.main([]) == 0
+    assert run([]) == 0
     assert "status: closed" in _origin_issue(origin, tmp_path)
     assert git("rev-parse", "HEAD", cwd=clone) == head
     assert git("status", "--porcelain", cwd=clone) == ""
@@ -261,7 +331,7 @@ def test_a_close_that_cannot_push_is_reported_not_fatal(lane, tmp_path, capsys):
                     "  git log --format=%s \"$new\" -1 | grep -q '^docs(backlog): close' && exit 1\n"
                     "done\nexit 0\n", encoding="utf-8")
     hook.chmod(0o755)
-    assert ll.main([]) == ll.CLEANUP_INCOMPLETE
+    assert run([]) == ll.CLEANUP_INCOMPLETE
     assert "status: verified" in _origin_issue(origin, tmp_path)
     err = capsys.readouterr().err
     assert "backstop" in err and "discarded with the throwaway worktree" in err
@@ -301,7 +371,7 @@ def test_a_pin_to_an_untagged_version_is_refused_before_anything_moves(lane, rel
     origin, clone, wt = lane
     _pin(wt, "0.9.1", "lanes: pin 0.9.1")
     before = _remote_heads(origin, tmp_path)
-    assert ll.main([]) == ll.NOT_LANDED
+    assert run([]) == ll.NOT_LANDED
     assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
     err = capsys.readouterr().err
     assert "lanes--v0.9.1 is not on" in err and "release_tag.py --ensure --push" in err
@@ -312,7 +382,7 @@ def test_a_pin_to_a_tagged_version_lands(lane, releases, tmp_path, capsys):
     releases("0.9.1")
     _pin(wt, "0.9.1", "lanes: pin 0.9.1")
     tip = git("rev-parse", "HEAD", cwd=wt)
-    assert ll.main([]) == 0
+    assert run([]) == 0
     assert _remote_heads(origin, tmp_path)["main"] == tip
     assert "pin 0.9.1: lanes--v0.9.1 is on" in capsys.readouterr().out
 
@@ -330,7 +400,7 @@ def test_the_landing_waits_for_the_tag_the_release_ci_mints(lane, releases, monk
     monkeypatch.setattr(ll.rt, "tag_on_remote", tag_on_remote)
     monkeypatch.setattr(ll, "TAG_WAIT_SECONDS", 60)
     monkeypatch.setattr(ll, "TAG_POLL_SECONDS", 0)
-    assert ll.main([]) == 0
+    assert run([]) == 0
     assert asked == ["0.9.1"] * 3
 
 
@@ -343,19 +413,19 @@ def test_a_landing_that_keeps_the_pin_asks_nothing(lane, releases, tmp_path, mon
     git("rebase", "-q", "origin/main", cwd=wt)
     git("push", "-q", "-f", "origin", "core-1-work", cwd=wt)
     monkeypatch.setattr(ll.rt, "tag_on_remote", lambda *a, **k: pytest.fail("looked up a pin the lane did not move"))
-    assert ll.main([]) == 0
+    assert run([]) == 0
 
 
 def test_an_unreachable_release_remote_refuses(lane, releases, tmp_path, monkeypatch, capsys):
     origin, clone, wt = lane
     monkeypatch.setenv("LANES_RELEASE_REMOTE", str(tmp_path / "nowhere.git"))
     _pin(wt, "0.9.1", "lanes: pin 0.9.1")
-    assert ll.main([]) == ll.NOT_LANDED
+    assert run([]) == ll.NOT_LANDED
     assert "could not be asked" in capsys.readouterr().err
 
 
 def test_with_the_lookup_off_the_pin_lands_and_says_so(lane, tmp_path, capsys):
     origin, clone, wt = lane                                 # conftest: LANES_RELEASE_REMOTE is empty
     _pin(wt, "0.9.1", "lanes: pin 0.9.1")
-    assert ll.main([]) == 0
+    assert run([]) == 0
     assert "release-tag lookup is off" in capsys.readouterr().out
