@@ -486,6 +486,11 @@ after the brief, and it happens *before* the first worktree exists:
 1. **Resolve the directive to an ordered ID list.** Re-run the step-5b grep: if any named
    ID is already `in-progress`, stop and say so — it may be another session's lane. 🚫 Do
    not release, re-date or edit that claim to clear the way, however stale it looks.
+   **An issue bigger than one landing is split now, before its lane starts** — phases or
+   parts in its text, independent deliverables, more than one session's work. Say so, and
+   on the operator's yes run `backlog_split.py <ID> "<child>" … --reported-by=claude --push`
+   (`/lanes:split`): the issue becomes the epic, the children are minted under it, and the
+   slice claims the children in its place. An epic is never claimed.
 2. **Claim every ID now, up front, in one call** — from the main checkout, on the main
    branch:
 

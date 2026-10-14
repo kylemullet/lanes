@@ -149,3 +149,16 @@ A permission allow-rule for `git *` is a PREFIX match over the command string, s
 <worktree> && git push …` matched nothing and was refused — for a push that was fully
 authorized. `git -C <worktree> push …` ran. Handing the operator a command to paste was
 the most avoidable friction in the flow.
+
+## The story that never closed (2026-10-12)
+
+One story was worked as four phases. Each lane landed a phase and sent the issue back to
+`open` with the next phase written into its Current status, which the old step 9.1
+allowed ("for a partial, back to the status it should now carry"). The issue never
+closed, its status section stacked four lanes of history, and the remaining work could
+not be claimed, prioritized or dated piece by piece. The operator split it into an epic
+and five children by hand after the fact, which took a type edit, one mint per child and
+a status rewrite. A rule a session has to remember had been tried first and rejected:
+the fix belongs in the protocol. So a partial landing now closes its issue and files the
+remainder as new issues in the same commit, an issue bigger than one landing is split
+before its lane starts, and `backlog_split.py` makes the split one command.

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.46 — a partial landing closes its issue and files the rest; the split is one command (2026-10-14)
+
+- **A partial landing no longer sends its issue back to the queue** (LANES-47). `worktree-increment`
+  step 9.1 said a partial goes "back to the status it should now carry with Current status saying
+  where it stopped", and that sentence produced a story worked in four phases that never closed:
+  its status section stacked four lanes of history, and the rest of the work could not be claimed,
+  prioritized or dated piece by piece. Now a lane that lands part of its issue narrows the
+  Resolution to what landed, marks it `verified` like any landing, and files the remainder as new
+  issues in the same commit. Only a lane that lands nothing goes back to the queue. The incident
+  is in `worktree-increment/references/incidents.md` ("The story that never closed").
+- **An issue bigger than one landing is split before its lane starts.** `session-startup` step 8b
+  says so when it resolves a directive: phases or parts in the text, independent deliverables,
+  more than one session's work. The slice claims the children; an epic is never claimed.
+- **`backlog_split.py <ID> "<child>" … --reported-by=…` and `/lanes:split`.** One command for
+  the split that took a type edit, one mint per child and a status rewrite by hand. An open,
+  blocked or paused issue becomes the epic, its children are minted under it with the parent's
+  project, priority and assignee, and its Current status gains one line naming them. An epic only
+  gains children. A claimed issue of this machine's is the partial landing: an epic can never be
+  claimed or verified, so the issue does not become one. The remainder goes under the issue's own
+  epic, or under a NEW epic minted over it, and the issue gets `epic:` and closes as that epic's
+  first child, its claim untouched. Refused: verified or closed issues, another machine's claim,
+  an unknown ID. A failure part-way restores the issue and removes what was minted. `--dry-run`
+  prints the IDs; `--push` (main clone, main branch, checked before anything is written) commits
+  every file by path and pushes under the OK-free guard. The command fills each child's Context
+  from the parent's.
+- **No `--check` finding for "phase N" in a Current status.** The issue asked for one if it was
+  cheap and quiet. Measured against the project it came from, it tripped six live issues
+  (a bootcamp's "step 3", a skill's "Step 6", a reference to another epic's "phase 2"), and a
+  `--check` failure blocks every push, so it is not built.
+
 ## 0.4.45 — an issue goes in at the front of a lane, not into a lane of its own (2026-10-14)
 
 - **`lanes_claim.py <ID>… --next-in <LANE>`** (LANES-49). `--behind` only appends, so an issue

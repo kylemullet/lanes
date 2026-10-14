@@ -415,13 +415,28 @@ step fails the push gate.
 
 1. Final backlog pass in the worktree: on the worked issue, move `status` off
    `in-progress` — to **`verified`** (NOT `closed`) with a filled Resolution and
-   `resolution: done` (or `duplicate` / `superseded`, named in the prose), or, for a
-   partial, back to the status it should now carry with Current status saying where it
-   stopped. Either way the ⏳ marker goes too. **Both halves, again.** The `lane:` line
-   STAYS on an issue that landed (`verified`): it records which lane resolved it and keeps
-   the slice whole in the views until its last issue lands. A partial going back to the
-   queue deletes it, like a release — `--check` fails a `lane:` on an open, blocked or
-   paused issue.
+   `resolution: done` (or `duplicate` / `superseded`, named in the prose). The ⏳ marker
+   goes too. **Both halves, again.** The `lane:` line STAYS on an issue that landed
+   (`verified`): it records which lane resolved it and keeps the slice whole in the views
+   until its last issue lands.
+
+   **A lane that lands part of its issue still closes it; what is left becomes new issues,
+   never a next phase written back into this one** (`incidents.md` → "The story that never
+   closed"). Narrow the Resolution to what landed, mark the issue `verified` as above, and
+   file the remainder in the same commit:
+
+   ```bash
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py <ID> "<piece>" ["<piece>" …] --reported-by=claude
+   ```
+
+   Each piece is minted under the issue's epic, or, when it has none, under a new epic
+   minted over it: the issue gets `epic:` and closes as that epic's first child, its claim
+   untouched. Write each piece's Context. After the landing, when the slice still has
+   reserved issues, `lanes_claim.py <pieces> --next-in <ID>` puts the ones worked next ahead
+   of them; otherwise they are claimed like any other issue. Only a lane that lands NOTHING
+   (parked, abandoned) goes back to the queue: the status it should carry, Current status
+   saying where it stopped, and no `lane:` line — `--check` fails one on an open, blocked
+   or paused issue.
 
    **A project may require more Resolution lines than `Docs:`** (`[[backlog.required_lines]]`,
    which `/lanes:doctor` lists — a `Toggle:` line on every story, say). A verified issue in

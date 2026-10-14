@@ -109,8 +109,12 @@ naming the cause — a guard that cannot ask git never waves a write through (LA
   prose works too; the command picks the project and title and says so. Session-raised issues
   keep calling `backlog_new.py` directly with `--reported-by=claude`.
 - **`/lanes:claim <ID> [<ID> …]`** — claims a slice in one pushed commit (see below).
+- **`/lanes:split <ID> "<child>" ["<child>" …]`** — splits an issue bigger than one landing into
+  an epic and its children in one backlog-only push, then writes each child's Context from the
+  parent's. An open issue becomes the epic; an epic gains children; a lane's own claimed issue
+  files its remainder (under its epic, or a new epic minted over it) for the lane's commit.
 
-All are thin: the work is in `scripts/lanes_init.py`, `scripts/lanes_doctor.py`, `scripts/backlog_new.py` and `scripts/lanes_claim.py`, which are
+All are thin: the work is in `scripts/lanes_init.py`, `scripts/lanes_doctor.py`, `scripts/backlog_new.py`, `scripts/backlog_split.py` and `scripts/lanes_claim.py`, which are
 stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualenv.
 
 ## The three skills
@@ -137,6 +141,7 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # aged
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # view_mode = "serve": the HTML view on backlog.view_port, re-parsed per request
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit | --push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short> [--push]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py CORE-12 "a piece" "another" --reported-by=<short> [--dry-run | --push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free [--push] [--add <paths> -m "<subject>"]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py [--ff-only] [--dry-run]           # sync the main branch; reconciles a mirror-delivered tree
 ```
@@ -304,9 +309,9 @@ duplicated.
 lanes/
 ├── .claude-plugin/     plugin.json, marketplace.json
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
-├── commands/           init.md, doctor.md, claim.md, new.md
+├── commands/           init.md, doctor.md, claim.md, new.md, split.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, backlog_split.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md
