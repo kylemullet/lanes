@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.45 — an issue goes in at the front of a lane, not into a lane of its own (2026-10-14)
+
+- **`lanes_claim.py <ID>… --next-in <LANE>`** (LANES-49). `--behind` only appends, so an issue
+  found mid-slice that had to be worked before the reserved ones was claimed bare, which opened
+  a lane of its own and split one slice across two cards in the view (readlines' INFRA-111
+  slice, 2026-10-12, regrouped by hand-editing `lane:` lines). `--next-in` takes a lane key or
+  any member's ID, landed ones included. Each new ID is claimed `RESERVED`, queued behind what
+  the lane's first reservation was queued behind, and that reservation is re-queued behind the
+  last new ID, so the view reads head, new, old next, the rest. It reads the lanes with the
+  view's own grouping (`backlog_index.lanes_in_flight`), so "next" means what the view shows.
+- **It also moves an issue claimed into the wrong lane.** An ID this machine claimed in a lane
+  of its own takes the target's `lane:` and keeps its state; a `RESERVED` one is re-queued, an
+  `ACTIVE` or `PENDING` one moves only into a lane with nothing being worked and must be named
+  first. A lane holding more than one claimed issue moves only when every one is named.
+- **Refusals:** a lane not in flight; any live member, or a moved ID, whose marker another
+  machine wrote (the only markers rewritten are this machine's own); an ID already in the lane;
+  and the plain claim's refusals. Nothing is written on a refusal, and a concurrent change to
+  the re-queued reservation withdraws the claim like a change to a claimed ID. A marker names a
+  machine, not a session: a second session on the same machine is kept off another session's
+  lane by the protocol's rule, as everywhere else, not by this check.
+- **No doctor warning for one machine holding two lanes.** The issue floated one; it would fire
+  all day, because several sessions on one machine legitimately run a lane each, and the doctor
+  cannot tell sessions apart. `worktree-increment`'s scope section now says where a mid-slice
+  issue goes (`--next-in` or `--behind`, never a bare claim); `session-startup` step 8b, the
+  `/lanes:claim` command and the README name the option.
+
 ## 0.4.44 — required Resolution lines, configured per project (2026-10-14)
 
 - **`[[backlog.required_lines]]`: a Resolution line `--check` requires, configured per project**

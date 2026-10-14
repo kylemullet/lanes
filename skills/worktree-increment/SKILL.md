@@ -84,6 +84,16 @@ other two RESERVED); work CORE-64 start to finish — worktree, build, verify, l
 begin UI-40, in its own worktree, flipping its marker from RESERVED to PENDING then
 ACTIVE as it starts.
 
+**An issue found mid-slice joins the slice's lane — never a lane of its own.** One that
+must be worked before the reserved ones (a rename the next issue builds on, a doc fix the
+current one exposed, the children a split mints) goes in at the front:
+`lanes_claim.py <ID> --next-in <any member's ID>` claims it RESERVED as the next to work
+and re-queues the old next behind it. One that can wait goes at the end with `--behind
+<the last ID>`. A bare `lanes_claim.py <ID>` opens a new lane and splits the slice across
+two cards in the view. If a session already did that, the same `--next-in` moves the stray
+issue into the slice's lane, keeping its state (one being worked moves only into a lane
+where nothing else is); never fix a `lane:` line by hand.
+
 **Never open the second lane while the first is unresolved**, and "unresolved" includes
 *waiting on the operator's verdict*. Genuine parallelism means **one Claude Code session
 per worktree**.

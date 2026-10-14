@@ -1,10 +1,12 @@
 ---
 description: Claim a slice of backlog issues in one pushed commit — every ID or none; the first WORKTREE PENDING, the rest RESERVED behind it
-argument-hint: "<ID> [<ID> …] [--files \"a, b\"] [--behind <ID>] [--dry-run]"
+argument-hint: "<ID> [<ID> …] [--files \"a, b\"] [--behind <ID> | --next-in <ID>] [--dry-run]"
 allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py:*), Read'
 ---
 
-Claim the named backlog issues for this session, in the order given.
+Claim the named backlog issues for this session, in the order given. `--behind <ID>` adds
+them to the end of a lane already claimed; `--next-in <ID>` puts them at its front, as the
+next to work, and moves an issue this machine claimed alone in a lane of its own.
 
 1. Run, exactly, from the repository's main clone on its main branch:
 

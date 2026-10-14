@@ -507,7 +507,8 @@ after the brief, and it happens *before* the first worktree exists:
    the meantime. Exit `0` claimed and pushed · `1` nothing written · `2` committed but not
    pushed (the reason is printed — usually non-main-direct work on local main, which is
    to be surfaced, not pushed). `--dry-run` prints the markers; `--behind <ID>` adds IDs
-   to a lane already claimed instead of starting a new one.
+   to the end of a lane already claimed instead of starting a new one, and `--next-in <ID>`
+   to its front, as the next to work (LANES-49).
 
    **The directive IS the operator's OK for this push** — a claim exists to be seen, by a
    second session, the other operator, a second machine; a local-only claim protects

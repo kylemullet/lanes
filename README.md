@@ -181,7 +181,9 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py CORE-64 UI-40 --files
 
 Every ID or none: each must have a file on the main branch and be unclaimed. The first gets
 `WORKTREE PENDING`, the rest `RESERVED, NOT STARTED` behind it, in one commit that is checked
-and pushed (`--behind <ID>` extends a lane, `--dry-run` prints the markers). A marker names its
+and pushed (`--behind <ID>` extends a lane at its end, `--next-in <ID>` at its front as the next
+to work, re-queuing the old next behind it and moving in an issue this machine claimed into a
+lane of its own by mistake; `--dry-run` prints the markers). A marker names its
 owner as `<Short>'s session on <machine id>@<host>`. `--resume <ID>` moves the operator's own
 ACTIVE lane to a second machine: it makes the worktree from the pushed branch, re-stamps the
 marker to this machine and pushes it. Another person's lane is refused (LANES-7).

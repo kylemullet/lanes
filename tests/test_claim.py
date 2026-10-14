@@ -259,3 +259,121 @@ def test_an_epic_is_never_claimed(setup, tmp_path, capsys):
     assert lcl.main(["CORE-1", "CORE-7"]) == lcl.NOT_CLAIMED
     assert "CORE-7: is an epic" in capsys.readouterr().err
     assert "status: open" in (clone / "docs/backlog/CORE/CORE-1-thing.md").read_text(encoding="utf-8")
+
+
+# --- --next-in: an issue at the FRONT of a lane (LANES-49) ----------------------
+
+import backlog_index as bidx   # noqa: E402  (the view's grouping is what "next" must mean)
+
+
+def _view_order(clone, monkeypatch, key):
+    for k, v in bidx.settings(clone).items():
+        monkeypatch.setattr(bidx, k, v)
+    issues, _ = bidx.load_issues()
+    lane = next(ln for ln in bidx.lanes_in_flight(issues) if ln["key"] == key)
+    return [m["id"] for m in lane["members"]]
+
+
+def _land(clone, issue_id):
+    """The lead lands: closed, done, marker gone, `lane:` kept (what the backfill leaves)."""
+    rel = f"docs/backlog/CORE/{issue_id}-thing.md"
+    text = (clone / rel).read_text(encoding="utf-8")
+    text = text.replace("status: in-progress", "status: closed").replace("resolution: null", "resolution: done")
+    text = "\n".join(l for l in text.split("\n") if not l.startswith("⏳ IN-PROGRESS"))
+    (clone / rel).write_text(text, encoding="utf-8")
+    git("add", rel, cwd=clone)
+    git("commit", "-q", "-m", f"docs(backlog): close {issue_id}", cwd=clone)
+    git("push", "-q", "origin", "main", cwd=clone)
+
+
+def test_next_in_puts_an_issue_ahead_of_the_reserved_ones(setup, tmp_path, monkeypatch, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2", "CORE-3"]) == 0
+    assert lcl.main(["CORE-4", "--next-in", "CORE-1"]) == 0
+    assert _origin_log(origin, tmp_path) == "docs(backlog): CORE-4 next in lane CORE-1@2026-10-07"
+    new = _origin_text(origin, tmp_path, "CORE-4")
+    assert _fm(new, "status") == "in-progress" and _fm(new, "lane") == "CORE-1@2026-10-07"
+    assert "RESERVED, NOT STARTED" in _marker(new) and "queued behind CORE-1." in _marker(new)
+    assert "queued behind CORE-4." in _marker(_origin_text(origin, tmp_path, "CORE-2"))
+    assert "queued behind CORE-2." in _marker(_origin_text(origin, tmp_path, "CORE-3"))
+    assert _view_order(clone, monkeypatch, "CORE-1@2026-10-07") == ["CORE-1", "CORE-4", "CORE-2", "CORE-3"]
+    assert "re-queued CORE-2 behind CORE-4" in capsys.readouterr().out
+
+
+def test_next_in_after_the_lead_landed_takes_the_lane_key(setup, tmp_path, monkeypatch):
+    origin, clone, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2", "CORE-3"]) == 0
+    _land(clone, "CORE-1")
+    assert lcl.main(["CORE-4", "--next-in", "CORE-1@2026-10-07"]) == 0
+    assert "queued behind CORE-1." in _marker(_origin_text(origin, tmp_path, "CORE-4"))
+    assert "queued behind CORE-4." in _marker(_origin_text(origin, tmp_path, "CORE-2"))
+    assert _view_order(clone, monkeypatch, "CORE-1@2026-10-07") == ["CORE-1", "CORE-4", "CORE-2", "CORE-3"]
+
+
+def test_next_in_moves_a_lane_opened_by_mistake(setup, tmp_path, monkeypatch):
+    """The INFRA-122 shape: between two issues of a slice, a mid-slice issue was claimed
+    bare and opened a lane of its own. --next-in moves it in, PENDING kept, ahead of the
+    reservation, and its stray lane is gone from the view."""
+    origin, clone, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2"]) == 0
+    _land(clone, "CORE-1")
+    assert lcl.main(["CORE-3"]) == 0
+    assert _fm(_origin_text(origin, tmp_path, "CORE-3"), "lane") == "CORE-3@2026-10-07"
+    assert lcl.main(["CORE-3", "--next-in", "CORE-2"]) == 0
+    moved = _origin_text(origin, tmp_path, "CORE-3")
+    assert _fm(moved, "lane") == "CORE-1@2026-10-07" and moved.count("\nlane:") == 1
+    assert "WORKTREE PENDING" in _marker(moved)
+    assert "queued behind CORE-3." in _marker(_origin_text(origin, tmp_path, "CORE-2"))
+    assert _origin_log(origin, tmp_path) == "docs(backlog): CORE-3 next in lane CORE-1@2026-10-07 (moved: CORE-3)"
+    assert _view_order(clone, monkeypatch, "CORE-1@2026-10-07") == ["CORE-1", "CORE-3", "CORE-2"]
+    issues, _ = bidx.load_issues()
+    assert [ln["key"] for ln in bidx.lanes_in_flight(issues)] == ["CORE-5@2026-10-07", "CORE-1@2026-10-07"]
+
+
+def test_next_in_refusals_write_nothing(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2"]) == 0
+    assert lcl.main(["CORE-3", "CORE-4"]) == 0
+    before = _origin_log(origin, tmp_path)
+    cases = [
+        (["CORE-4", "--next-in", "CORE-5"], "claimed by other"),            # another session's lane
+        (["CORE-5", "--next-in", "CORE-1"], "already claimed by another session"),
+        (["CORE-2", "--next-in", "CORE-1"], "already in lane CORE-1@2026-10-07"),
+        (["CORE-4", "--next-in", "CORE-9@2026-01-01"], "no lane in flight"),
+        (["CORE-6", "--next-in", "CORE-1"], "is `closed`"),
+        (["CORE-4", "--next-in", "CORE-1"], "also holds CORE-3"),           # half a lane
+        (["CORE-3", "CORE-4", "--next-in", "CORE-1"], "already works CORE-1"),   # two heads
+    ]
+    for argv, why in cases:
+        assert lcl.main(argv) == lcl.NOT_CLAIMED, argv
+        assert why in capsys.readouterr().err, argv
+    assert _origin_log(origin, tmp_path) == before
+    assert git("status", "--porcelain", cwd=clone) == ""
+
+
+def test_next_in_dry_run_writes_nothing(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2"]) == 0
+    before = _origin_log(origin, tmp_path)
+    assert lcl.main(["CORE-4", "--next-in", "CORE-1", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "queued behind CORE-1." in out and "queued behind CORE-4." in out and "would commit:" in out
+    assert _origin_log(origin, tmp_path) == before and git("status", "--porcelain", cwd=clone) == ""
+
+
+def test_next_in_takes_no_behind_or_files(setup):
+    for extra in (["--behind", "CORE-1"], ["--files", "x"]):
+        with pytest.raises(SystemExit):
+            lcl.main(["CORE-4", "--next-in", "CORE-1", *extra])
+
+
+def test_with_lane_and_requeued_each_change_one_line():
+    text = _issue("CORE-1", "in-progress").replace(
+        "**ACTIVE LANE.** x", "**RESERVED, NOT STARTED.** Claimed as part of the 2026-10-07 slice, "
+        "queued behind CORE-9. No worktree yet and no files touched.")
+    laned = lcl.with_lane(text, "CORE-2@2026-10-07")
+    assert "status: in-progress\nlane: CORE-2@2026-10-07\n" in laned and laned.count("\nlane:") == 1
+    assert lcl.with_lane(laned, "CORE-3@2026-10-07").count("\nlane:") == 1
+    out = lcl.requeued(laned, "CORE-4")
+    assert "queued behind CORE-4." in out and "CORE-9" not in out
+    assert sum(a != b for a, b in zip(laned.split("\n"), out.split("\n"))) == 1
