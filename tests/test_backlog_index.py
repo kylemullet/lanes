@@ -163,11 +163,12 @@ def test_check_problems_is_the_union(monkeypatch):
     monkeypatch.setattr(bidx, "orphaned_commit_citations", lambda issues: ["cite-problem"])
     monkeypatch.setattr(bidx, "unresolvable_verified", lambda issues: ["verified-problem"])
     monkeypatch.setattr(bidx, "undocumented_verified", lambda issues: ["docs-problem"])
+    monkeypatch.setattr(bidx, "missing_required_lines", lambda issues: ["required-line-problem"])
     monkeypatch.setattr(bidx, "dangling_epics", lambda issues: ["epic-problem"])
     monkeypatch.setattr(bidx, "resolution_problems", lambda issues: ["resolution-problem"])
     assert bidx.check_problems([], ["structural"]) == [
         "structural", "claim-problem", "cite-problem", "verified-problem", "docs-problem",
-        "epic-problem", "resolution-problem"]
+        "required-line-problem", "epic-problem", "resolution-problem"]
 
 
 # --- load_issues against a tree -------------------------------------------
@@ -778,6 +779,81 @@ def test_undocumented_verified_skips_when_git_cannot_answer(tmp_path, monkeypatc
     assert bidx.undocumented_verified([it], subjects=SUBJECTS, dirty=set()) == []
 
 
+# --- required Resolution lines (LANES-48) ------------------------------------
+
+TOGGLE_RULE = {"label": "Toggle", "projects": ("X",), "types": ("story", "epic"), "since": "2026-10-20"}
+
+
+def test_resolution_line_reads_the_value_bare_bold_bulleted_and_listed_under_the_label():
+    assert bidx.resolution_line(RESOLVED_BODY + "Toggle: `package_mode` at off.\n", "Toggle") == "`package_mode` at off."
+    assert bidx.resolution_line(RESOLVED_BODY + "**Toggle:** none — a refactor.\n", "Toggle") == "none — a refactor."
+    assert bidx.resolution_line(RESOLVED_BODY + "- **Toggle:** `a` at internal\n", "Toggle") == "`a` at internal"
+    listed = RESOLVED_BODY + "**Toggle:**\n- `a` at internal\n- `b` at off\n\nMore prose.\n"
+    assert bidx.resolution_line(listed, "Toggle") == "- `a` at internal - `b` at off"
+    # a label-only line followed by ANOTHER label is empty, not that label's value
+    assert bidx.resolution_line(RESOLVED_BODY + "**Toggle:**\n- **Docs:** edited x.\n", "Toggle") == ""
+    assert bidx.resolution_line(RESOLVED_BODY, "Toggle") is None
+    # outside the Resolution, or mid-sentence, it is not the line
+    moved = RESOLVED_BODY.replace("## Current status\n", "## Current status\n\nToggle: here\n")
+    assert bidx.resolution_line(moved, "Toggle") is None
+    assert bidx.resolution_line(RESOLVED_BODY + "No Toggle: here, mid-sentence.\n", "Toggle") is None
+    # the Docs line is the same pattern
+    assert bidx.DOCS_LINE_RE.pattern == bidx.line_re("Docs").pattern
+
+
+def test_line_value_problem_fails_empty_and_a_reasonless_none():
+    for ok in ("`package_mode` at off", "none — a refactor", "None (test-only change)", "none: no UI"):
+        assert bidx.line_value_problem(ok) is None, ok
+    for empty in ("", "  ", "—", "**"):
+        assert bidx.line_value_problem(empty) == "is empty", empty
+    for bare in ("none", "None —", "none:", "NONE ( )"):
+        assert "no reason" in bidx.line_value_problem(bare), bare
+    assert bidx.line_value_problem("nonexistent_toggle at off") is None, "`none` is a word, not a prefix"
+
+
+def test_a_required_line_binds_verified_issues_in_force_and_closed_done_ones_from_since(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "REQUIRED_LINES", (TOGGLE_RULE,))
+    bare = _write_issue(tmp_path, "bare.md", _fm(id="X-1"), RESOLVED_BODY)
+    toggled = _write_issue(tmp_path, "toggled.md", _fm(id="X-2"), RESOLVED_BODY + "Toggle: `a` at off.\n")
+    empty = _write_issue(tmp_path, "empty.md", _fm(id="X-3"), RESOLVED_BODY + "**Toggle:**\n")
+    reasonless = _write_issue(tmp_path, "none.md", _fm(id="X-4"), RESOLVED_BODY + "Toggle: none\n")
+    chore = _write_issue(tmp_path, "chore.md", _fm(id="X-5", type="chore"), RESOLVED_BODY)
+    other = _write_issue(tmp_path, "other.md", _fm(id="P-1", project="P"), RESOLVED_BODY)
+    superseded = _write_issue(tmp_path, "sup.md", _fm(id="X-6", resolution="superseded"), RESOLVED_BODY)
+    live = _write_issue(tmp_path, "open.md", _fm(id="X-7", status="open", resolution=None), RESOLVED_BODY)
+    epic_after = _write_issue(tmp_path, "epic.md", _fm(id="X-8", type="epic", status="closed",
+                                                      closed="2026-10-21"), RESOLVED_BODY)
+    epic_before = _write_issue(tmp_path, "old.md", _fm(id="X-9", type="epic", status="closed",
+                                                      closed="2026-10-19"), RESOLVED_BODY)
+    wont = _write_issue(tmp_path, "wont.md", _fm(id="X-10", status="closed", closed="2026-10-21",
+                                                 resolution="wont-do"), RESOLVED_BODY)
+    issues = [bare, toggled, empty, reasonless, chore, other, superseded, live, epic_after, epic_before, wont]
+
+    out = bidx.missing_required_lines(issues, today="2026-10-20")
+    assert [o.split(":")[0] for o in out] == ["bare.md", "empty.md", "none.md", "epic.md"]
+    assert "has no `Toggle:` line" in out[0] and "X · story, epic from 2026-10-20" in out[0]
+    assert "is empty" in out[1] and "no reason" in out[2]
+    # before `since` a verified issue is not yet bound; a closed one is dated by its own close
+    assert [o.split(":")[0] for o in bidx.missing_required_lines(issues, today="2026-10-19")] == ["epic.md"]
+
+
+def test_no_required_lines_configured_reads_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    assert bidx.REQUIRED_LINES == ()
+    it = {"_path": Path("missing.md"), "status": "verified", "type": "story", "project": "X"}
+    assert bidx.missing_required_lines([it]) == [], "no rule: no file is even read"
+
+
+def test_settings_carry_the_configured_rules(tmp_path):
+    raw = {"backlog": {"projects": ["X", "P"], "required_lines": [
+        {"label": "Toggle", "projects": ["X"], "types": ["story"], "since": "2026-10-20"},
+        {"label": "Risk", "since": "2026-11-01"}]}}
+    rules = bidx.settings(tmp_path, raw)["REQUIRED_LINES"]
+    assert rules == ({"label": "Toggle", "projects": ("X",), "types": ("story",), "since": "2026-10-20"},
+                     {"label": "Risk", "projects": None, "types": None, "since": "2026-11-01"})
+
+
 def test_commit_and_dirty_paths_survive_spaces_apostrophes_and_non_ascii(tmp_path, monkeypatch):
     def g(*args):
         return subprocess.run(["git", *args], cwd=tmp_path, capture_output=True, text=True,
@@ -839,6 +915,23 @@ def test_backfill_skips_an_undocumented_code_issue_and_closes_a_documented_one(t
     assert [(i["id"], "Docs:" in why and "modules/dwg_io.py" in why) for i, why in skipped] == [("X-1", True)]
     monkeypatch.setattr(bidx, "commit_paths", lambda h: {"docs/features/001-dwg-io.md", "CLAUDE.md"})
     closed, skipped = bidx.backfill_verified([bare], subjects=SUBJECTS, today="2026-09-16")
+    assert [i["id"] for i, _ in closed] == ["X-1"] and skipped == []
+
+
+def test_backfill_skips_an_issue_missing_a_required_line_and_closes_one_that_has_it(tmp_path, monkeypatch):
+    """The backfill runs before --check and a closed issue is checked forever after, so
+    closing one that owes a required line would hand --check a failure nobody can clear
+    from a lane (the same reason it refuses an undocumented one, INFRA-41)."""
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "REQUIRED_LINES", (TOGGLE_RULE,))
+    bare = _write_issue(tmp_path, "bare.md", _fm(id="X-1"), DOCUMENTED_BODY)
+    toggled = _write_issue(tmp_path, "toggled.md", _fm(id="X-2"), DOCUMENTED_BODY + "Toggle: none — a refactor.\n")
+    closed, skipped = bidx.backfill_verified([bare, toggled], subjects=SUBJECTS, today="2026-10-21")
+    assert [i["id"] for i, _ in closed] == ["X-2"]
+    assert [(i["id"], "`Toggle:`" in why) for i, why in skipped] == [("X-1", True)]
+    assert bidx.parse_frontmatter((tmp_path / "bare.md").read_text(encoding="utf-8"))[0]["status"] == "verified"
+    # before the rule is in force the same issue closes
+    closed, skipped = bidx.backfill_verified([bare], subjects=SUBJECTS, today="2026-10-19")
     assert [i["id"] for i, _ in closed] == ["X-1"] and skipped == []
 
 

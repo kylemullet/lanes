@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.44 — required Resolution lines, configured per project (2026-10-14)
+
+- **`[[backlog.required_lines]]`: a Resolution line `--check` requires, configured per project**
+  (LANES-48). The built-in `Docs:` line made the doc loop a gate rather than a discipline; a
+  project now names more lines the same way — a `Toggle:` line on every story, so "every feature
+  ships behind a toggle" is enforced instead of remembered. Each rule is a `label`, an optional
+  `projects` / `types` scope (omitted = every one; an empty list is an error, not a rule that
+  matches nothing) and a required `since` cut-over. It binds every verified issue in scope while
+  it is in force, and every issue closed `done` on or after `since` — the closed half is what
+  reaches a hand-closed epic, which never passes through `verified`; nothing closed before
+  `since` is ever checked. The line reads `<label>: <value>` or `<label>: none — <reason>`,
+  bare, bolded or bulleted, or a label alone over a bulleted list; present but empty fails, and
+  so does `none` with no reason. The backfill, and so the landing's own close, will not close an
+  issue that owes one, for the reason it will not close an undocumented one: it runs before
+  `--check`, and the closed issue it would write fails every check after. `/lanes:doctor` gains a
+  `required lines` row naming `Docs:` and each rule, its scope and whether it is in force yet;
+  the config check fails a rule with no `label` or `since`, a malformed date, a label with a
+  colon, a duplicate, `Docs` itself, or a project or type the backlog does not have.
+  `Docs:` stays built in: its condition is the change's paths, not the issue's project and type,
+  so it shares the line pattern (`line_re`) rather than becoming a configured instance.
+  `templates/config.toml` carries a commented example; the README, `session-startup` step 2d and
+  `worktree-increment` step 9.1 say what the gate now covers.
+
 ## 0.4.43 — a due date on an issue, and the views open with the calendar (2026-10-11)
 
 - **`due: YYYY-MM-DD` on an issue; a Due section at the top of every view** (LANES-46). One

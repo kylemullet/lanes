@@ -169,8 +169,9 @@ Rules:
 - A verified issue the script SKIPS (exit 1, listed on stderr) is a real finding: its
   Resolution is the stub, or its cited subject is not on HEAD (the subject drifted from
   the actual commit, or the lane never pushed), or its resolving commit reached outside
-  `backlog.docs_lane_prefixes` and the Resolution has no `Docs:` line. Fix the Resolution
-  by hand (cite the real subject exactly; write the `Docs:` line the lane owed) and
+  `backlog.docs_lane_prefixes` and the Resolution has no `Docs:` line, or it owes a line
+  `backlog.required_lines` requires and does not carry it. Fix the Resolution by hand
+  (cite the real subject exactly; write the `Docs:` or required line the lane owed) and
   re-run; never edit `commit:` by hand. The backfill refuses the undocumented case itself
   because it runs before step 5's `--check`, and a closed issue is never checked again.
 - It sits right after the pull so everything downstream reads the post-close state.

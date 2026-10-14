@@ -24,6 +24,15 @@ view_mode = "file"                            # "file": a file:// view every bac
                                               # regenerates (bookmark it); "serve": `--serve` re-parses per request
 view_port = 8099                              # the served backlog view (view_mode = "serve")
 
+# A Resolution line your project requires, enforced by `--check` the way the built-in `Docs:`
+# line is. One table per line; omit `projects` / `types` to mean every one. `since` is required:
+# issues closed `done` before it are never checked, and verified issues are checked from it on.
+# [[backlog.required_lines]]
+# label = "Toggle"                            # the line reads `Toggle: <value>` or `Toggle: none — <reason>`
+# projects = ["CORE"]
+# types = ["story", "epic"]
+# since = "2026-01-01"
+
 [git]
 main_branch = "main"
 land_requires_ok = true                       # the operator-OK gate is on LANDING, never on a branch push

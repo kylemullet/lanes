@@ -418,3 +418,21 @@ def test_release_tag_skips_offline_off_or_unpinned(tmp_path, monkeypatch):
 
 def test_release_tag_is_one_of_the_run_checks(repo):
     assert "release tag" in by_label(ld.run(repo, now=NOW))
+
+
+def test_required_lines_line_names_the_built_in_and_each_configured_rule():
+    cfg = lc.resolve({}, user_name="t", platform="linux")
+    c = ld.check_required_lines(cfg, "2026-10-14")
+    assert c.status == ld.OK and c.detail == "Docs: (built in); none configured"
+    raw = {"backlog": {"projects": ["UI", "PIPE"], "required_lines": [
+        {"label": "Toggle", "projects": ["UI", "PIPE"], "types": ["story", "epic"], "since": "2026-10-20"},
+        {"label": "Risk", "since": "2026-10-01"}]}}
+    c = ld.check_required_lines(lc.resolve(raw, user_name="t", platform="linux"), "2026-10-14")
+    assert c.detail == ("Docs: (built in); Toggle: (UI, PIPE · story, epic · from 2026-10-20, not yet in force); "
+                        "Risk: (every issue · from 2026-10-01)")
+
+
+def test_the_doctor_runs_the_required_lines_check(repo):
+    li.scaffold(repo, force=False, projects=["CORE"])
+    c = by_label(ld.run(repo, now=NOW))["required lines"]
+    assert c.status == ld.OK and c.detail.startswith("Docs: (built in)")

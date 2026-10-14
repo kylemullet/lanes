@@ -413,6 +413,11 @@ step fails the push gate.
    queue deletes it, like a release — `--check` fails a `lane:` on an open, blocked or
    paused issue.
 
+   **A project may require more Resolution lines than `Docs:`** (`[[backlog.required_lines]]`,
+   which `/lanes:doctor` lists — a `Toggle:` line on every story, say). A verified issue in
+   a rule's scope carries `<label>: <value>` or `<label>: none — <reason>`; empty, or `none`
+   with no reason, fails like a missing line, and the landing's close will not close it.
+
    **`verified` means landed, awaiting close.** The lane never writes `closed` or a
    `commit:` hash: the hash is unknowable here. The landing (9.7) closes it the moment
    the hash is final: `--backfill` finds the resolving commit on HEAD by the subject the

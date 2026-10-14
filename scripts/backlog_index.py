@@ -43,6 +43,10 @@ copy conflicts at every rebase. The issue files are the source of truth.
   * undocumented verified issues -- a verified issue whose change touched anything
     outside DOCS_LANE_PREFIXES must carry a `Docs:` line in its Resolution: the doc
     edited, the DOC issue queued, or "nothing -- no documented behavior changed";
+  * missing required lines -- each `[[backlog.required_lines]]` rule (LANES-48) names a
+    Resolution line (`Toggle:`, say) that every verified issue of its projects and
+    types carries, and every one closed `done` on or after its `since` date. Present
+    but empty fails, and so does `none` with no reason after it;
   * dangling epics and resolution/status disagreements.
 
 The `verified` status and --backfill. A worktree lane cannot know its resolving
@@ -116,6 +120,7 @@ def settings(root=None, raw=None):
         "DEFAULT_ASSIGNEE": default_assignee,
         "RESOLUTION_CUTOVER": cfg["resolution_required_from"],   # None = always required
         "DOCS_LANE_PREFIXES": tuple(cfg["docs_lane_prefixes"]),
+        "REQUIRED_LINES": tuple(cfg["required_lines"]),
         "CLAIM_MARKER_EXEMPT": set(cfg["claim_marker_exempt"]),
         "VIEW_PORT": cfg["view_port"],
         "MAIN_BRANCH": cfg["main_branch"],
@@ -855,7 +860,14 @@ def epic_claim_problems(issues):
 
 # --- the doc loop (INFRA-41) ---------------------------------------------
 
-DOCS_LINE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?Docs:", re.M)
+def line_re(label):
+    """A Resolution line `<label>:` -- bare, bolded or bulleted, at the start of a line.
+    Group 1 is whatever follows the colon on that line. The `Docs:` line and every
+    configured required line (LANES-48) are matched by this one pattern."""
+    return re.compile(rf"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?{re.escape(label)}:(.*)$", re.M)
+
+
+DOCS_LINE_RE = line_re("Docs")
 
 
 def is_docs_lane(path):
@@ -993,10 +1005,108 @@ def undocumented_verified(issues, subjects=None, dirty=None, touched=None):
     return out
 
 
+# --- required Resolution lines (LANES-48) -----------------------------------
+
+# Another `Label:` line, which ends a label-only line's bulleted value.
+_ANY_LABEL_RE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?[A-Za-z][A-Za-z0-9 _-]*:")
+_CONTINUATION_RE = re.compile(r"^(?:[ \t]*[-*][ \t]+|[ \t]+\S)")
+
+
+def resolution_line(body, label):
+    """The value of the Resolution's `<label>:` line, or None when there is no such line.
+
+    The value is what follows the colon (a closing `**` dropped). A label alone on its
+    line takes the bulleted or indented lines right under it, until a blank line or
+    another `Label:` line, so a `**Toggle:**` over two bulleted toggles reads as both."""
+    sec = resolution_section(body)
+    if sec is None:
+        return None
+    m = line_re(label).search(sec)
+    if not m:
+        return None
+    value = re.sub(r"^\*\*", "", m.group(1).strip()).strip()
+    if value:
+        return value
+    more = []
+    for line in sec[m.end():].lstrip("\r\n").splitlines():
+        if not line.strip() or not _CONTINUATION_RE.match(line) or _ANY_LABEL_RE.match(line):
+            break
+        more.append(line.strip())
+    return " ".join(more)
+
+
+def line_value_problem(value):
+    """Why a required line's value says nothing, or None when it says something.
+    Empty fails; so does `none` with no reason after it (`none — <reason>` passes)."""
+    if not re.search(r"\w", value or ""):
+        return "is empty"
+    m = re.match(r"(?i)none\b(.*)", value, re.S)
+    if m and not re.search(r"\w", m.group(1)):
+        return "says `none` with no reason after it"
+    return None
+
+
+def _rule_applies(rule, it, today):
+    """Does `rule` bind issue `it`? Every verified issue of its projects and types while
+    the rule is in force, and every one closed `done` on or after its `since` date --
+    a hand-closed epic never passes through `verified`, so the closed half is what
+    reaches it. A verified issue that was superseded or a duplicate made no change."""
+    if rule["projects"] is not None and it.get("project") not in rule["projects"]:
+        return False
+    if rule["types"] is not None and it.get("type") not in rule["types"]:
+        return False
+    status, res = it.get("status"), it.get("resolution")
+    if status == "verified":
+        return res in (None, "done") and today >= rule["since"]
+    if status == "closed":
+        closed = it.get("closed")
+        return res == "done" and isinstance(closed, str) and closed >= rule["since"]
+    return False
+
+
+def required_line_problems(it, body, today=None, rules=None):
+    """One string per required line issue `it` owes and its Resolution does not carry
+    (no path prefix: --check adds it, the backfill's skip line names the issue itself)."""
+    rules = REQUIRED_LINES if rules is None else rules
+    today = today or datetime.date.today().isoformat()
+    out = []
+    for rule in rules:
+        if not _rule_applies(rule, it, today):
+            continue
+        label = rule["label"]
+        value = resolution_line(body, label)
+        if value is None:
+            what = f"has no `{label}:` line"
+        else:
+            why = line_value_problem(value)
+            if why is None:
+                continue
+            what = f"has a `{label}:` line that {why}"
+        scope = " · ".join(filter(None, (", ".join(rule["projects"] or ()), ", ".join(rule["types"] or ()))))
+        out.append(f"{it.get('status')} and its Resolution {what} — required"
+                   f"{' for ' + scope if scope else ''} from {rule['since']} (backlog.required_lines); "
+                   f"write `{label}: <value>` or `{label}: none — <reason>`")
+    return out
+
+
+def missing_required_lines(issues, today=None):
+    """`--check`: every issue that owes a configured Resolution line and lacks it."""
+    if not REQUIRED_LINES:
+        return []
+    out = []
+    for it in issues:
+        if it.get("status") not in ("verified", "closed"):
+            continue
+        body = (ROOT / it["_path"]).read_text(encoding="utf-8")
+        out.extend(f"{it['_path']}: {p}" for p in required_line_problems(it, body, today=today))
+    return out
+
+
 def check_problems(issues, problems):
     """Everything --check and the test suite assert, as one list of strings."""
     return (list(problems) + orphaned_claims(issues) + unreadable_markers(issues)
             + orphaned_commit_citations(issues) + unresolvable_verified(issues) + undocumented_verified(issues)
+            + missing_required_lines(issues)
             + dangling_epics(issues) + epic_claim_problems(issues) + resolution_problems(issues)
             + lane_problems(issues))
 
@@ -1098,6 +1208,12 @@ def backfill_verified(issues, subjects=None, today=None, dry_run=False):
                                     f"{code[0]}" + (f" (+{len(code) - 1} more)" if len(code) > 1 else "")
                                     + " — worktree-increment 8a, INFRA-41"))
                 continue
+        # A configured required line (LANES-48): the issue closes `done` dated on or after the
+        # verify, so closing it here would hand --check a closed issue that fails forever.
+        owed = required_line_problems(it, body, today=today)
+        if owed:
+            skipped.append((it, owed[0]))
+            continue
         updates = {"status": "closed", "commit": short}
         if not it.get("closed"):
             updates["closed"] = commit_date(full) or today
@@ -2269,7 +2385,8 @@ def main(argv=None):
                          "a dangling epic: parent, a resolution: that disagrees with the "
                          "status or commit, "
                          "a due: that is not a calendar date, "
-                         "or a verified issue that is unresolvable or missing its Docs: line")
+                         "a verified issue that is unresolvable or missing its Docs: line, "
+                         "or an issue missing a line backlog.required_lines requires")
     ap.add_argument("--report", action="store_true", help="print aged operator view, don't write")
     ap.add_argument("--who", default=None,
                     help="an operator short name, or both (default: this machine's operator)")

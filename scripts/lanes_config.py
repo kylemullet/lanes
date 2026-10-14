@@ -54,6 +54,7 @@ DEFAULTS: dict[str, Any] = {
         "docs_lane_prefixes": None,          # None -> git.main_direct_paths
         "claim_marker_exempt": [],
         "resolution_required_from": None,    # None -> always required
+        "required_lines": [],                # [[backlog.required_lines]] (LANES-48)
         "view_port": 8099,
         "view_mode": "file",                 # "file" | "serve" (LANES-11)
     },
@@ -85,6 +86,7 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "dir": (str, False), "projects": (list, False), "types": (list, False),
         "priorities": (list, False), "docs_lane_prefixes": (list, False),
         "claim_marker_exempt": (list, False), "resolution_required_from": (str, False),
+        "required_lines": (list, False),
         "view_port": (int, False), "view_mode": (str, False),
     },
     "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False),
@@ -98,9 +100,16 @@ _OPERATOR_FIELDS = {
     "certifies": (bool, False), "may_edit_code": (bool, False),
     "retired": (bool, False), "retired_on": (str, False),     # LANES-27
 }
+_REQUIRED_LINE_FIELDS = {
+    "label": (str, True), "projects": (list, False), "types": (list, False), "since": (str, True),
+}
+# Lists of TABLES, validated field by field rather than as lists of strings.
+_TABLE_LISTS = {("backlog", "required_lines")}
 _TOP_LEVEL_SCALARS = {"plugin_version": (str, False)}
 _PROJECT_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 _-]*$")
+BUILT_IN_LINES = ("Docs",)     # the doc loop's line (INFRA-41): conditional on the change, never configured
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
 
 
@@ -220,7 +229,7 @@ def validate(raw: dict) -> list:
         for key, (typ, _req) in keys.items():
             if key in table and not isinstance(table[key], typ):
                 err(f"`{section}.{key}` must be a {typ.__name__}")
-            if key in table and typ is list and isinstance(table[key], list):
+            if key in table and typ is list and isinstance(table[key], list) and (section, key) not in _TABLE_LISTS:
                 if not all(isinstance(x, str) for x in table[key]):
                     err(f"`{section}.{key}` must be a list of strings")
 
@@ -252,6 +261,7 @@ def validate(raw: dict) -> list:
     mode = backlog.get("view_mode")
     if isinstance(mode, str) and mode not in VIEW_MODES:
         err(f"`backlog.view_mode` must be one of {', '.join(VIEW_MODES)}, got {mode!r}")
+    _validate_required_lines(backlog, err, warn)
     if "statuses" in backlog:
         err("`backlog.statuses` is not configurable: in-progress / verified / closed are read by name in the gate")
     if "resolutions" in backlog:
@@ -323,6 +333,79 @@ def validate(raw: dict) -> list:
     order = {"error": 0, "warning": 1}
     problems.sort(key=lambda p: order[p.level])
     return problems
+
+
+def _validate_required_lines(backlog: dict, err, warn) -> None:
+    """`[[backlog.required_lines]]`: one table per Resolution line a project requires (LANES-48).
+
+    `label` and `since` are required. `since` is the cut-over: without it every issue
+    closed before the rule existed would fail the day it turned on, the way INFRA-41's
+    `Docs:` line and the `resolution_required_from` field both needed one. `projects` and
+    `types` narrow it; omitted means every one, and an empty list is an error rather than
+    a rule that silently applies to nothing."""
+    rules = backlog.get("required_lines")
+    if not isinstance(rules, list):
+        return
+    projects = backlog.get("projects") if isinstance(backlog.get("projects"), list) else DEFAULTS["backlog"]["projects"]
+    types = backlog.get("types") if isinstance(backlog.get("types"), list) else DEFAULTS["backlog"]["types"]
+    seen = set()
+    for i, rule in enumerate(rules):
+        where = f"backlog.required_lines[{i}]"
+        if not isinstance(rule, dict):
+            err(f"`{where}` must be a table ([[backlog.required_lines]])")
+            continue
+        for key in rule:
+            if key not in _REQUIRED_LINE_FIELDS:
+                warn(f"unknown key `{where}.{key}` (ignored)")
+        for key, (typ, required) in _REQUIRED_LINE_FIELDS.items():
+            if key not in rule:
+                if required:
+                    err(f"`{where}` is missing `{key}`")
+            elif not isinstance(rule[key], typ):
+                err(f"`{where}.{key}` must be a {typ.__name__}")
+        label = rule.get("label")
+        if isinstance(label, str):
+            if not _LABEL_RE.match(label):
+                err(f"`{where}.label` {label!r} must be a word or words, no colon (the line reads `{label}:`)")
+            elif label.lower() in (b.lower() for b in BUILT_IN_LINES):
+                err(f"`{where}.label` {label!r} is built in: the doc loop requires it when a change reaches "
+                    "outside `backlog.docs_lane_prefixes`, and configuring it would change that rule")
+            elif label.lower() in seen:
+                err(f"`{where}.label` {label!r} is configured twice")
+            seen.add(label.lower())
+        since = rule.get("since")
+        if isinstance(since, str) and not _DATE_RE.match(since):
+            err(f"`{where}.since` must be YYYY-MM-DD, got {since!r}")
+        for key, allowed in (("projects", projects), ("types", types)):
+            vals = rule.get(key)
+            if not isinstance(vals, list):
+                continue
+            if not vals:
+                err(f"`{where}.{key}` is empty — omit it to mean every one")
+            unknown = [v for v in vals if v not in allowed]
+            if unknown:
+                err(f"`{where}.{key}` names {', '.join(repr(v) for v in unknown)}, not in `backlog.{key}`")
+
+
+def required_lines(backlog: dict) -> list:
+    """The well-formed `[[backlog.required_lines]]` rules, normalized. A malformed one is
+    `validate()`'s finding (the doctor fails on it); it is left out here, never guessed at.
+
+    Each: `label`, `projects` / `types` (a tuple, or None for every one), `since`."""
+    out = []
+    for rule in backlog.get("required_lines") or []:
+        if not isinstance(rule, dict):
+            continue
+        label, since = rule.get("label"), rule.get("since")
+        if not (isinstance(label, str) and _LABEL_RE.match(label) and isinstance(since, str)
+                and _DATE_RE.match(since)) or label.lower() in (b.lower() for b in BUILT_IN_LINES):
+            continue
+        scope = {}
+        for key in ("projects", "types"):
+            vals = rule.get(key)
+            scope[key] = tuple(vals) if isinstance(vals, list) and vals else None
+        out.append({"label": label, "projects": scope["projects"], "types": scope["types"], "since": since})
+    return out
 
 
 # ---------------------------------------------------------------- resolving
@@ -410,6 +493,7 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
         "docs_lane_prefixes": list(docs_lane),
         "claim_marker_exempt": list(merged["backlog"]["claim_marker_exempt"]),
         "resolution_required_from": merged["backlog"]["resolution_required_from"],
+        "required_lines": required_lines(merged["backlog"]),
         "view_port": merged["backlog"]["view_port"],
         "view_mode": merged["backlog"]["view_mode"],
         "main_branch": merged["git"]["main_branch"],

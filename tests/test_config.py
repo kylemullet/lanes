@@ -204,3 +204,44 @@ def test_retired_row_rules():
     assert any("`retired` is not true" in m for m in _warnings(dangling))
     assert any("retired" in m and "must be a bool" in m
                for m in _errors({"operators": [dict(RETIRED["operators"][1], retired="yes")]}))
+
+
+# --- [[backlog.required_lines]] (LANES-48) ------------------------------------
+
+def _lines(*rules, **backlog):
+    return {"backlog": {"projects": ["CORE", "UI"], **backlog, "required_lines": list(rules)}}
+
+
+def test_required_lines_valid_rule_resolves_and_scope_defaults_to_everything():
+    raw = _lines({"label": "Toggle", "projects": ["UI"], "types": ["story", "epic"], "since": "2026-10-20"},
+                 {"label": "Risk note", "since": "2026-11-01"})
+    assert lc.validate(raw) == []
+    cfg = lc.resolve(raw, user_name="t", platform="linux")
+    assert cfg["required_lines"] == [
+        {"label": "Toggle", "projects": ("UI",), "types": ("story", "epic"), "since": "2026-10-20"},
+        {"label": "Risk note", "projects": None, "types": None, "since": "2026-11-01"}]
+    assert lc.resolve({}, user_name="t", platform="linux")["required_lines"] == []
+
+
+def test_required_lines_need_a_label_and_a_since_date():
+    errs = _errors(_lines({"projects": ["UI"]}))
+    assert any("missing `label`" in m for m in errs) and any("missing `since`" in m for m in errs)
+    assert any("must be YYYY-MM-DD" in m for m in _errors(_lines({"label": "Toggle", "since": "Oct 20"})))
+    assert any("must be a table" in m for m in _errors(_lines("Toggle")))
+    assert lc.resolve(_lines({"label": "Toggle", "since": "Oct 20"}), user_name="t", platform="linux")["required_lines"] == []
+
+
+def test_required_lines_label_rules():
+    assert any("no colon" in m for m in _errors(_lines({"label": "Toggle:", "since": "2026-10-20"})))
+    assert any("is built in" in m for m in _errors(_lines({"label": "docs", "since": "2026-10-20"})))
+    twice = _lines({"label": "Toggle", "since": "2026-10-20"}, {"label": "toggle", "since": "2026-11-01"})
+    assert any("configured twice" in m for m in _errors(twice))
+
+
+def test_required_lines_scope_must_name_known_projects_and_types_and_not_be_empty():
+    errs = _errors(_lines({"label": "Toggle", "projects": ["PIPE"], "types": ["feature"], "since": "2026-10-20"}))
+    assert any("'PIPE', not in `backlog.projects`" in m for m in errs)
+    assert any("'feature', not in `backlog.types`" in m for m in errs)
+    assert any("is empty — omit it" in m for m in _errors(_lines({"label": "Toggle", "projects": [], "since": "2026-10-20"})))
+    assert any("unknown key `backlog.required_lines[0].statuses`" in m
+               for m in _warnings(_lines({"label": "Toggle", "since": "2026-10-20", "statuses": ["verified"]})))

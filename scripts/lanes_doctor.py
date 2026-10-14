@@ -14,7 +14,9 @@ Checks, in order:
   stubs      the three extension-point files exist
   backlog    the backlog directory exists; `--check` runs when the tracker ships with the plugin
   views      the generated INDEX.md / index.html are gitignored (a tracked copy conflicts at every rebase)
-  claims     every `in-progress` issue classified: live / setting up / reserved / STALE CANDIDATE
+  required lines  the Resolution lines `--check` requires: `Docs:` (built in) and each
+                  `[[backlog.required_lines]]` rule, its scope and whether it is in force (LANES-48)
+  claims    every `in-progress` issue classified: live / setting up / reserved / STALE CANDIDATE
   settings   the tracked `.claude/settings.json` is unmodified against HEAD (`marketplace remove` empties it)
   settings lanes  it declares lanes' marketplace and enables lanes — in HEAD and in the working tree
   marketplace     this machine's registered marketplace source (repo, ref) matches the declared one,
@@ -211,6 +213,21 @@ def check_release_tag(cfg: dict) -> Check:
     return Check(WARN, "release tag", f"{tag} is not on {remote} — CI that checks out the pinned release fails on every "
                                       "push until it exists; from the plugin checkout, `python3 scripts/release_tag.py "
                                       "--ensure --push`")
+
+
+def check_required_lines(cfg: dict, today: Optional[str] = None) -> Check:
+    """The Resolution lines `--check` requires: the built-in `Docs:` and each configured
+    `[[backlog.required_lines]]` rule, with its scope and whether it is in force yet (LANES-48).
+    A malformed rule is the config check's FAIL; it is absent here because nothing enforces it."""
+    today = today or datetime.now().strftime("%Y-%m-%d")
+    parts = ["Docs: (built in)"]
+    for rule in cfg.get("required_lines") or []:
+        scope = " · ".join(filter(None, (", ".join(rule["projects"] or ()), ", ".join(rule["types"] or ()))))
+        when = f"from {rule['since']}" if today >= rule["since"] else f"from {rule['since']}, not yet in force"
+        parts.append(f"{rule['label']}: ({scope or 'every issue'} · {when})")
+    if len(parts) == 1:
+        parts.append("none configured")
+    return Check(OK, "required lines", "; ".join(parts))
 
 
 def check_stubs(root: Path) -> Check:
@@ -561,6 +578,7 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     checks.append(check_release_tag(cfg))
     checks.append(check_stubs(root))
     checks.extend(check_backlog(root, cfg))
+    checks.append(check_required_lines(cfg, now.strftime("%Y-%m-%d") if now else None))
     checks.extend(check_claims(root, cfg, now))
     checks.extend(check_settings(root))
     checks.append(check_commit_guard(root))
