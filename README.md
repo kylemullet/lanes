@@ -359,12 +359,67 @@ turned a consumer's CI red for about 250 pushes before anyone noticed (LANES-33)
 
 ## Privacy
 
-lanes runs entirely on your machine, inside the repository it is installed in. It reads
-`git config user.name` and the platform to pick your row in `.claude/lanes/config.toml`, and the
-operator shorts you wrote into that config appear as `assignee` and `reported_by` in the issue files
-it creates. The hook reads `CLAUDE_PROJECT_DIR` to know which project it is guarding. Nothing is sent
-anywhere: no network calls, no telemetry, no service, no retention. The only outbound action is your
-own `git push`, which the skills ask you to authorize before it runs.
+lanes runs on your machine, inside the repository it is installed in. It has no service, no
+account and no telemetry, and it keeps nothing outside that repository. Below is everything it
+reads, every network call it makes, which of its pushes wait for you, and what it installs into git.
+
+**What it reads.** `git config user.name` and the platform, to pick your row in
+`.claude/lanes/config.toml`; the operator shorts you wrote into that config appear as `assignee`
+and `reported_by` in the issue files it creates. The edit hook reads `CLAUDE_PROJECT_DIR` to know
+which project it is guarding. `/lanes:doctor` reads Claude Code's plugin registry
+(`~/.claude/plugins`, or `$CLAUDE_CONFIG_DIR/plugins`) to compare the installed version with your
+pin.
+
+**Network calls.** Every one is a `git` command, run with your own git configuration and
+credentials. There are two destinations:
+
+- **Your repository's `origin`.** The scripts fetch from it: the pull (`lanes_pull.py`), issue
+  numbering (`backlog_new.py`, `backlog_split.py`), the claim, the close (`backlog_index.py
+  --backfill`) and the landing. They push to it: a claim or a backlog-only commit to the main
+  branch (`lanes_claim.py`, `push_guard.py`), a lane's topic branch, and a landing
+  (`lanes_land.py`, `<branch>:<main branch>`). After a landing it deletes the topic branch on
+  `origin`, but only once that branch's tip is on the main branch.
+- **The plugin's own public repository** (`repository` in `.claude-plugin/plugin.json`,
+  `github.com/kylemullet/lanes`). `/lanes:doctor`, and `lanes_land.py` when a lane moves
+  `plugin_version`, check with `git ls-remote` that the pinned version has a release tag there
+  (the landing asks again for a short while if the tag is still being minted). That is an
+  anonymous read and sends nothing about your project.
+  `LANES_RELEASE_REMOTE` points it elsewhere; set but empty, it turns the lookup off.
+
+**Which pushes wait for you.** A landing on the main branch waits for your explicit OK while
+`git.land_requires_ok` is true, which is the default. The skills run the others without asking:
+
+- **A claim**, pushed on the instruction that starts the work.
+- **A topic-branch push**, which cannot move the main branch.
+- **A backlog-only push.** `push_guard.py --ok-free` allows one only when every commit ahead of
+  `origin` touches nothing outside `git.ok_free_paths` (default: the backlog directory), the
+  backlog check passes, and no commit edits a claim another machine made.
+  `git.ok_free_paths = []` sends these through the OK as well.
+
+`scripts/release_tag.py --push` pushes a tag to the plugin's own repository. It is the
+maintainer's release step, and no skill or command runs it.
+
+**What it installs into git.** `session-startup` writes four hooks into the repository's hooks
+directory (`.git/hooks`, shared by every worktree), so git runs plugin code on commands you type
+outside Claude Code as well. Each hook is a short shell shim that calls `scripts/lanes.sh` at the
+plugin's install path. If that path is gone (plugin updated or removed), the shim checks nothing
+and never fails the git command; the commit guard prints a line saying so. None of the four makes
+a network call.
+
+- **`pre-commit`**, the commit guard (`guard_commit.py`). It refuses a commit made in the wrong
+  checkout. It never overwrites a `pre-commit` hook it did not write, and it writes nothing when
+  `core.hooksPath` is set. `git.commit_guard = false` turns it off and removes the shim at the next
+  install; `git commit --no-verify` skips it once.
+- **`post-merge`, `post-rewrite` and `post-checkout`**, the view refresh (`view_hooks.py`). After a
+  pull, rebase or branch switch it regenerates the gitignored backlog view. Its lines are appended
+  after any other tool's (git-lfs writes two of these hooks) and never replace them.
+  `backlog.view_mode = "serve"` turns them off and removes the blocks at the next install.
+
+**Other effects on your disk.** After a landing reads back from `origin`, `lanes_land.py` removes
+the lane's worktree and deletes its local branch. The close and the pull work in temporary
+worktrees and directories that they delete when they finish. `backlog_index.py --serve` serves the
+view on `127.0.0.1` only. It is off by default and is used only when `backlog.view_mode = "serve"`
+is set.
 
 ## License
 

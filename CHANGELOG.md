@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.47 — the Privacy section says what the plugin does now (2026-10-17)
+
+- **The README's Privacy section was still the one written for 0.4.9, and it was false**
+  (LANES-50). It said "no network calls" and that the only outbound action was a `git push` the
+  skills ask you to authorize. 0.4.9 had no script that touched a remote. Since then, eight do:
+  the pull, issue numbering, the split, the claim, the close, the push guard and the landing fetch
+  from or push to `origin`, and the release script pushes tags. The skills push a claim, a topic
+  branch and a backlog-only commit without asking (LANES-5). `/lanes:doctor` and the landing ask
+  the plugin's own repository for a release tag (LANES-33). `session-startup` installs four git
+  hooks (LANES-1, LANES-11). Each was disclosed in its own README section, but the Privacy section
+  denied them, and that section is the one a reader takes as the plugin's statement of what it
+  does.
+- **The section now lists everything:** what it reads (including the plugin registry the doctor
+  compares against), both network destinations and the calls made to each, which pushes wait for
+  an OK and how `git.land_requires_ok` and `git.ok_free_paths` change that, the four hooks with
+  what each runs, what each refuses to overwrite and how to turn it off, and the local effects:
+  worktree and branch removal after a landing, temporary worktrees, and the `127.0.0.1`-only
+  served view. No behavior changed.
+
 ## 0.4.46 — a partial landing closes its issue and files the rest; the split is one command (2026-10-14)
 
 - **A partial landing no longer sends its issue back to the queue** (LANES-47). `worktree-increment`
