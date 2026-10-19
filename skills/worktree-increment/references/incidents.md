@@ -162,3 +162,18 @@ a status rewrite. A rule a session has to remember had been tried first and reje
 the fix belongs in the protocol. So a partial landing now closes its issue and files the
 remainder as new issues in the same commit, an issue bigger than one landing is split
 before its lane starts, and `backlog_split.py` makes the split one command.
+
+## The debrief that ended in the box (2026-10-19)
+
+The operator's harness gained an end-of-turn tool: a "next step" box holding a recap of a
+few sentences and one question, under a contract that the box, when it carries a question,
+ends the turn and nothing is written after it. The hold is a turn that ends on a question
+for the operator, so a model that followed the harness closely put "ready to verify" in
+the box and stopped. The operator got no debrief and no verification steps, slice after
+slice, and asked for them each time. Step 5 had said only "announce readiness and what
+verification will cover", and the shape of the steps — numbered, one command each, the
+output as observed — lived in one machine's memory, not in the skill: the debrief had been
+a habit, and the new contract removed the habit's slot. Now the debrief is the hold's
+specified deliverable, its contents are listed, and the skill says where it goes: a
+message, before the box. A ground rule says the same for anything else the operator is
+handed to read or run.

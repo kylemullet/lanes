@@ -105,6 +105,17 @@ def test_the_landed_issue_closes_on_landing_and_closeout_sweeps():
     assert "**The backstop.**" in start
 
 
+def test_the_hold_is_a_debrief_written_before_the_harness_box():
+    """LANES-51: a harness end-of-turn box swallowed the hold's verification steps."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    assert "### 5. Hold — the debrief" in text
+    assert "for every lane, not only UX-touching work" in text
+    assert "as observed by running it first" in text
+    assert text.count("BEFORE any wrap-up") == 2, "the ground rule and step 5 both say where the debrief goes"
+    inc = (ROOT / "skills/worktree-increment/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The debrief that ended in the box (2026-10-19)" in inc
+
+
 def test_claims_run_through_the_claim_script():
     """LANES-9: a hand-made claim skipped an ID and copied a marker the doctor cannot read."""
     import lanes_doctor as ld

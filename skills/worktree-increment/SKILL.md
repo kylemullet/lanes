@@ -37,6 +37,11 @@ Ground rules that apply the whole way through:
 - Tests gate commits: a full green `tests.command` before any commit of code.
 - A local server, if the project has one, runs on **this lane's own port**
   (`worktrees.port_command` from the worktree root); never a shared default port.
+- **Anything the operator is handed to read or run — the hold's debrief, verification
+  steps, a landing report — is a message in the transcript, written BEFORE any wrap-up,
+  next-step or end-of-turn call the harness provides.** That box holds a few sentences and
+  one question, and ends the turn: it carries the question, never the content
+  (`incidents.md` → "The debrief that ended in the box").
 
 ## Scope: ONE issue per invocation — this is a hard boundary
 
@@ -287,12 +292,32 @@ cleanly does not repeat it (6.1).
 - For visual or UX-touching work, auto-tests-green ≠ shipped — the operator's eyes in step
   6 are the other half of the gate.
 
-### 5. Hold
+### 5. Hold — the debrief
 
 Leave the work UNCOMMITTED in the worktree until the operator verifies. (For rebase
 mechanics during the hold: a temporary WIP commit → rebase → `git reset --mixed HEAD~1`
-restores the uncommitted state exactly.) Announce readiness and what verification will
-cover; then wait — do not commit, do not push.
+restores the uncommitted state exactly.)
+
+**The hold's deliverable is a debrief, written as a message in the transcript** — not an
+announcement that one is coming. It carries:
+
+1. **The verdict against the baseline:** passed / failed / skipped here against step 1's
+   numbers, the test-ID reconciliation, and any attributed red subtracted.
+2. **Numbered verification steps — for every lane, not only UX-touching work.** Each names
+   the file or path, gives ONE runnable command in its own code block, and quotes the
+   output **as observed by running it first**, never predicted. An expected refusal is
+   shown as its message, never as a traceback (a demonstration that raises on purpose
+   reads as "got an error"). Prefer `cmd > /dev/null; echo "exit=$?"` to pipe-status
+   tricks, whose spelling differs by shell. Where the change is visual, a render the
+   operator can open carries that half. Keep counts honest: an untracked file is `??`,
+   not `M`.
+3. **What is uncommitted and where:** the worktree, the branch, the files.
+
+**Write it BEFORE any wrap-up, next-step or end-of-turn call the harness provides.** Such
+a box holds a few sentences and one question, and ends the turn, so a debrief routed into
+it is a recap with the steps dropped (`incidents.md` → "The debrief that ended in the
+box"). The box carries the question — "ready to verify?"; the message carries the
+debrief. Then wait — do not commit, do not push.
 
 **Generated files stay out of the WIP commit.** Stage by explicit path.
 
@@ -343,10 +368,11 @@ When the operator says they are ready:
    operator is looking at it. Start the server from the worktree root.
 4. Confirm the served bundle == disk before handing over. Against a shared port that
    check compares THIS lane's disk to whatever server answers, and passes wrongly.
-5. Hand the operator **concise test cases**: numbered, each with the file path, the exact
-   action and the expected result. **Quote the FULL URL including the port**, and **say
+5. Hand the operator the step-5 debrief's verification steps, refreshed for whatever the
+   rebase or rebuild changed under them: numbered, each with the file path, the exact
+   action and the observed result. **Quote the FULL URL including the port**, and **say
    "reload the tab"** — an open tab keeps old JS in memory forever and reads exactly like
-   the fix not working.
+   the fix not working. As in step 5: a message, before the harness's end-of-turn box.
 
 ### 7. The operator verifies
 

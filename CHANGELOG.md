@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.48 — the hold is a debrief, written before the harness's end-of-turn box (2026-10-19)
+
+- **The hold's verification steps were being lost to the harness** (LANES-51). The operator's
+  harness gained an end-of-turn tool: a next-step box holding a recap of a few sentences and
+  one question, with the contract that a box carrying a question ends the turn and nothing is
+  written after it. The hold is a turn that ends on a question for the operator, so a model
+  that followed the harness closely put "ready to verify" in the box and stopped: no debrief,
+  no verification steps, slice after slice. `worktree-increment` step 5 had said only "announce
+  readiness and what verification will cover", and the shape of the steps lived in one
+  machine's memory, not in the skill.
+- **Step 5 is now "Hold — the debrief", and the debrief is its deliverable:** the verdict
+  against the baseline, numbered verification steps for every lane (the file or path, one
+  runnable command, the output as observed by running it first, an expected refusal shown as
+  its message and never a traceback), and what is uncommitted and where. It is written as a
+  message in the transcript BEFORE any wrap-up, next-step or end-of-turn call the harness
+  provides; the box carries the question, the message carries the debrief. Step 6.5's test
+  cases are those steps refreshed after the rebase and rebuild. A ground rule says the same
+  for anything the operator is handed to read or run. The incident is in
+  `worktree-increment/references/incidents.md` ("The debrief that ended in the box"), and
+  `tests/test_skills.py` pins the wording.
+
 ## 0.4.47 — the Privacy section says what the plugin does now (2026-10-17)
 
 - **The README's Privacy section was still the one written for 0.4.9, and it was false**
