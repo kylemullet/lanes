@@ -36,9 +36,10 @@ claude plugin install lanes@lanes-marketplace
 ```
 
 A repo that adopts `lanes` commits `enabledPlugins` and `extraKnownMarketplaces` in its
-`.claude/settings.json` (`claude plugin marketplace add … --scope project` and `claude plugin
-install … --scope project` write the entries) so the next person opening it is prompted to
-install. **Run those from the main clone, never from a worktree** — a project-scope install records
+`.claude/settings.json` so the next person opening it is prompted to install. `/lanes:init`
+writes the two entries from this machine's marketplace record; by hand, `claude plugin
+marketplace add … --scope project` and `claude plugin install … --scope project` write them.
+**Run those from the main clone, never from a worktree** — a project-scope install records
 the absolute path it was run from. If the repo ignores `.claude/` wholesale, the rule has to become
 `.claude/*` with `!.claude/settings.json` and `!.claude/lanes/`. For hacking on the plugin itself, load a
 checkout directly: `claude --plugin-dir /path/to/lanes`.
@@ -89,9 +90,16 @@ naming the cause — a guard that cannot ask git never waves a write through (LA
 
 ## Commands
 
-- **`/lanes:init [--force] [--projects CORE,INFRA,DOC]`** — writes `.claude/lanes/config.toml`
-  with every key defaulted to **solo mode** and the installed plugin version pinned, plus the
-  three extension-point stubs. Never overwrites without `--force`.
+- **`/lanes:init [--force] [--projects CORE,INFRA,DOC]`** — sets up everything `/lanes:doctor`
+  checks (LANES-52). It writes `.claude/lanes/config.toml` with every key defaulted to **solo
+  mode** and the installed plugin version pinned, and the three extension-point stubs. It creates
+  the backlog folder with a `README.md`, plus a `.gitignore` there for the two generated views.
+  It adds lanes to `.claude/settings.json` from the marketplace this machine installed it from, and
+  installs the view hooks and the commit guard. Never overwrites without `--force`, and never
+  overwrites `settings.json` at all (it only adds to it); it prints the `git add` for what it wrote.
+  The guard is held back while a file it wrote is uncommitted and outside `git.main_direct_paths`
+  (by default `settings.json`), since it would refuse that commit, so the sequence on a fresh repo is
+  `/lanes:init`, the commit it prints, `/lanes:init` again, then `/lanes:doctor`, which reads 0 warn.
 - **`/lanes:doctor [--strict] [--json]`** — one line per check: config valid, config tracked,
   every install scope vs the expected version, stubs present, backlog integrity, every `in-progress` claim
   classified (live / setting up / reserved / **stale-claim candidate**), settings pin the plugin (committed AND
@@ -312,7 +320,7 @@ lanes/
 ├── commands/           init.md, doctor.md, claim.md, new.md, split.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
 ├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, backlog_split.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
-├── templates/          config.toml + the three extension-point stubs
+├── templates/          config.toml + the three extension-point stubs + backlog-README.md
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md
 ```
@@ -399,7 +407,7 @@ credentials. There are two destinations:
 `scripts/release_tag.py --push` pushes a tag to the plugin's own repository. It is the
 maintainer's release step, and no skill or command runs it.
 
-**What it installs into git.** `session-startup` writes four hooks into the repository's hooks
+**What it installs into git.** `/lanes:init` and `session-startup` write four hooks into the repository's hooks
 directory (`.git/hooks`, shared by every worktree), so git runs plugin code on commands you type
 outside Claude Code as well. Each hook is a short shell shim that calls `scripts/lanes.sh` at the
 plugin's install path. If that path is gone (plugin updated or removed), the shim checks nothing

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.49 — `/lanes:init` sets up everything the doctor checks (2026-10-25)
+
+- **A fresh repo that followed init's own instructions met five doctor warnings** (LANES-52).
+  `/lanes:init` wrote the config and the three stubs and nothing else, then said "run
+  /lanes:doctor". In a throwaway repo on 0.4.48 the doctor answered: config untracked, *docs/backlog
+  does not exist yet*, *.claude/settings.json absent*, no commit guard, no view hooks. After the
+  commit and a first issue, four were still there, with the views warning in place of the backlog
+  one. No lanes script wrote a `.gitignore` or a `settings.json`, and only `session-startup`
+  installed the hooks.
+- **Init now sets up all of it.** It creates the backlog folder (`backlog.dir`) with a
+  `README.md`, and gitignores the two generated views with a `.gitignore` inside that folder, unless
+  they are ignored already. It declares lanes in `.claude/settings.json` from the marketplace this
+  machine installed it from, copying the source from `known_marketplaces.json`, which is the record
+  the doctor's `marketplace` line compares against. It installs the view hooks and the commit guard.
+  `settings.json` is only ever added to: other keys stay, a lanes entry already there is kept byte
+  for byte, `"lanes@…": false` is left alone, and a file it cannot parse is reported, not rewritten,
+  `--force` included. A machine with no marketplace record (a `--plugin-dir` checkout) gets a WARN
+  line instead of a guess.
+- **The commit guard is held back while it would refuse the adoption commit.** `.claude/settings.json`
+  is not in the default `git.main_direct_paths`, so a guard installed before that commit would refuse
+  the commit init asks for. Init holds the guard while any file it wrote is uncommitted and outside
+  `main_direct_paths`, says so, and installs it on the next run. That is why the views' `.gitignore`
+  goes in the backlog folder, under the main-direct `docs/`, and not at the root. Widening the
+  default instead was considered and left alone: `main_direct_paths` is also the default
+  `docs_lane_prefixes`. On a fresh repo the walk is `/lanes:init`, the `git add` and `git commit` it
+  prints, `/lanes:init` again, and `/lanes:doctor` reads 16 ok, 0 warn. `tests/test_init.py` walks it
+  end to end against a fake plugin install and asserts no doctor line is WARN or FAIL, before and
+  after the first issue is committed through the guard.
+
 ## 0.4.48 — the hold is a debrief, written before the harness's end-of-turn box (2026-10-19)
 
 - **The hold's verification steps were being lost to the harness** (LANES-51). The operator's
