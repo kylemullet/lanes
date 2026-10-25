@@ -374,9 +374,10 @@ reads, every network call it makes, which of its pushes wait for you, and what i
 **What it reads.** `git config user.name` and the platform, to pick your row in
 `.claude/lanes/config.toml`; the operator shorts you wrote into that config appear as `assignee`
 and `reported_by` in the issue files it creates. The edit hook reads `CLAUDE_PROJECT_DIR` to know
-which project it is guarding. `/lanes:doctor` reads Claude Code's plugin registry
-(`~/.claude/plugins`, or `$CLAUDE_CONFIG_DIR/plugins`) to compare the installed version with your
-pin.
+which project it is guarding. Two commands read Claude Code's plugin registry
+(`~/.claude/plugins`, or `$CLAUDE_CONFIG_DIR/plugins`): `/lanes:doctor`, to compare the installed
+version with your pin, and `/lanes:init`, to find the marketplace lanes was installed from and copy
+that marketplace's source into `.claude/settings.json`. Neither sends what it reads anywhere.
 
 **Network calls.** Every one is a `git` command, run with your own git configuration and
 credentials. There are two destinations:
@@ -407,12 +408,12 @@ credentials. There are two destinations:
 `scripts/release_tag.py --push` pushes a tag to the plugin's own repository. It is the
 maintainer's release step, and no skill or command runs it.
 
-**What it installs into git.** `/lanes:init` and `session-startup` write four hooks into the repository's hooks
-directory (`.git/hooks`, shared by every worktree), so git runs plugin code on commands you type
-outside Claude Code as well. Each hook is a short shell shim that calls `scripts/lanes.sh` at the
-plugin's install path. If that path is gone (plugin updated or removed), the shim checks nothing
-and never fails the git command; the commit guard prints a line saying so. None of the four makes
-a network call.
+**What it installs into git.** `/lanes:init` and `session-startup` write four hooks into the
+repository's hooks directory (`.git/hooks`, shared by every worktree), so git runs plugin code on
+commands you type outside Claude Code as well. Each hook is a short shell shim that calls
+`scripts/lanes.sh` at the plugin's install path. If that path is gone (plugin updated or removed),
+the shim checks nothing and never fails the git command; the commit guard prints a line saying so.
+None of the four makes a network call.
 
 - **`pre-commit`**, the commit guard (`guard_commit.py`). It refuses a commit made in the wrong
   checkout. It never overwrites a `pre-commit` hook it did not write, and it writes nothing when
@@ -423,11 +424,16 @@ a network call.
   after any other tool's (git-lfs writes two of these hooks) and never replace them.
   `backlog.view_mode = "serve"` turns them off and removes the blocks at the next install.
 
-**Other effects on your disk.** After a landing reads back from `origin`, `lanes_land.py` removes
-the lane's worktree and deletes its local branch. The close and the pull work in temporary
-worktrees and directories that they delete when they finish. `backlog_index.py --serve` serves the
-view on `127.0.0.1` only. It is off by default and is used only when `backlog.view_mode = "serve"`
-is set.
+**Other effects on your disk.** `/lanes:init` adds lanes to the repository's
+`.claude/settings.json`: an `extraKnownMarketplaces` entry and an `enabledPlugins` entry. Once
+that file is committed, Claude Code prompts everyone who opens the repository to install lanes.
+It never removes or changes another key, and it leaves the file alone when it already declares
+lanes, sets lanes to `false`, or does not parse.
+
+After a landing reads back from `origin`, `lanes_land.py` removes the lane's worktree and deletes
+its local branch. The close and the pull work in temporary worktrees and directories that they
+delete when they finish. `backlog_index.py --serve` serves the view on `127.0.0.1` only. It is
+off by default and is used only when `backlog.view_mode = "serve"` is set.
 
 ## License
 

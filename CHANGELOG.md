@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.50 — the Privacy section names what `/lanes:init` reads and adds (2026-10-25)
+
+- **0.4.49 left the README's Privacy section incomplete in two places** (LANES-53). The section
+  promises everything the plugin reads, and it named only `/lanes:doctor` as reading Claude Code's
+  plugin registry. Since 0.4.49, `/lanes:init` reads it too, to find the marketplace lanes came
+  from and copy that source into `.claude/settings.json`. Its "Other effects on your disk" did not
+  say that init now adds lanes to that file, which decides what Claude Code prompts everyone
+  opening the repository to install. LANES-52's doc pass updated only the hooks paragraph.
+- **Both are now stated.** "What it reads" names the two commands that read the registry and why,
+  and says neither sends what it reads anywhere. "Other effects on your disk" says what init adds
+  to `.claude/settings.json`, that it never removes or changes another key, and when it leaves the
+  file alone. Checked against the 0.4.49 code: init makes no network call, and nothing else it
+  reads or writes is missing from the section. README only; no code changed.
+
 ## 0.4.49 — `/lanes:init` sets up everything the doctor checks (2026-10-25)
 
 - **A fresh repo that followed init's own instructions met five doctor warnings** (LANES-52).
