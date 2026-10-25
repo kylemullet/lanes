@@ -5,7 +5,7 @@ One file per issue, `<PROJECT>/<ID>-<slug>.md`, kept by the
 issue types are set in `.claude/lanes/config.toml`.
 
 - `/lanes:new <PROJECT> "<title>"` mints an issue with the next free ID.
-- `/lanes:claim <ID> …` claims a slice before a lane starts; the skills release it.
+- `/lanes:claim <ID> …` claims a lane of one or more issues before work starts; the skills release it.
 - `/lanes:doctor` checks the backlog's integrity along with the rest of the setup.
 
 `INDEX.md` and `index.html` in this folder are generated local views, rewritten by every

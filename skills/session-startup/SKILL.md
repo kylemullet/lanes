@@ -1,15 +1,15 @@
 ---
 name: session-startup
-description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. Pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator (or reads it from the trigger, e.g. "GA housekeeping"), and offers 2–3 proposals for that mode — then STOPS and waits for the operator to name the work.
+description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator (or reads it from the trigger, e.g. "GA housekeeping"), and offers 2–3 proposals for that mode — then STOPS and waits for the operator to name the work.
 ---
 
-# Session startup
+# Startup sequence
 
 ## Why this skill exists
 
 Everything shared between sessions, operators and machines reaches the others through
 the main branch. A session that starts on a stale clone reads yesterday's state,
-re-answers settled questions and sets up merge conflicts at closeout. Startup = sync
+re-answers settled questions and sets up merge conflicts at shutdown. Startup = sync
 first, then orient the right person to the right queue, then **stop** — the brief is a
 recommendation, never the start of work.
 
@@ -183,11 +183,11 @@ From the pulled commits and `git status --porcelain --untracked-files=all | grep
 
 - **A new session asset from the OTHER operator** (`docs/session-assets/`)? Read it and
   skim the backlog issues the pull touched (`git log ORIG_HEAD..HEAD --stat --
-  <backlog.dir>`). Their closeout should already have queued anything you must act on
+  <backlog.dir>`). Their shutdown sequence should already have queued anything you must act on
   as issues, so surface those rather than re-digesting the asset. Vet technical claims;
   "parser-valid" ≠ verified.
 - **Untracked shared text** — a new session asset, or project text the other machine has
-  not seen? Surface it now; it MUST be committed no later than closeout, and committing
+  not seen? Surface it now; it MUST be committed no later than shutdown, and committing
   it immediately is fine.
 
 Solo mode: nothing to do.
@@ -226,11 +226,11 @@ curl -s -m 2 http://127.0.0.1:<backlog.view_port>/ >/dev/null || sh "${CLAUDE_PL
 
 **The view's link is the report's `Sortable backlog` section, on its own line.** It is the operator's
 whole queue — sortable, filterable, linking into each issue file — and it carries the
-weight of "let me see everything and overrule the slice". Do NOT pass `--open` unless
+weight of "let me see everything and overrule the lane". Do NOT pass `--open` unless
 asked; a browser window stealing focus every session is noise.
 
 The report is the mechanical half. Yours: staleness judgment (step 6), the report blocks
-(step 7), the slice (step 8). Titles compress — **read the issue file body before acting
+(step 7), the lane (step 8). Titles compress — **read the issue file body before acting
 on or recommending an item.**
 
 Also sanity-check the tooling: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py
@@ -338,7 +338,7 @@ phrase.
 anything needing a decision right now; the backfill result ("closed N verified: IDs —
 commit pending push" / "N verified awaiting the certifying machine's close"); whatever
 `preflight.md` asked to report; unlanded branches from step 2; **the in-flight lanes from
-step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the slice name
+step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the lane's name
 (`LANES-20/21/9`), each issue's ACTIVE/PENDING/RESERVED state, lane state, what it is
 waiting on**; **the due line, from the report's `DUE` block: every issue overdue or due
 within seven days, as `due: <ID> <date> (<countdown>), …`** (omit the line when there is
@@ -360,7 +360,7 @@ Brief — the `file://` path the generator printed (the main clone's, never a wo
 `http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. Nothing else in the section.
 It is the operator's escape hatch from every proposal below.
 
-**There is no full-backlog table**, and no fixed Critical / Quick-wins / Slice sections
+**There is no full-backlog table**, and no fixed Critical / Quick-wins / Lane sections
 (LANES-24): the operator usually acts on one of them, so analysis spent on all three was
 mostly spent on sections nobody read. Step 8 puts it into the one mode the operator wants.
 (`incidents.md` → "The full table that oscillated".)
@@ -376,7 +376,7 @@ and the rule the session follows are the same words, so they cannot drift.
 | Option | Line under it |
 | :-- | :-- |
 | **Critical** | Urgent issues and blockers |
-| **Deep Dive** | A single-context issue slice, project, or epic. Research or spike. |
+| **Deep Dive** | A single-context lane of issues, a project, or an epic. Research or spike. |
 | **Housekeeping** | Issue-clearing, audits, and quick wins |
 | **Ops** | Decisions, accounts, and outreach |
 
@@ -428,7 +428,7 @@ What each mode optimizes:
 
 **Autonomous was retired** (LANES-36). Under step 8a's rule 4 a session never opens a
 second issue while one waits on a verdict, and `git.land_requires_ok` makes every landing
-wait, so an "autonomous slice" was always one lane and then a stall. Unattended
+wait, so an "autonomous lane" was always one issue and then a stall. Unattended
 throughput is a protocol change — landing a class of issues on green without the per-lane
 OK — not a menu option. An unattended suite run still needs the machine kept awake.
 
@@ -437,19 +437,19 @@ NOT begin work. End the message by asking which proposal (or what else) the oper
 wants. Work begins only when they name it ("do B", "run A", "go"). Sole exception: a
 staleness correction from step 6 is part of the report itself.
 
-### 8a. How a slice is EXECUTED — read this before saying "on it"
+### 8a. How a lane is EXECUTED — read this before saying "on it"
 
-A slice is a **queue, not a batch.** Four rules, in priority order:
+A lane is a **queue, not a batch.** Four rules, in priority order:
 
 1. **Anything that is not a backlog claim is worked in a worktree.** Not "code" —
    *anything*. The only writes that belong in the main checkout are the claim itself, the
-   closing docs, and the startup/closeout skills' own writes.
-2. **One issue at a time, sequentially.** A slice of three issues is three worktrees
+   closing docs, and the startup and shutdown sequences' own writes.
+2. **One issue at a time, sequentially.** A lane of three issues is three worktrees
    worked one after another. Finish, land or park, clean up, *then* start the next.
 3. **Pull, then take the baseline, BEFORE each issue.** Every issue starts from a freshly
    pulled main branch with a known test-count baseline behind it — a measurement
    `preflight.md` supplies, or one `tests.command` run produces. Before *each* issue, not
-   once at the top of the slice: otherwise issue #2 inherits issue #1's breakage and
+   once at the top of the lane: otherwise issue #2 inherits issue #1's breakage and
    neither bisects.
 4. **Never start a second issue while one is unresolved.** "Unresolved" includes *waiting
    on the operator's verdict*. The session waits or asks — it does not open a new front to
@@ -469,7 +469,7 @@ stay.
 
 **The reply to "go" states the order before starting:**
 
-> Slice is CORE-64, UI-40, INFRA-31. Working them one at a time, each in its own worktree
+> The lane is CORE-64, UI-40, INFRA-31. Working them one at a time, each in its own worktree
 > off a fresh main, baseline read before each. Starting CORE-64 in `../<repo>-core-64`; I
 > will report before opening the next.
 
@@ -479,7 +479,7 @@ with no product work".)
 
 ### 8b. On the directive — claim, commit, PUSH, then hand off
 
-"go", "run the slice", "do CORE-64", "work X then Y" — any directive naming one issue, a
+"go", "run the lane", "do CORE-64", "work X then Y" — any directive naming one issue, a
 group, or one of the proposals. This is the ONE write startup makes in the main checkout
 after the brief, and it happens *before* the first worktree exists:
 
@@ -490,7 +490,7 @@ after the brief, and it happens *before* the first worktree exists:
    parts in its text, independent deliverables, more than one session's work. Say so, and
    on the operator's yes run `backlog_split.py <ID> "<child>" … --reported-by=claude --push`
    (`/lanes:split`): the issue becomes the epic, the children are minted under it, and the
-   slice claims the children in its place. An epic is never claimed.
+   lane claims the children in its place. An epic is never claimed.
 2. **Claim every ID now, up front, in one call** — from the main checkout, on the main
    branch:
 
@@ -523,7 +523,7 @@ after the brief, and it happens *before* the first worktree exists:
    ⚠️ The marker says `WORKTREE PENDING`, not `ACTIVE LANE`, and names no worktree — it
    does not exist yet; `worktree-increment` step 2 flips it the moment `git worktree add`
    returns. Never hand-write a claim marker while the script is reachable: a hand-written
-   one drifts from the spelling the doctor reads (`incidents.md` → "The slice claimed by
+   one drifts from the spelling the doctor reads (`incidents.md` → "The lane claimed by
    hand").
 3. Refresh the local views: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py`
    (the served view, if up, is already current).

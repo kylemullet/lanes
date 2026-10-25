@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.54 — a slice is a lane; startup and closeout read as the startup and shutdown sequences (2026-10-25)
+
+- **One word for a claimed group of issues: a lane** (LANES-57). Since LANES-49 a slice was already
+  recorded as its lane (the `lane:` line, the lane cards, `--next-in`), so the protocol had two
+  words for one thing. Kyle: *"claim a lane instead of a slice"*. "Slice" is gone from the skills,
+  their incident files, the commands, the README, the templates, and the scripts' help and
+  messages. The claim script's RESERVED marker now reads "Claimed as part of the <date> lane". The
+  parser keys on "queued behind <ID>", so markers already written with "slice" still parse, and a
+  fixture keeps that checked.
+- **"Lane" no longer means two things in one passage.** Where the old text used "lane" for one
+  issue's worktree next to "slice" for the group, the issue's side now says "worktree" or
+  "increment". For example: "Never open a second issue's worktree while the first is unresolved".
+  The `ACTIVE LANE` marker and the `lane:` line are unchanged. They are parsed, and "ACTIVE LANE"
+  reads as the lane's active issue.
+- **The operator reads "startup sequence" and "shutdown sequence"; the identifiers stay.** The
+  `session-startup` and `session-closeout` skills are titled *Startup sequence* and *Shutdown
+  sequence*. Their descriptions say so, and closeout gained a "shutdown" trigger. "Session startup"
+  and "closeout" in prose became the sequences, or "startup" / "shutdown" for short. The skill
+  names, every `/lanes:` invocation and every reference to them are unchanged, so no trigger and
+  no consumer's docs break.
+- **"Land" stays.** A landing is a fast-forward push of a verified branch, never a git merge, and
+  calling it one would misdescribe the operator-OK gate.
+- `tests/test_skills.py` guards the result. It fails if "slice" reappears anywhere the protocol
+  speaks to the operator, except one quoted line that means a scoped test re-run. It also fails if
+  the two skills lose their sequence titles or identifiers, or if "session startup" or "closeout"
+  returns in prose. CHANGELOG history keeps its words.
+
 ## 0.4.53 — the Due section shows five, then "Show N more" (2026-10-25)
 
 - **The Due section pushed everything else down the page** (LANES-56). Since LANES-46 the HTML

@@ -154,7 +154,7 @@ def test_startup_asks_the_mode_with_one_four_option_menu_and_no_fixed_blocks():
     text = _startup()
     menu = [
         ("Critical", "Urgent issues and blockers"),
-        ("Deep Dive", "A single-context issue slice, project, or epic. Research or spike."),
+        ("Deep Dive", "A single-context lane of issues, a project, or an epic. Research or spike."),
         ("Housekeeping", "Issue-clearing, audits, and quick wins"),
         ("Ops", "Decisions, accounts, and outreach"),
     ]
@@ -197,3 +197,43 @@ def test_every_main_branch_pull_runs_through_the_pull_script():
     assert "lanes_pull.py --ff-only" in (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
     assert "never substitute `git stash`" in _startup().lower()
     assert (ROOT / "scripts" / "lanes_pull.py").is_file()
+
+
+# --- vocabulary (LANES-57) -----------------------------------------------------------------
+
+# Where the protocol speaks to the operator: the skills, commands, README, templates and the
+# scripts' help and messages. CHANGELOG is history and keeps its words.
+_PROSE = ["skills", "commands", "templates", "scripts", "README.md"]
+
+
+def _prose_files():
+    for top in _PROSE:
+        p = ROOT / top
+        yield from ([p] if p.is_file() else sorted(q for q in p.rglob("*") if q.suffix in (".md", ".py", ".toml")))
+
+
+def test_the_protocol_says_lane_not_slice():
+    """A claimed group of issues is a lane (LANES-57). The one 'slice' left is quoted, and
+    means something else: a project's scoped test re-run."""
+    allowed = {'was followed by a "slice" of 101 test files'}
+    hits = []
+    for f in _prose_files():
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"\bslices?\b", line, re.I) and not any(a in line for a in allowed):
+                hits.append(f"{f.relative_to(ROOT)}:{n}: {line.strip()[:80]}")
+    assert hits == [], "\n".join(hits)
+
+
+def test_startup_and_shutdown_read_as_sequences_and_keep_their_identifiers():
+    """LANES-57: the operator reads 'startup sequence' and 'shutdown sequence'; the skill
+    names stay `session-startup` and `session-closeout`, which every trigger and doc uses."""
+    start = (ROOT / "skills/session-startup/SKILL.md").read_text(encoding="utf-8")
+    stop = (ROOT / "skills/session-closeout/SKILL.md").read_text(encoding="utf-8")
+    assert "\nname: session-startup\n" in start and "\n# Startup sequence\n" in start
+    assert "\nname: session-closeout\n" in stop and "\n# Shutdown sequence\n" in stop
+    assert "The startup sequence:" in start.split("---", 2)[1]
+    assert "The shutdown sequence:" in stop.split("---", 2)[1] and '"shutdown"' in stop.split("---", 2)[1]
+    for f in _prose_files():
+        text = f.read_text(encoding="utf-8")
+        assert not re.search(r"\bsession (startup|closeout)\b", text, re.I), f
+        assert not re.search(r"\bclose-?outs?\b", re.sub(r"session-closeout", "", text), re.I), f

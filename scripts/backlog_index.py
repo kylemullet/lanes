@@ -52,7 +52,7 @@ copy conflicts at every rebase. The issue files are the source of truth.
 The `verified` status and --backfill. A worktree lane cannot know its resolving
 commit's hash: the close rides IN that commit, and the pre-push rebase rewrites it
 anyway. So the lane marks the issue `verified` (Resolution filled, the SUBJECT cited
-in backticks, `commit:` null) and pushes. The certifying machine's session startup --
+in backticks, `commit:` null) and pushes. The certifying machine's startup sequence --
 after the pull -- runs --backfill, which finds each verified issue's resolving commit
 on HEAD by the exact subject it cites, fills `commit:`, and flips it to `closed`. The
 script refuses to backfill on a machine whose operator row does not certify; in solo
@@ -254,10 +254,10 @@ def load_issues():
 
 # --- lanes (LANES-22 view, LANES-10 recorded identity) ----------------------
 #
-# A lane is a slice of one or more claimed issues: at most one ACTIVE or PENDING
+# A lane is one or more claimed issues, worked in order: at most one ACTIVE or PENDING
 # issue and the RESERVED ones queued behind it. Its identity is the frontmatter
 # field `lane: <lead-ID>@<YYYY-MM-DD>`, which `lanes_claim.py` writes on every
-# issue of a slice (and copies onto a `--behind` extension) and which leaves the
+# issue of a lane (and copies onto a `--behind` extension) and which leaves the
 # issue with its claim. A claim made before the field existed is grouped from its
 # marker prose instead -- under the SAME key, `<root>@<root's claim date>`, so an
 # old lead and a new reservation behind it still land in one lane:
@@ -303,17 +303,17 @@ def parse_marker(body):
 
 
 def lanes_in_flight(issues):
-    """Group the lanes still in flight, each in slice order.
+    """Group the lanes still in flight, each in queue order.
 
     A lane is in flight while ANY of its issues is in-progress, and until then it
     keeps the ones that already landed (`verified` / `closed` with the same `lane:`),
-    so the operator sees the whole slice -- what is done and what is left -- until
+    so the operator sees the whole lane -- what is done and what is left -- until
     the last issue lands and the lane disappears (Kyle, 2026-10-07).
 
     Returns a list of {"key", "members": [issue, ...], "lead", "head", "claimed"},
     oldest claim first. `key` is the recorded `lane:` value, or the marker-derived
     one for a claim that predates the field. Members run landed-first (by close
-    date), then the live ones in queued-behind order. `lead` is the slice's first
+    date), then the live ones in queued-behind order. `lead` is the lane's first
     issue (the key's ID when present), `head` the ACTIVE/PENDING one (else the
     first live one). A RESERVED issue whose lead is no longer claimed and carries
     no field stands as its own lane rather than vanishing.
@@ -385,9 +385,9 @@ def lane_problems(issues):
 
     A `lane:` value must be `<ID>@<YYYY-MM-DD>`. It stays on an issue that LANDED
     (`verified` / `closed`: the record of which lane resolved it, and what keeps the
-    slice whole in the views until its last issue lands) but not on one that went
+    lane whole in the views until its last issue lands) but not on one that went
     back to the queue: a release deletes it. A lane holds AT MOST one ACTIVE or
-    PENDING issue -- zero is legal between two issues of a slice. An in-progress
+    PENDING issue -- zero is legal between two issues of a lane. An in-progress
     issue WITHOUT the field is not a problem either: claims made before it existed
     are grouped from their markers, and only the session that owns a claim may write
     to it (INFRA-47).
@@ -413,10 +413,10 @@ def lane_problems(issues):
 
 
 def lane_name(ln):
-    """A lane is named after its slice: `LANES-20/21/9`. '/' joins issues of ONE
+    """A lane is named after its issues: `LANES-20/21/9`. '/' joins issues of ONE
     project, the first written in full and the rest by number; ', ' separates
     projects, which are grouped in order of first appearance (LANES-29), so
-    `DOC-100, PROD-19, DOC-103` reads `DOC-100/103, PROD-19` whatever the slice
+    `DOC-100, PROD-19, DOC-103` reads `DOC-100/103, PROD-19` whatever the queue
     order. The lead comes from the recorded key, so the name stays the same after
     the lead lands and only its reservations remain."""
     lead = ln["key"].split("@", 1)[0] if "@" in ln["key"] else ln["lead"]["id"]
@@ -428,9 +428,9 @@ def lane_name(ln):
 
 
 def lane_label(ln):
-    """How every view describes a lane: its slice name, and a phase only when no issue is
+    """How every view describes a lane: its name, and a phase only when no issue is
     being worked. Worktree and branch names stay in the marker for the doctor; on the
-    operator's row they are noise the slice name already covers (LANES-28)."""
+    operator's row they are noise the lane's name already covers (LANES-28)."""
     head = ln["head"].get("_marker") or {}
     if head.get("worktree"):
         phase = None
@@ -444,7 +444,7 @@ def lane_label(ln):
 
 
 def lane_epics(ln):
-    """The epics a lane's issues sit under, in slice order (LANES-31)."""
+    """The epics a lane's issues sit under, in queue order (LANES-31)."""
     out = []
     for m in ln["members"]:
         if m.get("epic") and m["epic"] not in out:
@@ -1268,7 +1268,7 @@ def sync_main():
 
 
 def guard_cfg():
-    """The slice of the resolved config `push_guard` reads, from this module's globals --
+    """The part of the resolved config `push_guard` reads, from this module's globals --
     so `isolated()`'s repointing carries over to the guard too."""
     return {"main_branch": MAIN_BRANCH, "ok_free_paths": list(OK_FREE_PATHS),
             "main_direct_paths": [], "backlog_dir": BACKLOG_REL, "machine": MACHINE}
@@ -1333,7 +1333,7 @@ def _cell(v):
 
 
 def _md_lanes(lanes):
-    """INDEX.md's In progress section: one block per lane, issues in slice order."""
+    """INDEX.md's In progress section: one block per lane, issues in queue order."""
     if not lanes:
         return []
     n = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
@@ -1381,7 +1381,7 @@ def render_index(issues):
         "# Backlog index",
         "",
         "**GENERATED by the lanes plugin's `backlog_index.py` — local, gitignored, never hand-edit.**",
-        "Regenerate after `git pull` or any issue change (session startup does it for",
+        "Regenerate after `git pull` or any issue change (the startup sequence does it for",
         "you). One row per issue; the issue file is the source of truth. Ages are",
         "computed by `--report`, not stored here.",
         "",
@@ -2035,7 +2035,7 @@ def html_sort_key(it):
 
 
 def _html_lanes(lanes):
-    """The In progress section: one card per lane, issues in slice order."""
+    """The In progress section: one card per lane, issues in queue order."""
     if not lanes:
         return ""
     cards = []
@@ -2338,7 +2338,7 @@ def refresh_main_view(auto=True):
 # --- serve (INFRA-43) ---------------------------------------------------
 # The views were GENERATED ON WRITE: something had to remember to run this
 # script after every backlog change, and something did not. `session-startup`
-# step 8b claims a slice, runs `--check`, commits and pushes -- and never
+# step 8b claims a lane, runs `--check`, commits and pushes -- and never
 # regenerated, so a claim reached origin/main while the two local views still
 # showed the pre-claim state. `worktree-increment` step 1.3 did say to
 # regenerate, but by then the session is in a worktree and ROOT comes from

@@ -1,4 +1,4 @@
-"""Claim a slice: every named issue in one commit, pushed, or nothing at all.
+"""Claim a lane: every named issue in one commit, pushed, or nothing at all.
 
 Part of the `lanes` plugin. Stdlib-only; runs on any machine with no virtualenv.
 
@@ -10,9 +10,9 @@ Usage (in the MAIN clone, on the main branch, on the operator's directive):
   python3 lanes_claim.py --resume CORE-64              # the same operator, a second machine (LANES-7)
 
 `session-startup` step 8b and `worktree-increment` step 1 as one all-or-nothing
-operation (LANES-9). Written by hand, the claim slipped twice in one slice: a named
+operation (LANES-9). Written by hand, the claim slipped twice in one lane: a named
 ID was left out of the commit, and a named ID had no file on the main branch (it
-existed only on an unabsorbed branch), so the session re-scoped the slice silently.
+existed only on an unabsorbed branch), so the session re-scoped the lane silently.
 Hand-written markers also drift from the spelling the doctor reads.
 
   1. Fetch and fast-forward the main branch. Refuse when this is not the main clone,
@@ -31,8 +31,8 @@ Hand-written markers also drift from the spelling the doctor reads.
      conflicts, and this claim is withdrawn.
 
 `--next-in <LANE>` (LANES-49) puts the named IDs at the front of a lane already claimed,
-as the next to work: `--behind` only appends, so an issue found mid-slice that had to go
-first was claimed bare, which opened a lane of its own and split the slice across cards.
+as the next to work: `--behind` only appends, so an issue found mid-lane that had to go
+first was claimed bare, which opened a lane of its own and split the work across two cards.
 LANE is a lane key (`INFRA-112@2026-10-12`) or any member's ID. Each new ID is RESERVED,
 queued behind what the lane's first reservation was queued behind, and that reservation
 is re-queued behind the last new ID -- so the order reads head, new, old next, the rest.
@@ -124,7 +124,7 @@ def marker(kind, stamp, who, behind=None, files=None, prior=None):
         tail = ("Claim pushed; worktree not yet created. Expected files: "
                 + (files or "(named when the lane goes ACTIVE)") + ".")
     else:
-        tail = (f"Claimed as part of the {stamp[:10]} slice, queued behind {behind}. "
+        tail = (f"Claimed as part of the {stamp[:10]} lane, queued behind {behind}. "
                 "No worktree yet and no files touched.")
     if prior and prior != "open":
         tail += f" Prior status: `{prior}`."
@@ -295,7 +295,7 @@ class Claim:
         return f"{self.behind}@{m.group(1) if m else self.stamp[:10]}"
 
     def rewrites(self):
-        """{rel path: new text} for every ID, in slice order."""
+        """{rel path: new text} for every ID, in lane order."""
         who, out, prev = identity(self.cfg), {}, self.behind
         lane = self.lane()
         for issue_id in self.ids:
@@ -425,8 +425,8 @@ def resume(root, issue_id, path=None, now=None):
 
 def main(argv=None):
     use_utf8_console()
-    ap = argparse.ArgumentParser(description="lanes: claim a slice of backlog issues in one pushed commit")
-    ap.add_argument("ids", nargs="*", metavar="ID", help="the slice, in working order")
+    ap = argparse.ArgumentParser(description="lanes: claim a lane of backlog issues in one pushed commit")
+    ap.add_argument("ids", nargs="*", metavar="ID", help="the lane's issues, in working order")
     ap.add_argument("--files", default=None,
                     help="the first issue's expected files, as the marker should list them")
     ap.add_argument("--behind", default=None, metavar="ID",

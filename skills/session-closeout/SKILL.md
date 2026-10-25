@@ -1,9 +1,9 @@
 ---
 name: session-closeout
-description: Use when the operator is wrapping up a working session on a repo that runs the lanes protocol and wants the loose ends tied off. Triggers include "let's wrap", "session close", "wrap up", "let's call it", "before I go", "end of session", "close out", or any explicit end-of-session signal. Sweeps every worktree, commits shared text, reconciles the backlog and releases this session's unreached claims, runs the project's pre-land checks and the test gate, pushes branches freely, and confirms before anything lands on the main branch.
+description: Use when the operator is wrapping up a working session on a repo that runs the lanes protocol and wants the loose ends tied off. Triggers include "let's wrap", "session close", "wrap up", "let's call it", "before I go", "end of session", "close out", "shutdown", or any explicit end-of-session signal. The shutdown sequence: sweeps every worktree, commits shared text, reconciles the backlog and releases this session's unreached claims, runs the project's pre-land checks and the test gate, pushes branches freely, and confirms before anything lands on the main branch.
 ---
 
-# Session closeout
+# Shutdown sequence
 
 ## Why this skill exists
 
@@ -98,7 +98,7 @@ Act on what it finds, in this order:
 ### 1a. 🚨 Shared text content MUST commit before push
 
 **Critical rule, no exceptions, every machine:** any untracked project text MUST be
-committed before the closeout push, even if this session never processed it — a new
+committed before the shutdown push, even if this session never processed it — a new
 session asset under `docs/session-assets/`, and any text the project's `preflight.md`
 names as shared (data-mirror notes, fixture ground truth). Text that is not on the main
 branch is invisible to every surface except the machine it was written on.
@@ -117,7 +117,7 @@ commit so cross-machine sync content stays legible in `git log`.
 ### 2. Reconcile the backlog
 
 The backlog is the queue's source of truth; issue frontmatter is state, issue bodies are
-current understanding. At every closeout, either operator:
+current understanding. At every shutdown, either operator:
 
 - **Close what this session finished:** in each issue file — `status: closed` (or
   `verified`, if a lane landed and the certifying machine's backfill will close it),
@@ -159,15 +159,15 @@ current understanding. At every closeout, either operator:
   (and Context, if the framing changed) **overwritten** — not appended to. History lives
   in git blame + session assets. If the blocker changed, update `blocked_on`; if the
   urgency changed, `priority`.
-- **Release every RESERVED claim the session never reached.** A slice claims all its
+- **Release every RESERVED claim the session never reached.** A lane claims all its
   issues up front, so a session that runs out of time leaves `status: in-progress` on
   issues with no worktree and nobody behind them, and those poison every future conflict
-  scan. For each slice issue still marked `RESERVED, NOT STARTED`: set `status` back to
+  scan. For each lane issue still marked `RESERVED, NOT STARTED`: set `status` back to
   what it should now carry (`open`, or `blocked` / `paused` if that was its prior state),
   delete its `lane:` line, and overwrite the ⏳ marker to say it was claimed and not reached. An issue that WAS
   worked and is parked mid-flight keeps its claim — that is a live lane.
 
-  🚫 **Release only THIS session's own claims.** Closeout is where a claim is released
+  🚫 **Release only THIS session's own claims.** Shutdown is where a claim is released
   precisely because the session releasing it is the one that made it. Another session's
   claim — including one that looks stale, misdated or abandoned — is **surfaced in the
   handoff and left untouched**, even here, even when it is obviously wrong. Only the
@@ -216,7 +216,7 @@ A code lane closes its doc loop inside `worktree-increment` (step 8a); an author
 has no increment skill, so its loop closes here. **Run it for every piece of authoring
 this session produced**, deriving the candidate docs mechanically — grep the project's
 docs for the thing authored, never ask "did anything change?" — then the same three-way
-triage as the increment skill: a paragraph gets edited now and rides in this closeout's
+triage as the increment skill: a paragraph gets edited now and rides in this shutdown's
 docs commit; a new surface or a rewrite gets a DOC issue; and **the outcome goes into the
 closed issue's Resolution as a `Docs:` line**, "nothing" included. Authoring is docs-lane
 by path, so `--check` does NOT enforce the line here the way it does for a code lane — the
@@ -234,7 +234,7 @@ only. Link the asset from the issues it explains.
 **The doc-loop backstop is mechanical — do not re-verify it by hand.** `backlog_index.py
 --check` (step 2, and again in step 7 after the rebase) fails any `verified` issue whose
 change reached outside the docs lane without a `Docs:` line in its Resolution. If it
-reports one here, the fix is the increment's, not the closeout's: add the line to that
+reports one here, the fix is the increment's, not the shutdown's: add the line to that
 Resolution in a docs commit that names the increment, and do **not** do the doc review
 itself at the session boundary — that is how the obligation migrates back to where it
 never got done.

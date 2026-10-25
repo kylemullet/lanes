@@ -1,6 +1,6 @@
 ---
 name: worktree-increment
-description: "Use when the operator assigns ONE backlog issue (an ID like CORE-2 or INFRA-7) to be worked in an isolated git worktree — the standard flow for running one or more sessions, each targeting its own increment. ALSO the flow for a multi-issue slice — invoked once per issue, sequentially, never widened to cover several at once. Triggers include \"work CORE-<N> in a worktree\", \"do this issue in a worktree\", \"run the slice\", \"go\" after a startup brief, or any assignment naming backlog issues. Covers the full lifecycle: claim → worktree → build → self-verify → hold → operator verify → fix/log → commit → push → land (with OK) → clean up."
+description: "Use when the operator assigns ONE backlog issue (an ID like CORE-2 or INFRA-7) to be worked in an isolated git worktree — the standard flow for running one or more sessions, each targeting its own increment. ALSO the flow for a multi-issue lane — invoked once per issue, sequentially, never widened to cover several at once. Triggers include \"work CORE-<N> in a worktree\", \"do this issue in a worktree\", \"run the lane\", \"go\" after a startup brief, or any assignment naming backlog issues. Covers the full lifecycle: claim → worktree → build → self-verify → hold → operator verify → fix/log → commit → push → land (with OK) → clean up."
 ---
 
 # Worktree increment
@@ -46,16 +46,16 @@ Ground rules that apply the whole way through:
 ## Scope: ONE issue per invocation — this is a hard boundary
 
 **If the operator names more than one issue, this skill runs once per issue,
-sequentially.** It does not widen to cover a slice.
+sequentially.** It does not widen to cover a whole lane.
 
-**Claims are the exception: make them for the WHOLE slice, up front.** Claiming and
+**Claims are the exception: make them for the WHOLE lane, up front.** Claiming and
 working have different jobs and do not share a cadence. A claim exists so a concurrent
-session does not open the same issue; it says nothing about which lane is active. In the
+session does not open the same issue; it says nothing about which issue is being worked. In the
 operator's words: *"even if we end up not working those for one reason or another, the
 claim should still be valid, because I'm not going to open that same issue in another
 worktree."*
 
-So: **one claim commit covering every issue in the slice, committed AND pushed to
+So: **one claim commit covering every issue in the lane, committed AND pushed to
 `origin/<main_branch>` before the first worktree is created.** Normally `session-startup`
 step 8b has done this on the directive, and step 1 here only verifies it. Use the body
 marker to distinguish states, since `status: in-progress` is doing collision duty for all
@@ -67,7 +67,7 @@ conflict scan match these strings):
 ```
 ⏳ IN-PROGRESS (YYYY-MM-DD HH:MM, <operator>'s session) — **WORKTREE PENDING.** Claim pushed; worktree not yet created. Expected files: …
 ⏳ IN-PROGRESS (YYYY-MM-DD HH:MM, <operator>'s session, worktree <name>, branch <branch>) — **ACTIVE LANE.** Expected files: …
-⏳ IN-PROGRESS (YYYY-MM-DD HH:MM, <operator>'s session) — **RESERVED, NOT STARTED.** Claimed as part of the <date> slice, queued behind <ID>. No worktree yet and no files touched.
+⏳ IN-PROGRESS (YYYY-MM-DD HH:MM, <operator>'s session) — **RESERVED, NOT STARTED.** Claimed as part of the <date> lane, queued behind <ID>. No worktree yet and no files touched.
 ```
 
 **Timestamps are LOCAL and carry minutes** (`date "+%Y-%m-%d %H:%M"`, never UTC). A date
@@ -79,7 +79,7 @@ and that gap is real** (`incidents.md` → "113 seconds"). A second session seei
 routes around the issue exactly as it would for an active lane; nothing has to be
 inferred.
 
-A reserved issue the session never reaches is **released at closeout**, not left claimed:
+A reserved issue the session never reaches is **released at shutdown**, not left claimed:
 set it back to the status it should carry and clear the marker and the `lane:` line. An `in-progress` issue
 with no live worktree and no session behind it poisons every future conflict scan.
 
@@ -89,17 +89,17 @@ other two RESERVED); work CORE-64 start to finish — worktree, build, verify, l
 begin UI-40, in its own worktree, flipping its marker from RESERVED to PENDING then
 ACTIVE as it starts.
 
-**An issue found mid-slice joins the slice's lane — never a lane of its own.** One that
+**An issue found mid-lane joins that lane — never a lane of its own.** One that
 must be worked before the reserved ones (a rename the next issue builds on, a doc fix the
 current one exposed, the children a split mints) goes in at the front:
 `lanes_claim.py <ID> --next-in <any member's ID>` claims it RESERVED as the next to work
 and re-queues the old next behind it. One that can wait goes at the end with `--behind
-<the last ID>`. A bare `lanes_claim.py <ID>` opens a new lane and splits the slice across
+<the last ID>`. A bare `lanes_claim.py <ID>` opens a new lane and splits the work across
 two cards in the view. If a session already did that, the same `--next-in` moves the stray
-issue into the slice's lane, keeping its state (one being worked moves only into a lane
+issue into the right lane, keeping its state (one being worked moves only into a lane
 where nothing else is); never fix a `lane:` line by hand.
 
-**Never open the second lane while the first is unresolved**, and "unresolved" includes
+**Never open a second issue's worktree while the first is unresolved**, and "unresolved" includes
 *waiting on the operator's verdict*. Genuine parallelism means **one Claude Code session
 per worktree**.
 
@@ -169,7 +169,7 @@ Work happens in the MAIN checkout before the worktree exists:
 
    🚫 **You never write to another issue's claim. Not the marker, not the frontmatter, not
    the timestamp, not a typo in it.** Releasing or amending a claim belongs to exactly two
-   actors: the session that OWNS it (at closeout), or an explicit operator instruction
+   actors: the session that OWNS it (at shutdown), or an explicit operator instruction
    naming that issue. A claim that looks stale, wrong, abandoned, misdated or absurd is
    still not yours — **say so and stop.** An intention can be complied with while being
    violated; a prohibition cannot (`incidents.md` → "The takeover with an opt-out").
@@ -192,7 +192,7 @@ Work happens in the MAIN checkout before the worktree exists:
 
    It writes BOTH halves, which are read by different things — one without the other is
    the bug: **frontmatter** `status: in-progress` plus `lane: <lead-ID>@<date>`, the lane's
-   recorded identity, the same on every issue of the slice (what the views and `--report`
+   recorded identity, the same on every issue of the lane (what the views and `--report`
    render and group by, and which stays on the issue after it lands)
    and the **body** `WORKTREE PENDING` marker with the expected files at the top of
    **Current status** (what another session reads once its frontmatter scan points it at
@@ -443,7 +443,7 @@ step fails the push gate.
    `in-progress` — to **`verified`** (NOT `closed`) with a filled Resolution and
    `resolution: done` (or `duplicate` / `superseded`, named in the prose). The ⏳ marker
    goes too. **Both halves, again.** The `lane:` line STAYS on an issue that landed
-   (`verified`): it records which lane resolved it and keeps the slice whole in the views
+   (`verified`): it records which lane resolved it and keeps the lane whole in the views
    until its last issue lands.
 
    **A lane that lands part of its issue still closes it; what is left becomes new issues,
@@ -457,7 +457,7 @@ step fails the push gate.
 
    Each piece is minted under the issue's epic, or, when it has none, under a new epic
    minted over it: the issue gets `epic:` and closes as that epic's first child, its claim
-   untouched. Write each piece's Context. After the landing, when the slice still has
+   untouched. Write each piece's Context. After the landing, when the lane still has
    reserved issues, `lanes_claim.py <pieces> --next-in <ID>` puts the ones worked next ahead
    of them; otherwise they are claimed like any other issue. Only a lane that lands NOTHING
    (parked, abandoned) goes back to the queue: the status it should carry, Current status
@@ -511,7 +511,7 @@ step fails the push gate.
    BRANCH <name>, awaiting the certifying machine`, and do not ask for a landing OK you
    should not be offering.
 6. **Land when the lane is verified — per lane, with the operator's OK.** A worktree left
-   waiting for closeout is a lane that has not finished. (`incidents.md` → "The batching
+   waiting for the shutdown sequence is an increment that has not finished. (`incidents.md` → "The batching
    convention broken five times".)
 7. **To land — the operator's explicit OK, then RUN it yourself** (their OK is the
    authorization, not a request for a command to paste). From the worktree:
@@ -619,7 +619,7 @@ close, the branch push, the claim pushes: run them, then say what they did. Aski
 
 ## What this skill does NOT cover
 
-- Session startup ceremony — `session-startup`. `session-closeout` still runs at the end
+- The startup sequence — `session-startup`. The shutdown sequence (`session-closeout`) still runs at the end
   of the operator's overall session, but do NOT defer this increment's obligations to it:
-  the backlog close-out, the session asset and the push all happen in step 9 here.
+  the backlog's closing pass, the session asset and the push all happen in step 9 here.
 - Choosing WHICH item to work — that is the operator's assignment.

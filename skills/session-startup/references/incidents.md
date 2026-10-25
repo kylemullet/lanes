@@ -1,4 +1,4 @@
-# Session startup — the incidents behind the rules
+# Startup sequence — the incidents behind the rules
 
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
@@ -19,7 +19,7 @@ propagates that delete to every other machine. The pull is now a script that com
 each dirty path to origin by blob hash, reconciles the identical ones without writing
 them, carries a new local file, and refuses only on what genuinely differs, by name.
 
-## The slice claimed by hand (2026-10-06, 2026-10-07)
+## The lane claimed by hand (2026-10-06, 2026-10-07)
 
 A directive named four issues. The claim commit covered one; the second was reserved 35
 minutes later, after the operator noticed only one showed in progress. Another named ID
@@ -64,7 +64,7 @@ anyone tried to age it. Timestamps are LOCAL and carry minutes.
 ## Our own claims in block V (2026-09-16)
 
 A brief put a lane that was verified on its branch and awaiting the landing OK, and the
-lane reserved behind it, in block V as *the recommended slice* — while both were
+lane reserved behind it, in block V as *the recommended lane* — while both were
 `in-progress` from the previous session's claim commit. The exclusion-set rule was
 already in the skill; it was skipped because the lanes were the operator's own. A claim
 does not care whose it is — that is the whole point of a claim.

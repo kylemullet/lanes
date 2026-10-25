@@ -36,4 +36,4 @@ closes; this is the alternative.
    ```
 
 4. Report the epic, each child's ID and title, and the push result. An epic is never
-   claimed: a slice that named the split issue claims its children instead.
+   claimed: a lane that named the split issue claims its children instead.

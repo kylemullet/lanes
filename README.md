@@ -116,7 +116,7 @@ naming the cause — a guard that cannot ask git never waves a write through (LA
   then the Context written from what they said, so it ends as a filled issue, not a stub. Plain
   prose works too; the command picks the project and title and says so. Session-raised issues
   keep calling `backlog_new.py` directly with `--reported-by=claude`.
-- **`/lanes:claim <ID> [<ID> …]`** — claims a slice in one pushed commit (see below).
+- **`/lanes:claim <ID> [<ID> …]`** — claims a lane in one pushed commit (see below).
 - **`/lanes:split <ID> "<child>" ["<child>" …]`** — splits an issue bigger than one landing into
   an epic and its children in one backlog-only push, then writes each child's Context from the
   parent's. An open issue becomes the epic; an epic gains children; a lane's own claimed issue
@@ -129,9 +129,9 @@ stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualen
 
 | Skill | When | What it does |
 | :-- | :-- | :-- |
-| `session-startup` | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief (always with a `critical:` line), ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator (or read it from the trigger: `GA housekeeping`) — and offer 2–3 proposals for it; **stop** |
-| `worktree-increment` | "do CORE-7", "run the slice", "go" | claim the whole slice up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator with a written debrief (verdict, numbered verification steps, what is uncommitted — a message, before any harness end-of-turn box), close the doc loop, push the branch freely, land only with the OK, on the lane's own green (a rebase re-runs tests only after a hand-resolved logic conflict) |
-| `session-closeout` | "let's wrap", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
+| `session-startup` (the startup sequence) | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief (always with a `critical:` line), ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator (or read it from the trigger: `GA housekeeping`) — and offer 2–3 proposals for it; **stop** |
+| `worktree-increment` | "do CORE-7", "run the lane", "go" | claim the whole lane up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator with a written debrief (verdict, numbered verification steps, what is uncommitted — a message, before any harness end-of-turn box), close the doc loop, push the branch freely, land only with the OK, on the lane's own green (a rebase re-runs tests only after a hand-resolved logic conflict) |
+| `session-closeout` (the shutdown sequence) | "let's wrap", "shutdown", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
 
 Each `SKILL.md` is protocol only; the project-specific steps live in the repo's
 `.claude/lanes/{preflight,lane-setup,pre-land}.md`, and the rules' history lives in
@@ -181,11 +181,11 @@ warns and numbers from what is here; `--no-fetch` skips it.
 (LANES-5). `--ok-free`: every path ahead of `origin/<main>` is under `git.ok_free_paths`
 (default: the backlog dir alone), `--check` is green, and no commit edits a claim marker
 another machine wrote. `--claim`: every path is main-direct (the claim push's rule). The
-backfill close, `backlog_new.py --push`, a staleness fix, the ACTIVE flip and closeout's
+backfill close, `backlog_new.py --push`, a staleness fix, the ACTIVE flip and the shutdown sequence's
 release of an unreached claim all go through it; `--add` commits exactly the named paths
 first. Exit 0 passed (and pushed) · 1 refused, nothing pushed · 2 passed, push failed.
 
-One for the start of a slice, run in the main clone on the operator's directive (also
+One for the start of a lane, run in the main clone on the operator's directive (also
 `/lanes:claim`):
 
 ```bash
@@ -234,7 +234,7 @@ ACTIVE/PENDING issues in one lane. The views and `--report` open with **Due** �
 calendar order with its countdown (`in 15d`, `today`, `3d OVERDUE`); an overdue issue is a finding
 there, never a failed check. The HTML view shows the first 5 and every overdue one, the rest behind
 a "Show N more" button (LANES-56) — then **In progress**, one group per
-lane, labelled by its slice alone: '/' joins issues of one project (`LANES-20/21/9`) and ', '
+lane, labelled by its issues alone: '/' joins issues of one project (`LANES-20/21/9`) and ', '
 separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`). The worktree and branch names stay in the ⏳
 marker, where the doctor reads them. Its landed issues are shown beside the live ones until the
 last one lands and the lane disappears. `lanes_claim.py` writes the `lane:` field, which stays on an
@@ -305,9 +305,9 @@ Three files beside the config, each run by one protocol skill when present:
 
 | File | Runs in | After |
 | :-- | :-- | :-- |
-| `preflight.md` | session startup | the pull, before the queue is read |
+| `preflight.md` | the startup sequence | the pull, before the queue is read |
 | `lane-setup.md` | the worktree flow | `git worktree add` returns |
-| `pre-land.md` | session closeout | before the landing OK is requested |
+| `pre-land.md` | the shutdown sequence | before the landing OK is requested |
 
 Everything true of one project only goes there, and is deleted from the skills rather than
 duplicated.

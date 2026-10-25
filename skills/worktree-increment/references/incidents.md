@@ -30,11 +30,11 @@ accumulated trying to recover it. The position check (step 0) and, later, the ho
 enforces it both come from this. Note the hook refuses on EITHER condition — the write
 that caused this had HEAD on a topic branch, so an "AND" form would have passed it.
 
-## Claim the whole slice (2026-09-13)
+## Claim the whole lane (2026-09-13)
 
-The operator was about to open a second agent session mid-slice and found issues 3 and 4
-of the slice unclaimed — the exact collision the mechanism exists to prevent. Claims are
-made for the whole slice up front; work proceeds one issue at a time.
+The operator was about to open a second agent session mid-lane and found issues 3 and 4
+of the lane unclaimed — the exact collision the mechanism exists to prevent. Claims are
+made for the whole lane up front; work proceeds one issue at a time.
 
 ## The hash that resolved locally (2026-09-01)
 
@@ -96,7 +96,7 @@ The doc-loop step said "skip when no code changed" and named five code directori
 the infra class skipped by rule: a CI change left the standing docs describing a retired
 CI shape for two days; skill-only lanes changed the process while the docs kept
 describing the old one. Six code lanes shipped without a `Docs:` line in two weeks,
-because the only check was a closeout step that worktree sessions never run. Now
+because the only check was a shutdown-sequence step that worktree sessions never run. Now
 everything outside the docs lane runs the loop, the outcome is recorded in the Resolution,
 and `--check` enforces it at the push gate.
 
@@ -140,7 +140,7 @@ for six verified issues. The backfill needed no OK, and nothing in the protocol 
 run it before the next startup, a whole session later. It lived at startup because a
 lane cannot know its resolving hash: the pre-push rebase rewrites it. That reason ends
 the moment the landing reads back from the remote. So the landing closes its own issue,
-closeout sweeps what is left, and startup is the backstop. Housekeeping the protocol has
+the shutdown sequence sweeps what is left, and startup is the backstop. Housekeeping the protocol has
 already authorized is run and reported, never put to the operator as a question.
 
 ## The `cd &&` that was refused (2026-09-01)
@@ -169,8 +169,8 @@ The operator's harness gained an end-of-turn tool: a "next step" box holding a r
 few sentences and one question, under a contract that the box, when it carries a question,
 ends the turn and nothing is written after it. The hold is a turn that ends on a question
 for the operator, so a model that followed the harness closely put "ready to verify" in
-the box and stopped. The operator got no debrief and no verification steps, slice after
-slice, and asked for them each time. Step 5 had said only "announce readiness and what
+the box and stopped. The operator got no debrief and no verification steps, lane after
+lane, and asked for them each time. Step 5 had said only "announce readiness and what
 verification will cover", and the shape of the steps — numbered, one command each, the
 output as observed — lived in one machine's memory, not in the skill: the debrief had been
 a habit, and the new contract removed the habit's slot. Now the debrief is the hold's

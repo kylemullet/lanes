@@ -329,7 +329,7 @@ def decide(rel: str, pos: Position) -> tuple[int, str]:
             f"write would land in the MAIN CLONE on `{mb}`. Code never lands on `{mb}` from a "
             f"commit made there (branch policy). Work it in a worktree on a topic branch -- "
             f"`worktree-increment` step 0 -- and keep only the claim, the closing docs and the "
-            f"startup/closeout writes here. Main-direct paths (git.main_direct_paths): "
+            f"startup/shutdown writes here. Main-direct paths (git.main_direct_paths): "
             f"{', '.join(pos.rules.main_direct)}."
         )
 

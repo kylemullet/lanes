@@ -84,6 +84,7 @@ def test_claims_the_whole_slice_in_one_pushed_commit(setup, tmp_path, capsys):
     assert ld.KIND_RE.search(_marker(second)).group(1) == "RESERVED, NOT STARTED"
     assert "queued behind CORE-1" in _marker(second) and "Prior status: `blocked`" in _marker(second)
     assert "queued behind CORE-2" in _marker(third)
+    assert "Claimed as part of the 2026-10-07 lane," in _marker(second)    # LANES-57: a lane, not a slice
     assert "Tester's session on " in _marker(first)
     assert "## Current status\n\n⏳" in first and "\n\nOpen.\n" in first     # prior text kept below
     assert git("status", "--porcelain", cwd=clone) == ""

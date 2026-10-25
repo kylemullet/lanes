@@ -1,4 +1,4 @@
-# Session closeout — the incidents behind the rules
+# Shutdown sequence — the incidents behind the rules
 
 Operators are named by role; mechanics as they happened; dates are when the rule changed.
 
@@ -6,14 +6,14 @@ Operators are named by role; mechanics as they happened; dates are when the rule
 
 A session ended with ~24 files of finished work — a CI matrix and a console-encoding
 sweep, both complete — sitting uncommitted in a worktree that had never been pushed.
-Nothing in the closeout looked there, because it ran in the main clone and `git status`
+Nothing in the shutdown sequence looked there, because it ran in the main clone and `git status`
 was clean. It survived only because a later session went looking for something else.
 Committed-and-pushed is the *minimum* resting state for work that exists; "still in
 progress" is not a reason to leave it on one disk. Step 1b sweeps every worktree.
 
 ## A stopped session is not a dead session (2026-09-16)
 
-The operator stopped two sessions; a third killed their orphaned test suites at closeout;
+The operator stopped two sessions; a third killed their orphaned test suites at shutdown;
 both stopped sessions woke — a task ending, including by `kill`, re-invokes the session
 that owns it — and had to be stopped again. Never kill another session's background
 process; let it finish, or have the operator close its thread.
@@ -22,7 +22,7 @@ process; let it finish, or have the operator close its thread.
 
 A second operator worked a session without access to their own prior session asset,
 because it had been written on a sync-mirrored path and never committed. Since then: any
-untracked project text is committed before the closeout push, whoever wrote it and
+untracked project text is committed before the shutdown push, whoever wrote it and
 whether or not this session processed it.
 
 ## The pathspec that matched nothing (2026-06-13)
@@ -57,10 +57,10 @@ worse than none.
 
 ## The reserved claims nobody released (2026-09-13)
 
-A slice claims every issue up front, so a session that ran out of time left
+A lane claims every issue up front, so a session that ran out of time left
 `status: in-progress` on issues with no worktree and nobody behind them — stale claims
 that were easier to create than abandoned active ones because nobody had touched the
-files. Closeout releases THIS session's unreached reservations; another session's claims
+files. The shutdown sequence releases THIS session's unreached reservations; another session's claims
 are surfaced and left alone.
 
 ## Verify-first that went false (2026-05-22)
@@ -76,10 +76,10 @@ before the promotion is written down.
 Landings were told to batch to one a day because each cost a ~53-minute CI run; the rule
 was broken five times in its first three hours and the day billed ~700 minutes anyway.
 The cost was removed instead: CI no longer runs on push, lanes land as they are verified,
-and closeout lands only the remainder — enumerated by lane, so the OK is informed consent.
+and the shutdown sequence lands only the remainder — enumerated by lane, so the OK is informed consent.
 
 ## The sweep that took another lane's server (2026-09-16)
 
-A closeout that tidied the whole local-port band would have killed a worktree lane's
+A shutdown that tidied the whole local-port band would have killed a worktree lane's
 server mid-verification on another session. Port sweeps are scoped to what the checkout
 owns.

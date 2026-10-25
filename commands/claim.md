@@ -1,5 +1,5 @@
 ---
-description: Claim a slice of backlog issues in one pushed commit — every ID or none; the first WORKTREE PENDING, the rest RESERVED behind it
+description: Claim a lane of backlog issues in one pushed commit — every ID or none; the first WORKTREE PENDING, the rest RESERVED behind it
 argument-hint: "<ID> [<ID> …] [--files \"a, b\"] [--behind <ID> | --next-in <ID>] [--dry-run]"
 allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py:*), Read'
 ---

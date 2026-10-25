@@ -7,7 +7,7 @@ Usage (from inside the lane's worktree, after the operator's landing OK):
   python3 lanes_land.py --keep       # land and verify; leave the worktree and the branch
   python3 lanes_land.py --dry-run    # every check, no push, no clean-up
   python3 lanes_land.py --onto next  # land on another integration branch than git.main_branch
-  python3 lanes_land.py --no-close   # land and clean up; leave the backfill to closeout/startup
+  python3 lanes_land.py --no-close   # land and clean up; leave the backfill to the shutdown/startup sequences
   python3 lanes_land.py --path ../proj-core-1   # the lane's worktree, from anywhere else
 
 On Windows the last form is the only one that can finish (LANES-44): the shell that
