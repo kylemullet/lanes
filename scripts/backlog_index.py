@@ -63,7 +63,7 @@ issue write byte-identical files, and `--push` fetches first, then converges on 
 rejected push by rebasing -- identical closes merge cleanly or drop out. No machine is
 named the single writer, and nothing is ever force-pushed.
 """
-import argparse, datetime, html, re, shutil, subprocess, sys, tempfile, webbrowser
+import argparse, base64, datetime, html, re, shutil, subprocess, sys, tempfile, webbrowser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -1524,6 +1524,21 @@ DUE_COLS = (("Due", "due", 0), ("When", "dueIn", 1), ("ID", "id", 0), ("Title", 
 # Dropped first on a narrow screen, so a phone still gets ID / title / pri / status.
 SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution", "due")
 
+# The lanes mark (LANES-58): a main line with two lanes landing on it at staggered heights.
+# Embedded, not read from the plugin's assets, because no plugin text names the icon files by
+# path (0.4.7). Keep it in step with the vector source when the mark changes.
+LOGO_BODY = ('<rect width="1024" height="1024" rx="224" fill="#181a20"/>'
+             '<g fill="none" stroke="#e6b85c" stroke-width="112" stroke-linecap="round" '
+             'stroke-linejoin="round"><path d="M512 840V176"/>'
+             '<path d="M276 840V700C276 610 512 590 512 500"/>'
+             '<path d="M748 840V600C748 500 512 460 512 360"/></g>')
+# Inline in the header: HTML needs no namespace on an <svg> element.
+LOGO_INLINE = f'<svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">{LOGO_BODY}</svg>'
+# The tab icon: a standalone SVG does need its namespace, so it is base64 in a data: URI -- the
+# page still fetches nothing.
+LOGO_FAVICON = "data:image/svg+xml;base64," + base64.b64encode(
+    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">{LOGO_BODY}</svg>'.encode()).decode()
+
 HTML_STYLE = """
 :root{color-scheme:light dark;
   --bg:#f6f7f9;--surface:#fff;--fg:#17191c;--mut:#646b75;--faint:#9aa1ab;--line:#e4e7eb;
@@ -1545,7 +1560,10 @@ body{margin:0;background:var(--bg);color:var(--fg);
 a{color:inherit;text-decoration:none}
 code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
 .top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
-h1{font-size:20px;letter-spacing:-.01em;margin:0;font-weight:650}
+h1{font-size:20px;letter-spacing:-.01em;margin:0;font-weight:650;
+   display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+h1 .logo{width:26px;height:26px;flex:none}
+h1 .sep{color:var(--faint);font-weight:400}
 h1 .repo{color:var(--mut);font-weight:450}
 .meta{color:var(--mut);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .pos::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
@@ -2061,13 +2079,14 @@ def render_html(issues, problems=(), position=None):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Backlog — {_esc(REPO_NAME)}</title>
+<title>Lanes | {_esc(REPO_NAME)} Backlog</title>
+<link rel="icon" href="{LOGO_FAVICON}">
 <style>{HTML_STYLE}</style>
 </head>
 <body>
 <div class="wrap">
 <header class="top">
-  <h1>Backlog <span class="repo">· {_esc(REPO_NAME)}</span></h1>
+  <h1>{LOGO_INLINE}<span>Lanes</span><span class="sep" aria-hidden="true">|</span><span class="repo">{_esc(REPO_NAME)} Backlog</span></h1>
   <div class="meta">{pos_inline}<span>generated {stamp}</span></div>
 </header>
 <div class="stats">{stats}</div>
@@ -2229,11 +2248,13 @@ def refresh_main_view(auto=True):
     views are gitignored, so a side effect never leaves an untracked file for a broad
     `git add` to sweep up; the doctor's `views` check says how to ignore them."""
     main = main_clone()
-    paths = ("ROOT", "BACKLOG", "INDEX", "HTML_VIEW")
+    paths = ("ROOT", "BACKLOG", "INDEX", "HTML_VIEW", "REPO_NAME")
     home = {k: globals()[k] for k in paths}
     try:
+        # Same config, the main clone's files -- and its name, which the header shows (LANES-54):
+        # a lane's worktree, or the close's throwaway one, would otherwise title the view.
         apply({"ROOT": main, "BACKLOG": main / BACKLOG_REL, "INDEX": main / BACKLOG_REL / "INDEX.md",
-               "HTML_VIEW": main / BACKLOG_REL / "index.html"})   # same config, the main clone's files
+               "HTML_VIEW": main / BACKLOG_REL / "index.html", "REPO_NAME": main.name})
         if auto and not views_ignored():
             return None
         regenerate()

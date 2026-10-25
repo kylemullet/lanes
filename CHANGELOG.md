@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.52 — the backlog view's header is the mark, then "Lanes | <repo> Backlog" (2026-10-25)
+
+- **The view's header and tab now say whose page it is** (LANES-54). The header used to read
+  `Backlog · <repo>` and the tab `Backlog — <repo>`, with no mark. Now the header is the lanes mark
+  (0.4.51), **Lanes**, a faint `|`, and `<repo> Backlog`. The tab title reads the same, and the tab
+  icon is the mark. Both copies of the mark are embedded in `backlog_index.py` rather than read
+  from the plugin's assets, because no plugin text names the icon files by path (0.4.7). The page
+  still fetches nothing. The header's copy is inline SVG, which needs no namespace URL. The tab
+  icon is a standalone SVG, which does, so it is a base64 `data:` URI. The self-contained-page test
+  now allows exactly that one `<link>`.
+- **The view is titled with the main clone's name, whichever checkout refreshes it.** Since LANES-11
+  any checkout regenerates the main clone's view from the main clone's files, but the repo name
+  stayed the calling checkout's. A refresh from a lane's worktree, or from the landing's throwaway
+  close worktree, titled the page with that directory's name. The new header made this hard to
+  miss. The redirect now carries the name too, and `test_backlog_new.py` pins it.
+
 ## 0.4.51 — a simpler icon: three lanes landing on one line at staggered heights (2026-10-25)
 
 - **The 0.4.6 icon was too busy to read small** (LANES-58). It had a trunk ending in an arrow,

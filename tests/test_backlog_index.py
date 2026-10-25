@@ -5,6 +5,8 @@ settings under tmp_path and assigns them onto the module, so nothing here can to
 a real backlog, and tests that need git build a real repository (the properties
 under test are git ones).
 """
+import base64
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -245,10 +247,34 @@ def test_render_html_is_self_contained_and_named_after_the_repo(monkeypatch):
     monkeypatch.setattr(bidx, "REPO_NAME", "my-proj")
     page = bidx.render_html([_issue("UI-1"), _issue("PIPE-2", status="closed", closed="2026-08-09")])
     assert page.startswith("<!doctype html>")
-    assert "<script src" not in page and "<link" not in page
+    assert "<script src" not in page
+    # The one <link> is the tab icon, and it carries its own bytes (LANES-54).
+    assert re.findall(r"<link[^>]*>", page) == [f'<link rel="icon" href="{bidx.LOGO_FAVICON}">']
     assert "http://" not in page and "https://" not in page
     assert "<style>" in page and "applyFilter" in page
-    assert "<title>Backlog — my-proj</title>" in page
+    assert "<title>Lanes | my-proj Backlog</title>" in page
+
+
+def test_render_html_header_is_the_mark_then_lanes_then_the_repos_backlog(monkeypatch):
+    """LANES-54: the header reads `[logo] Lanes | <repo> Backlog`, and the tab icon is the same
+    mark. Both are embedded: the page is opened from file:// and fetches nothing."""
+    monkeypatch.setattr(bidx, "REPO_NAME", "my-proj")
+    page = bidx.render_html([_issue("UI-1")])
+    h1 = re.search(r"<h1>(.*?)</h1>", page, re.S).group(1)
+    assert h1.startswith('<svg class="logo"') and bidx.LOGO_BODY in h1
+    text = re.sub(r"<svg.*?</svg>|<[^>]+>", " ", h1, flags=re.S)
+    assert text.split() == ["Lanes", "|", "my-proj", "Backlog"]
+    head, _, data = bidx.LOGO_FAVICON.partition(";base64,")
+    assert head == "data:image/svg+xml"
+    icon = base64.b64decode(data).decode()
+    assert icon.startswith('<svg xmlns="http://www.w3.org/2000/svg"') and bidx.LOGO_BODY in icon
+
+
+def test_the_header_escapes_the_repo_name(monkeypatch):
+    monkeypatch.setattr(bidx, "REPO_NAME", "a<b>&c")
+    page = bidx.render_html([_issue("UI-1")])
+    assert '<span class="repo">a&lt;b&gt;&amp;c Backlog</span>' in page
+    assert "<title>Lanes | a&lt;b&gt;&amp;c Backlog</title>" in page
 
 
 def test_render_html_rows_carry_every_filter_and_sort_key():

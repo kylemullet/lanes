@@ -278,10 +278,14 @@ def test_create_issue_in_a_worktree_refreshes_the_main_clones_view(tmp_path, mon
     wt = tmp_path / "wt"
     _git(repo, "worktree", "add", "-q", str(wt), "-b", "lane")
     _point_at(monkeypatch, wt)
+    monkeypatch.setattr(bidx, "REPO_NAME", wt.name)              # as a process started in the lane has it
     bn.create_issue("INFRA", "from the lane", reported_by="kyle")
     assert not (wt / "docs" / "backlog" / "index.html").exists()
     page = (repo / "docs" / "backlog" / "index.html").read_text(encoding="utf-8")
     assert "INFRA-1" in page and "from the lane" not in page    # the main clone's files, not the lane's
+    # ...and the main clone's name in the header, not the worktree's (LANES-54)
+    assert f"<title>Lanes | {repo.name} Backlog</title>" in page and "wt Backlog" not in page
+    assert bidx.REPO_NAME == "wt", "the redirect is undone once the view is written"
 
 
 def test_cli_requires_reported_by(monkeypatch, capsys):
