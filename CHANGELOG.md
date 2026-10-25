@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.51 — a simpler icon: three lanes landing on one line at staggered heights (2026-10-25)
+
+- **The 0.4.6 icon was too busy to read small** (LANES-58). It had a trunk ending in an arrow,
+  two lanes that left and rejoined it, a third that ended in a square, and three circles, every
+  stroke drawn twice as an outline. That is ten shapes, and at 16 and 24px the circles and inner
+  strokes blurred together. Its first use inside the product will be the backlog view's header
+  (LANES-54), at about 24px.
+- **The new mark is three strokes,** amber on the same dark rounded square: a straight main line,
+  with a lane on each side landing on it at different heights, left low and right high. Kyle
+  picked it from candidates rendered at 16, 24, 64 and 160px on light and dark backgrounds, where
+  it reads at every size. A stronger-stagger variant he also liked is kept beside it as the
+  alternate vector source. The 1024px listing PNG is re-rendered from the new source, RGB with
+  white corners like the old one. No text names either file by path (0.4.7).
+
 ## 0.4.50 — the Privacy section names what `/lanes:init` reads and adds (2026-10-25)
 
 - **0.4.49 left the README's Privacy section incomplete in two places** (LANES-53). The section
