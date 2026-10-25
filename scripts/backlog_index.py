@@ -1521,6 +1521,9 @@ VERIFIED_COLS = (("ID", "id", 0), ("Title", "title", 0), ("Pri", "priorityRank",
 DUE_COLS = (("Due", "due", 0), ("When", "dueIn", 1), ("ID", "id", 0), ("Title", "title", 0),
             ("Pri", "priorityRank", 1), ("Status", "statusRank", 1), ("Type", "type", 0),
             ("Assignee", "assignee", 0))
+# The view shows this many Due rows, then a "Show N more" button -- and every overdue row,
+# however many (LANES-56).
+DUE_FOLD = 5
 # Dropped first on a narrow screen, so a phone still gets ID / title / pri / status.
 SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution", "due")
 
@@ -1623,6 +1626,8 @@ button{font:inherit;font-size:12.5px;padding:7px 12px;border-radius:8px;cursor:p
        border:1px solid var(--line);background:var(--surface);color:var(--fg)}
 button:hover{background:var(--hov)}
 button[aria-expanded="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+table.folded tr.fold{display:none}
+button.more{margin:8px 0 2px}
 #fcount{display:inline-block;min-width:1.4em;margin-left:4px;padding:0 5px;border-radius:9px;
         background:var(--accent);color:var(--surface);font-size:11px;font-weight:600}
 #fcount:empty{display:none}
@@ -1752,6 +1757,34 @@ function applyFilter(){
   document.getElementById('showing').textContent =
     shown === total ? total + ' issues' : 'showing ' + shown + ' of ' + total + ' issues';
   document.getElementById('fcount').textContent = active ? active : '';
+  refold();
+}
+
+// The Due section folds past its first rows (LANES-56): every overdue row shows, then the
+// first data-fold of the rest -- counted over the rows the filter leaves, in their current
+// order, so a sort or a filter never hides an overdue issue behind the button.
+function refold(){
+  document.querySelectorAll('table.foldable').forEach(t => {
+    const vis = bodyRows(t).filter(r => !r.hidden);
+    let room = Math.max(0, +t.dataset.fold - vis.filter(r => r.classList.contains('overdue')).length);
+    let more = 0;
+    bodyRows(t).forEach(r => r.classList.remove('fold'));
+    vis.forEach(r => {
+      if (r.classList.contains('overdue')) return;
+      if (room > 0) { room--; return; }
+      r.classList.add('fold'); more++;
+    });
+    const open = !t.classList.contains('folded'), btn = t.nextElementSibling;
+    btn.hidden = more === 0;
+    btn.textContent = open ? 'Show fewer' : 'Show ' + more + ' more';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+}
+
+function showAllDue(open){
+  document.querySelectorAll('table.foldable').forEach(t => t.classList.toggle('folded', !open));
+  store.set('lanes.backlog.due', open ? 'all' : 'fold');
+  refold();
 }
 
 function sortBy(th){
@@ -1765,6 +1798,7 @@ function sortBy(th){
     if (num) { x = Number(x); y = Number(y); }
     return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
   }).forEach(r => body.appendChild(r));
+  refold();
 }
 
 // Claim times are written LOCAL ("YYYY-MM-DD HH:MM"); say how long ago, which
@@ -1813,6 +1847,10 @@ document.getElementById('reset').addEventListener('click', () => {
 document.getElementById('q').addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.target.value = ''; applyFilter(); }
 });
+document.querySelectorAll('button.more').forEach(b =>
+  b.addEventListener('click', () => showAllDue(b.previousElementSibling.classList.contains('folded'))));
+if (store.get('lanes.backlog.due') === 'all')
+  document.querySelectorAll('table.foldable').forEach(t => t.classList.remove('folded'));
 applyFilter();
 ago();
 setInterval(ago, 60000);
@@ -1843,7 +1881,7 @@ def _href(i):
     return i["_path"].as_posix().replace(BACKLOG_REL + "/", "")
 
 
-def _html_row(i, cols, activity=None):
+def _html_row(i, cols, activity=None, fold=False):
     activity = activity or {}
     status = shown_status(i, activity)
     href = _href(i)
@@ -1900,7 +1938,8 @@ def _html_row(i, cols, activity=None):
         return f'<td class="{classes}">{inner}</td>' if classes else f"<td>{inner}</td>"
 
     attr_str = " ".join(f'data-{k}="{_esc(v)}"' for k, v in attrs.items())
-    row_cls = ' class="overdue"' if days is not None and days < 0 else ""
+    classes = (["overdue"] if days is not None and days < 0 else []) + (["fold"] if fold else [])
+    row_cls = f' class="{" ".join(classes)}"' if classes else ""
     return f"<tr{row_cls} {attr_str}>" + "".join(td(key) for _, key, _n in cols) + "</tr>"
 
 
@@ -1941,16 +1980,45 @@ def _col_class(key):
     return "col-sec" if key in SECONDARY_COLS else "col-age" if key == "age" else ""
 
 
-def _html_table(issues, cols, empty, activity=None, dup=False):
+def _html_table(issues, cols, empty, activity=None, dup=False, fold=None):
+    """`fold`: the number of rows to show before a "Show N more" button (LANES-56), or None.
+    The script recomputes which rows fold after every filter and sort; this is the first paint."""
     if not issues:
         return f'<p class="empty">{empty}</p>'
     head = "".join(
         f'<th data-key="{key}" data-num="{num}"'
         + (f' class="{_col_class(key)}"' if _col_class(key) else "") + f'>{_esc(label)}</th>'
         for label, key, num in cols)
-    rows = "\n".join(_html_row(i, cols, activity) for i in issues)
+    folded = _folded_rows(issues, fold) if fold is not None else set()
+    rows = "\n".join(_html_row(i, cols, activity, fold=n in folded) for n, i in enumerate(issues))
     cls = "issues dup" if dup else "issues"
-    return f'<table class="{cls}"><thead><tr>{head}</tr></thead><tbody>\n{rows}\n</tbody></table>'
+    data = ""
+    if fold is not None:
+        cls += " foldable folded"
+        data = f' data-fold="{fold}"'
+    table = f'<table class="{cls}"{data}><thead><tr>{head}</tr></thead><tbody>\n{rows}\n</tbody></table>'
+    if fold is None:
+        return table
+    more = (f'<button type="button" class="more" aria-expanded="false">Show {len(folded)} more</button>'
+            if folded else '<button type="button" class="more" aria-expanded="false" hidden></button>')
+    return table + more
+
+
+def _folded_rows(issues, fold):
+    """Indexes of the rows that start folded: every overdue row shows, and the first
+    `fold` minus that many of the rest, in order. The script's refold() is the same rule."""
+    overdue = sum(1 for i in issues if (d := _days_until(i.get("due"))) is not None and d < 0)
+    room = max(0, fold - overdue)
+    out = set()
+    for n, i in enumerate(issues):
+        d = _days_until(i.get("due"))
+        if d is not None and d < 0:
+            continue
+        if room > 0:
+            room -= 1
+        else:
+            out.add(n)
+    return out
 
 
 def html_sort_key(it):
@@ -2008,7 +2076,7 @@ def _html_due(issues, activity):
     overdue = overdue_count(dated)
     od = f' <span class="od">· {overdue} overdue</span>' if overdue else ""
     return (f'<details class="sec" open><summary>Due <span class="n">{len(dated)}</span>{od}</summary>'
-            f'{_html_table(dated, DUE_COLS, "", activity, dup=True)}</details>')
+            f'{_html_table(dated, DUE_COLS, "", activity, dup=True, fold=DUE_FOLD)}</details>')
 
 
 def _html_problems(problems):

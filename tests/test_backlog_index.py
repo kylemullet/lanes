@@ -1677,7 +1677,7 @@ def test_html_opens_with_a_due_section_flags_overdue_and_keeps_the_claimed_issue
     lanes_at = page.index('<section class="lanes">'); queue_at = page.index("<summary>Open queue")
     assert due_at < lanes_at < queue_at
     assert '<span class="od">· 1 overdue</span>' in page
-    assert 'class="issues dup"' in page and "const dup = t.classList.contains('dup')" in page
+    assert 'class="issues dup foldable folded"' in page and "const dup = t.classList.contains('dup')" in page
     assert '<tr class="overdue" data-project="ADMIN"' in page
     assert '<span class="due overdue">2d OVERDUE</span>' in page
     assert '<span class="due soon">today</span>' in page and '<span class="due soon">in 3d</span>' in page
@@ -1690,6 +1690,54 @@ def test_html_opens_with_a_due_section_flags_overdue_and_keeps_the_claimed_issue
     assert page.count('href="BD/BD-9-x.md"') == 3 and "BD-9" not in page[queue_at:]
     assert 'value="in-progress" checked' in page
     assert "BD-4" not in page[due_at:lanes_at]
+
+
+# --- the Due section folds after DUE_FOLD rows (LANES-56) ------------------------------------
+
+def _due_rows(page):
+    """(id, folded, overdue) for each Due row, in page order."""
+    due = page[page.index("<summary>Due "):page.index("</details>", page.index("<summary>Due "))]
+    out = []
+    for m in re.finditer(r'<tr( class="([^"]*)")? data-project=[^>]*? data-id="([^"]+)"', due):
+        cls = (m.group(2) or "").split()
+        iid = re.sub(r"-0*(\d)", r"-\1", m.group(3))              # data-id is padded to sort: OD-0000
+        out.append((iid, "fold" in cls, "overdue" in cls))
+    return out, due
+
+
+def _many_due(overdue, upcoming):
+    return ([_issue(f"OD-{n}", due=_today(-1 - n)) for n in range(overdue)]
+            + [_issue(f"UP-{n}", due=_today(1 + n)) for n in range(upcoming)])
+
+
+def test_five_or_fewer_due_rows_never_fold():
+    rows, due = _due_rows(bidx.render_html(_many_due(1, 4)))
+    assert len(rows) == 5 and not any(f for _, f, _ in rows)
+    assert '<button type="button" class="more" aria-expanded="false" hidden></button>' in due
+
+
+def test_due_rows_past_the_fifth_fold_behind_a_show_more_button():
+    rows, due = _due_rows(bidx.render_html(_many_due(2, 7)))
+    assert [i for i, f, _ in rows if not f] == ["OD-1", "OD-0", "UP-0", "UP-1", "UP-2"]
+    assert [i for i, f, _ in rows if f] == ["UP-3", "UP-4", "UP-5", "UP-6"]
+    assert '<button type="button" class="more" aria-expanded="false">Show 4 more</button>' in due
+    assert '<summary>Due <span class="n">9</span>' in due, "the count is every dated issue, folded or not"
+    assert 'data-fold="5"' in due
+
+
+def test_an_overdue_row_never_folds_even_past_five():
+    rows, due = _due_rows(bidx.render_html(_many_due(7, 3)))
+    assert all(not f for _, f, od in rows if od) and sum(od for *_, od in rows) == 7
+    assert [i for i, f, _ in rows if f] == ["UP-0", "UP-1", "UP-2"]
+    assert "Show 3 more" in due
+
+
+def test_the_script_refolds_after_every_filter_and_sort_and_remembers_the_choice():
+    page = bidx.render_html(_many_due(0, 8))
+    script = page[page.index("<script>"):]
+    assert "function refold()" in script and script.count("refold();") >= 3   # filter, sort, toggle
+    assert "table.folded tr.fold{display:none}" in page
+    assert "store.set('lanes.backlog.due'" in script and "store.get('lanes.backlog.due')" in script
 
 
 def test_html_without_dates_has_no_due_section_and_no_due_chip():

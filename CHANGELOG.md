@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.53 — the Due section shows five, then "Show N more" (2026-10-25)
+
+- **The Due section pushed everything else down the page** (LANES-56). Since LANES-46 the HTML
+  view opens with every dated live or verified issue. Readlines has 17, so the lanes and the queue
+  started a screen below the header.
+- **The view now shows the first 5, plus every overdue one, however many.** The rest wait behind a
+  "Show N more" button, which becomes "Show fewer". The section's count stays the full count, and
+  the choice is remembered the way the Filters panel is. The server renders the first paint. The
+  page script re-folds after every filter and every sort, counting only the rows the filter leaves,
+  in their current order. So a narrow filter shows no button, and re-sorting never puts an overdue
+  issue behind it. Folding is a class on the Due table, not the rows' `hidden` attribute, which the
+  filter owns. `INDEX.md`, `--report` and the Brief are unchanged.
+- Tests cover five or fewer rows (no fold), the fold past five, overdue rows past five, and the
+  script hooks. The script was also driven in headless Chrome: fold, unfold, filter, clear, and
+  re-sort with the overdue rows at the bottom. No overdue row was ever hidden.
+
 ## 0.4.52 — the backlog view's header is the mark, then "Lanes | <repo> Backlog" (2026-10-25)
 
 - **The view's header and tab now say whose page it is** (LANES-54). The header used to read

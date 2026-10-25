@@ -232,7 +232,8 @@ requires (or carrying it empty, or `none` with no reason), a dangling `epic:` pa
 or paused issue (a release deletes it), a value that is not `<ID>@<YYYY-MM-DD>`, or two
 ACTIVE/PENDING issues in one lane. The views and `--report` open with **Due** — every dated live or verified issue in
 calendar order with its countdown (`in 15d`, `today`, `3d OVERDUE`); an overdue issue is a finding
-there, never a failed check — then **In progress**, one group per
+there, never a failed check. The HTML view shows the first 5 and every overdue one, the rest behind
+a "Show N more" button (LANES-56) — then **In progress**, one group per
 lane, labelled by its slice alone: '/' joins issues of one project (`LANES-20/21/9`) and ', '
 separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`). The worktree and branch names stay in the ⏳
 marker, where the doctor reads them. Its landed issues are shown beside the live ones until the
