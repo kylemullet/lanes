@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.55 — the mark is the strong stagger, which still reads as staggered at 16px (2026-10-26)
+
+- **The 0.4.51 mark lost its stagger at small sizes** (LANES-59). Its side lanes land on the main
+  line only a little apart, and at 16px, the tab icon's size, they read as landing at one height,
+  a symmetric fork. Kyle: *"the staggering is barely visible at smaller resolutions"*.
+- **The stronger-stagger variant kept beside it since 0.4.51 is now the mark everywhere:** the
+  vector source, the 1024px listing PNG, and the copy embedded in `backlog_index.py` that draws the
+  backlog view's header and tab icon. The left lane lands lower and the right one higher, and both
+  still read as separate heights at 16 and 24px. The previous mark is kept as the alternate vector
+  source, so the choice stays a swap. The listing PNG keeps the old one's square, corners and
+  format (RGB, white corners); only the strokes inside it are re-rendered. No text names either
+  file by path (0.4.7).
+
 ## 0.4.54 — a slice is a lane; startup and closeout read as the startup and shutdown sequences (2026-10-25)
 
 - **One word for a claimed group of issues: a lane** (LANES-57). Since LANES-49 a slice was already

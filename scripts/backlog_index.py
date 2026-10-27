@@ -1527,14 +1527,15 @@ DUE_FOLD = 5
 # Dropped first on a narrow screen, so a phone still gets ID / title / pri / status.
 SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution", "due")
 
-# The lanes mark (LANES-58): a main line with two lanes landing on it at staggered heights.
+# The lanes mark (LANES-58): a main line with two lanes landing on it at staggered heights --
+# the strong stagger since LANES-59, which still reads as staggered at tab-icon size.
 # Embedded, not read from the plugin's assets, because no plugin text names the icon files by
 # path (0.4.7). Keep it in step with the vector source when the mark changes.
 LOGO_BODY = ('<rect width="1024" height="1024" rx="224" fill="#181a20"/>'
              '<g fill="none" stroke="#e6b85c" stroke-width="112" stroke-linecap="round" '
              'stroke-linejoin="round"><path d="M512 840V176"/>'
-             '<path d="M276 840V700C276 610 512 590 512 500"/>'
-             '<path d="M748 840V600C748 500 512 460 512 360"/></g>')
+             '<path d="M276 840V768C276 680 512 672 512 580"/>'
+             '<path d="M748 840V540C748 420 512 400 512 296"/></g>')
 # Inline in the header: HTML needs no namespace on an <svg> element.
 LOGO_INLINE = f'<svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">{LOGO_BODY}</svg>'
 # The tab icon: a standalone SVG does need its namespace, so it is base64 in a data: URI -- the
