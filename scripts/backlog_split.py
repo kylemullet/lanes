@@ -60,6 +60,7 @@ CHILD_BODY = """\
 A child of [[{epic}]], split from [[{parent}]] by `backlog_split.py` (LANES-47){why}.
 (What this piece covers — overwrite with the part of the parent's Context it carries.)
 
+""" + bn.ACCEPTANCE_STUB + """
 ## Current status
 
 Open, not started.

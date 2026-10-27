@@ -69,12 +69,26 @@ ME = "me"   # --reported-by=me: this machine's operator short (LANES-2, /lanes:n
 BACKLOG = bidx.BACKLOG
 BACKLOG_REL = bidx.BACKLOG_REL
 
+# What done looks like, as concise test cases (LANES-60): one row per criterion. A row's Test ID
+# names the automated test that proves it, and stays blank for a case its owner checks by hand.
+ACCEPTANCE_STUB = """\
+## Acceptance criteria
+
+(One concise test case per row. Owner is who verifies it; Test ID names the automated test
+that proves it, and stays blank for a manual case.)
+
+| AC | Test case description | Owner | Test ID |
+| :-- | :-- | :-- | :-- |
+| AC1 | | | |
+"""
+
 BODY_STUB = """\
 ## Context
 
 (What this is and why it exists. Overwrite to current understanding — history
 lives in git blame + linked session assets, not in stacked amendments.)
 
+""" + ACCEPTANCE_STUB + """
 ## Current status
 
 (Where it stands right now. Overwrite in place.)

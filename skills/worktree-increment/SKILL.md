@@ -265,6 +265,13 @@ Then:
 Normal build discipline. Scope stays on the assigned item: in-scope discoveries get fixed;
 out-of-scope discoveries get LOGGED (step 8), not chased.
 
+**Start from the issue's Acceptance criteria table** (LANES-60). When its rows are still the
+stub, or the issue predates the section, write them before building: concise test cases drawn
+from the Context, one per row (AC1, AC2, …), in the lane's copy of the issue, where they ride in
+the lane's commit. As a row gets an automated test, put that test's ID in its Test ID cell (a
+pytest node ID, say). A row with no automation keeps the cell blank, and its Owner checks it
+in step 7.
+
 ### 4. Self-verify
 
 **Rebase FIRST, then verify — not the other way round.** `git fetch origin`; if
@@ -302,7 +309,9 @@ restores the uncommitted state exactly.)
 announcement that one is coming. It carries:
 
 1. **The verdict against the baseline:** passed / failed / skipped here against step 1's
-   numbers, the test-ID reconciliation, and any attributed red subtracted.
+   numbers, the test-ID reconciliation, and any attributed red subtracted. Then the
+   Acceptance criteria rows: each automated row's Test ID and that it passed, and which
+   verification step below covers each manual row.
 2. **Numbered verification steps — for every lane, not only UX-touching work.** Each names
    the file or path, gives ONE runnable command in its own code block, and quotes the
    output **as observed by running it first**, never predicted. An expected refusal is
@@ -444,7 +453,8 @@ step fails the push gate.
    `resolution: done` (or `duplicate` / `superseded`, named in the prose). The ⏳ marker
    goes too. **Both halves, again.** The `lane:` line STAYS on an issue that landed
    (`verified`): it records which lane resolved it and keeps the lane whole in the views
-   until its last issue lands.
+   until its last issue lands. Every Acceptance criteria row carries its Test ID, or a blank
+   one whose Owner checked it in step 7.
 
    **A lane that lands part of its issue still closes it; what is left becomes new issues,
    never a next phase written back into this one** (`incidents.md` → "The story that never

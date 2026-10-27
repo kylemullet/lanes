@@ -28,7 +28,11 @@ Create a backlog issue the user is raising, then fill it in.
 
 3. Read the file the script printed (`created <path>`) and replace the Context stub with
    what the user said: the problem, where it shows, and any fix they suggested, in their
-   terms. Leave Current status and Resolution as written. Do not change the frontmatter.
+   terms. When they said what done looks like, write it into the Acceptance criteria table
+   as concise test cases, one per row (AC1, AC2, …): Owner is who will verify it, and Test ID
+   names an automated test only when one already exists. If they said nothing about done,
+   leave the table's stub for the lane to fill. Leave Current status and Resolution as
+   written. Do not change the frontmatter.
 
 4. Publish it, so the other machines see it now rather than at the next OK'd push. From
    the main clone on the main branch, commit that one file and push it under the OK-free

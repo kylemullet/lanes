@@ -237,3 +237,15 @@ def test_startup_and_shutdown_read_as_sequences_and_keep_their_identifiers():
         text = f.read_text(encoding="utf-8")
         assert not re.search(r"\bsession (startup|closeout)\b", text, re.I), f
         assert not re.search(r"\bclose-?outs?\b", re.sub(r"session-closeout", "", text), re.I), f
+
+
+def test_the_lane_works_from_the_acceptance_criteria_and_fills_their_test_ids():
+    """LANES-60: the lane writes the rows before building, reports them at the hold, and lands
+    with every row carrying its Test ID or a manual check by its owner."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    work = text.split("### 3. Work the item", 1)[1].split("### 4.", 1)[0]
+    hold = text.split("### 5. Hold", 1)[1].split("### 6.", 1)[0]
+    final = text.split("1. Final backlog pass", 1)[1].split("**A lane that lands part", 1)[0]
+    for step in (work, hold, final):
+        assert "Acceptance criteria" in step
+    assert "Test ID" in work and "Test ID" in final

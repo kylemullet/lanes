@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.56 — every issue carries an acceptance-criteria table: AC, test case, owner, test ID (2026-10-26)
+
+- **An issue had nowhere to say what done looks like** (LANES-60). A minted issue got Context,
+  Current status and Resolution. Acceptance, where it was stated at all, was a line of prose in
+  Context, and the tests that proved an issue were named only after the fact, in the Resolution's
+  evidence. Kyle: *"adding acceptance criteria to jiras. Concise test cases with test id's when
+  there's automation"*.
+- **`backlog_new.py` and `backlog_split.py` now mint a fourth section, `## Acceptance criteria`,**
+  between Context and Current status: a table of `AC | Test case description | Owner | Test ID`,
+  one concise test case per row. Owner is who verifies it. Test ID names the automated test that
+  proves it, and stays blank for a manual case. The claim still writes its marker under Current
+  status and leaves the table alone. Issues minted earlier keep their three sections; `--check`
+  does not require the table.
+- **`/lanes:new` writes the rows** when the operator says what done looks like, and otherwise
+  leaves the stub for the lane.
+- **The lane works from the table** (`worktree-increment`). It writes the rows before building
+  when they are still the stub, or when the issue predates the section. It puts each automated
+  test's ID in its row as the test is written. The hold's debrief reports every row: an automated
+  row's Test ID and that it passed, and which verification step covers a manual row. At landing,
+  every row carries its Test ID, or a blank one whose Owner checked it.
+- Tests pin the section's place and header in a minted issue and in a split child, that a claim
+  leaves it untouched, and that the command and the skill say how to fill it. Each fails with the
+  change reverted.
+
 ## 0.4.55 — the mark is the strong stagger, which still reads as staggered at 16px (2026-10-26)
 
 - **The 0.4.51 mark lost its stagger at small sizes** (LANES-59). Its side lanes land on the main

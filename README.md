@@ -113,7 +113,8 @@ naming the cause — a guard that cannot ask git never waves a write through (LA
 
 - **`/lanes:new <PROJECT> "<title>" [--type=…] [--priority=…] [--assignee=…] [--epic=ID]`** — mints
   an issue the operator is raising: the next free ID, `--reported-by=me` (this machine's operator),
-  then the Context written from what they said, so it ends as a filled issue, not a stub. Plain
+  then the Context written from what they said, and the Acceptance criteria rows when they said
+  what done looks like, so it ends as a filled issue, not a stub. Plain
   prose works too; the command picks the project and title and says so. Session-raised issues
   keep calling `backlog_new.py` directly with `--reported-by=claude`.
 - **`/lanes:claim <ID> [<ID> …]`** — claims a lane in one pushed commit (see below).
@@ -221,8 +222,11 @@ consumer CI that checks out the pinned release fails on every push until the tag
 One file per issue at `<backlog.dir>/<PROJECT>/<ID>-<slug>.md`, flat YAML frontmatter (`id`,
 `project`, `type`, `status`, `priority`, `blocked_on`, `assignee`, `reported_by`, `opened`,
 `closed`, `commit`, `resolution`, `links`, optional `epic`, optional `due` — the `YYYY-MM-DD` the issue
-stops being movable, written by `backlog_new.py --due` or by hand — and `lane` while claimed) and three H2 sections: Context,
-Current status, Resolution. `--check` is the integrity gate: duplicate or misnamed IDs,
+stops being movable, written by `backlog_new.py --due` or by hand — and `lane` while claimed) and four H2 sections: Context,
+Acceptance criteria, Current status, Resolution. Acceptance criteria is a table, `AC | Test case
+description | Owner | Test ID`: one concise test case per row, its owner, and the automated test
+that proves it, blank for a manual case (LANES-60). Issues minted before 0.4.56 have three
+sections; a lane that works one adds the table. `--check` is the integrity gate: duplicate or misnamed IDs,
 out-of-vocabulary values, a `due:` that is not a calendar date, a `status: in-progress` without its body claim marker (or the
 reverse) or with one the view cannot read (LANES-37), a `commit:` hash that is not an ancestor of HEAD (the rebase signature), a `verified`
 issue whose Resolution does not cite a commit subject on HEAD, a `verified` issue whose change

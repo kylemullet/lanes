@@ -424,3 +424,35 @@ def test_the_new_command_offers_due():
     from pathlib import Path
     text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
     assert "--due=YYYY-MM-DD" in text
+
+
+# --- the Acceptance criteria table (LANES-60) ---------------------------------------------
+
+SECTIONS = ["## Context", "## Acceptance criteria", "## Current status", "## Resolution"]
+
+
+def test_a_new_issue_carries_the_acceptance_criteria_table_after_its_context(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _point_at(monkeypatch, repo)
+    text = bn.create_issue("PROD", "with criteria", regen_index=False).read_text(encoding="utf-8")
+    assert [l for l in text.splitlines() if l.startswith("## ")] == SECTIONS
+    table = text.split("## Acceptance criteria", 1)[1].split("## Current status", 1)[0]
+    assert ("\n| AC | Test case description | Owner | Test ID |\n| :-- | :-- | :-- | :-- |\n"
+            "| AC1 | | | |\n") in table
+
+
+def test_a_claim_on_a_new_issue_leaves_its_acceptance_criteria_alone(tmp_path, monkeypatch):
+    import lanes_claim
+    repo = _repo(tmp_path)
+    _point_at(monkeypatch, repo)
+    text = bn.create_issue("PROD", "claimed", regen_index=False).read_text(encoding="utf-8")
+    claimed = lanes_claim.with_claim(text, "⏳ IN-PROGRESS (the marker)", lane="PROD-1@2026-10-26")
+    before_status = lambda t: t.partition("\n---\n")[2].split("## Current status", 1)[0]
+    assert "| AC1 | | | |" in before_status(claimed) and before_status(claimed) == before_status(text)
+    assert claimed.split("## Current status\n\n", 1)[1].startswith("⏳ IN-PROGRESS (the marker)\n")
+
+
+def test_the_new_command_writes_acceptance_criteria_from_what_done_looks_like():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
+    assert "Acceptance criteria" in text and "Test ID" in text and "leave the table's stub" in text

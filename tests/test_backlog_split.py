@@ -180,3 +180,14 @@ def test_push_off_the_main_clone_is_refused_before_anything_is_written(backlog, 
     with pytest.raises(SystemExit):
         bs.main(["CORE-1", "one", "--reported-by", "claude", "--push"])
     assert p.read_bytes() == before and len(list((backlog / "docs/backlog/CORE").iterdir())) == 1
+
+
+def test_a_child_carries_the_acceptance_criteria_stub(backlog):
+    """LANES-60: a split child is an issue like any other, so it gets the table too."""
+    put(backlog, "CORE-1")
+    bs.split("CORE-1", ["parse it"], "tester", today="2026-10-14")
+    _, cbody = meta(backlog, "CORE-2")
+    assert [l for l in cbody.splitlines() if l.startswith("## ")] == [
+        "## Context", "## Acceptance criteria", "## Current status", "## Resolution"]
+    assert bn.ACCEPTANCE_STUB in cbody
+    check_is_green()
