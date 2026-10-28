@@ -43,8 +43,9 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" guard_commit.py --install
 It writes a git `pre-commit` shim that refuses a commit putting non-main-direct paths on
 the main branch, or any commit made in the main clone off it. Running it every session is
 the per-clone setup step: a fresh clone is guarded after its first startup, and a plugin
-update re-points the shim. `installed (unchanged)` needs no Brief line. Anything else goes
-in the Brief: re-pointed, `off`, another tool's hook, `core.hooksPath`.
+update re-points the shim. `installed (unchanged)` is its `OK` status line, which folds into
+`health:` (step 7). Anything else is a `CUE` line the Brief shows: re-pointed, `off`, another
+tool's hook, `core.hooksPath`.
 
 The same goes for the view hooks (LANES-11), which regenerate the bookmarked backlog view
 after any pull, rebase or branch switch in the main clone:
@@ -54,8 +55,8 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" view_hooks.py --install
 ```
 
 They chain after another tool's hooks (git-lfs writes two of the three). `installed
-(unchanged)` and `off` (`backlog.view_mode = "serve"`) need no Brief line; anything else
-does.
+(unchanged)` and `off` (`backlog.view_mode = "serve"`) are `OK`; anything else is a `CUE`
+line.
 
 Keys this skill binds to: `git.main_branch`, `backlog.dir`, `backlog.view_mode`, `backlog.view_port`,
 `tests.command`, `operators[]`, `lanes.code` / `lanes.code_owner`. Where this skill says
@@ -148,7 +149,7 @@ Resolution cites in backticks, fills `commit:`, sets `status: closed` (+ `closed
 resolving commit's date if the lane left it null), and — with `--commit` — stages ONLY
 those issue files and commits `docs(backlog): close <IDs> — backfill resolving commit
 hash`. `--commit` does not push: the commit rides to origin with the next push the
-operator OKs. Mention it in the Brief.
+operator OKs. That is a `CUE` status line (step 7).
 
 **`--push`** is `--commit` made safe for several certifying machines at once. It fetches and
 fast-forwards first, so it closes only what origin still shows as verified. It pushes only
@@ -334,10 +335,47 @@ Two sections, every time, each under a plain header — `Brief`, then `Sortable 
 with no numerals, and then the mode question (step 8). Keep item text to a short noun
 phrase.
 
-**Brief.** Bullets, one line each: sync result; what landed since last session;
-anything needing a decision right now; the backfill result ("closed N verified: IDs —
-commit pending push" / "N verified awaiting the certifying machine's close"); whatever
-`preflight.md` asked to report; unlanded branches from step 2; **the in-flight lanes from
+**The status lines go through the fold** (LANES-66). Every check that reports into the
+Brief, the protocol's own and every `preflight.md` step, gives its result as one or more
+status lines in one spelling:
+
+```
+<LEVEL> <name>: <detail>          LEVEL is OK, CUE or CRITICAL; the name has no colon
+```
+
+`OK` means nothing to read. `CUE` is worth a glance and is never a finding. `CRITICAL` also
+goes on the `critical:` line, whatever mode the operator picks. A line in any other spelling
+is shown in full, so an unmarked check is never folded out of sight. Pass every status line,
+verbatim, through the fold:
+
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" status_lines.py <<'EOF'
+<every status line, one per line>
+EOF
+```
+
+It prints the `CRITICAL` lines, then the `CUE` lines, then any unmarked line, each as
+written, and last one `health:` line naming every `OK` check (`health: all clear — pull ·
+doctor · …` when nothing else printed). Those lines are the Brief's status bullets, as
+printed; an `OK` check never gets a bullet of its own.
+
+The protocol's own checks print in their own words, so write their status lines from this
+table. A result outside the `OK` column is a `CUE`, unless the `CRITICAL` column names it:
+
+| Name | `OK` when it printed | `CRITICAL` when |
+| :-- | :-- | :-- |
+| `pull` (step 2) | up to date, or a fast-forward | it refused |
+| `doctor` (step zero) | `0 warn, 0 fail` | any `fail` |
+| `commit guard` (step zero) | `installed (unchanged)` | — |
+| `view hooks` (step zero) | `installed (unchanged)` or `off` | — |
+| `backfill` (step 2d) | nothing to close, or closed and pushed | it skips a verified issue |
+| `backlog check` (step 5) | `--check` exits 0 | it names a problem |
+
+A `preflight.md` step prints its own lines in this spelling; the contract is in the template
+`/lanes:init` writes.
+
+**Brief.** Bullets, one line each: the fold's lines; what landed since last session;
+anything needing a decision right now; unlanded branches from step 2; **the in-flight lanes from
 step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the lane's name
 (`LANES-20/21/9`), each issue's ACTIVE/PENDING/RESERVED state, lane state, what it is
 waiting on**; **the due line, from the report's `DUE` block: every issue overdue or due

@@ -268,3 +268,19 @@ def test_startup_asks_the_project_beside_the_mode_in_one_dialog():
     assert "outside Critical, only from the chosen projects" in step8
     assert "which backlog project, in the same dialog" in text.split("---", 2)[1]
     assert "`PROJECTS` block is the project question's menu" in text       # step 5 points at it
+
+
+def test_the_status_line_contract_reads_the_same_in_the_skill_the_template_and_the_readme():
+    """LANES-66: one spelling for every check that reports into the Brief, said in the same
+    words everywhere an author meets it, and step 7 sends every status line through the fold."""
+    spelling = "<LEVEL> <name>: <detail>          LEVEL is OK, CUE or CRITICAL; the name has no colon"
+    meaning = "`OK` means nothing to read. `CUE` is worth a glance and is never a finding."
+    for rel in ("skills/session-startup/SKILL.md", "templates/preflight.md", "README.md"):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert spelling in text and meaning in text, rel
+    step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
+    assert 'scripts/lanes.sh" status_lines.py' in step7
+    assert "an unmarked check is never folded out of sight" in step7
+    for name in ("`pull`", "`doctor`", "`commit guard`", "`view hooks`", "`backfill`", "`backlog check`"):
+        assert f"| {name} (step" in step7, name                     # the protocol's own checks are levelled
+    assert "needs no Brief line" not in _startup()                   # superseded by the OK level

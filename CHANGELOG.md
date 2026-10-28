@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.58 — every startup check reports OK, CUE or CRITICAL, and the OK ones fold into one health line (2026-10-27)
+
+- **Most of the Brief said nothing changed** (LANES-66, the first piece of the LANES-65 epic). On
+  one project's Brief, 7 of 14 bullets were all-clear checks, each in its own words, and the one
+  line that had to be read was last. Kyle: *"The brief isn't really working for me."*
+- **A status-line contract.** Every check that reports into the Brief, the protocol's own and
+  every `preflight.md` step, gives each result as `<LEVEL> <name>: <detail>`, with LEVEL `OK`,
+  `CUE` or `CRITICAL`. `OK` means nothing to read; `CUE` is worth a glance and never a finding;
+  `CRITICAL` also goes on the `critical:` line. Step 7, the `preflight.md` template and the
+  README say it in the same words.
+- **`status_lines.py` folds them.** It prints the `CRITICAL` lines, then the `CUE` lines, then any
+  line in another spelling, and last one `health:` line naming every `OK` check (`health: all
+  clear — pull · doctor · …`). A line in another spelling is shown in full, so an unmarked check
+  is never folded out of sight.
+- **The protocol's own checks are levelled from a table in step 7** (pull, doctor, commit guard,
+  view hooks, backfill, backlog check). They keep printing in their own words for now; the Brief
+  script (LANES-67) reads them directly. Step zero's "needs no Brief line" rules became their
+  `OK` level.
+- Tests pin the parse, the fold's order, the health line, unmarked lines shown in full, the CLI,
+  and the contract's wording in all three places. Each fails with the change reverted.
+
 ## 0.4.57 — the startup sequence asks which project beside the mode (2026-10-27)
 
 - **The mode question had no room for a project** (LANES-64). An operator's sessions were

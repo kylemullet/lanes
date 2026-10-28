@@ -318,6 +318,20 @@ Three files beside the config, each run by one protocol skill when present:
 Everything true of one project only goes there, and is deleted from the skills rather than
 duplicated.
 
+**Status lines** (LANES-66). A `preflight.md` step that reports into the Brief gives each
+result as a status line:
+
+```
+<LEVEL> <name>: <detail>          LEVEL is OK, CUE or CRITICAL; the name has no colon
+```
+
+`OK` means nothing to read. `CUE` is worth a glance and is never a finding. `CRITICAL` also
+goes on the `critical:` line, whatever mode the operator picks. The startup sequence passes
+every status line, the protocol's own included, through `status_lines.py`, which prints the
+`CRITICAL` lines, then the `CUE` lines, then any line in another spelling, and last one
+`health:` line naming every `OK` check. A line in another spelling is shown in full, so an
+unmarked check is never folded out of sight.
+
 ## Layout
 
 ```
@@ -326,7 +340,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md, claim.md, new.md, split.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, backlog_split.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, backlog_split.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, status_lines.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs + backlog-README.md
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md
