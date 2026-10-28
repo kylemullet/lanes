@@ -168,3 +168,97 @@ def test_the_cli_reads_the_status_lines_on_stdin_and_takes_judgment_as_arguments
         "health: 1 ok — pull",
         "0 live · 0 critical",
     ]
+
+
+# --- since the last Brief (LANES-68) ---------------------------------------------------------
+
+NOW = datetime.datetime(2026, 10, 28, 9, 30)
+STATUS = ["OK pull: up to date", "OK canary: last run GREEN at abc1234", "CUE patent triage: 3 awaiting triage"]
+
+
+def _last(issues, status=STATUS, branches=("auth-28-work",)):
+    return lb.snapshot(issues, status, branches=branches, tip="abc", now=NOW - datetime.timedelta(hours=2))
+
+
+def test_a_second_brief_on_the_same_state_says_nothing_changed():
+    issues = _quiet()
+    out = lb.render(issues, STATUS, who="kyle", today=TODAY, now=NOW, branches=["auth-28-work"], last=_last(issues))
+    assert out == [
+        "critical: none",
+        "since 07:30: nothing changed",
+        "due: BD-2 Title of BD-2 10-30 (in 2d)",
+        "lanes: 1 in flight, unchanged",
+        "health: 2 ok, 1 cue unchanged (patent triage) — pull · canary",
+        "4 live · 0 critical · oldest 40d",
+    ]
+
+
+def test_the_since_line_names_what_landed_opened_and_closed_and_which_lanes_started_or_ended():
+    before = _quiet() + [_active("PIPE-6", "pipe-6-work"), _issue("BD-8")]
+    last = _last(before)
+    after = [i for i in _quiet() if i["id"] != "UI-1"] + [
+        _issue("UI-1", status="verified", lane="UI-1@2026-10-28"),       # landed, so not "closed" again
+        _issue("BD-8", status="closed", resolution="wont-do"),           # closed without a landing
+        _active("PIPE-6", "pipe-6-work"), _active("LANES-9", "lanes-9-work"), _issue("UI-10")]
+    out = lb.render(after, STATUS, who="kyle", today=TODAY, now=NOW, landed=["UI-1"], last=last)
+    since = next(l for l in out if l.startswith("since "))
+    assert since == ("since 07:30: landed UI-1 Title of UI-1; opened UI-10 Title of UI-10; closed BD-8 Title of BD-8; "
+                     "lanes started LANES-9 Title of LANES-9; lanes ended UI-1 Title of UI-1")
+    assert next(l for l in out if l.startswith("lanes:")).startswith("lanes: 2 — ")   # the set changed: in full
+    assert not any(l.startswith("landed:") for l in out), "the since line carries the landings"
+    assert not any(l.startswith("branches:") for l in out), "an unchanged set of branches is not news"
+
+
+def test_a_check_whose_level_moved_gets_its_own_line_even_when_it_is_now_ok():
+    issues = _quiet()
+    last = _last(issues, status=["OK pull: up to date", "CUE slow machine: 1.9x", "CUE patent triage: 3",
+                                 "CRITICAL nightly: RED"])
+    now = ["OK pull: up to date", "OK slow machine: timings normal", "CUE patent triage: 3",
+           "OK nightly: GREEN at c634eb8", "CUE toggle clocks: a review in 13d"]
+    out = lb.render(issues, now, who="kyle", today=TODAY, now=NOW, last=last)
+    assert out[0] == "critical: none"
+    assert out[1:4] == ["CUE toggle clocks: a review in 13d",                  # new: shown
+                        "OK slow machine: timings normal (was CUE)",          # moved: shown once
+                        "OK nightly: GREEN at c634eb8 (was CRITICAL)"]
+    assert "health: 3 ok, 1 cue unchanged (patent triage) — pull · slow machine · nightly" in out
+
+
+def test_a_since_label_from_another_day_names_the_day():
+    issues = _quiet()
+    last = lb.snapshot(issues, STATUS, tip="abc", now=datetime.datetime(2026, 10, 26, 17, 8))
+    assert "since 10-26 17:08: nothing changed" in lb.render(issues, STATUS, who="kyle", today=TODAY, now=NOW, last=last)
+
+
+def test_the_saved_brief_lives_in_the_clone_git_dir_shared_by_worktrees_and_never_tracked(tmp_path, monkeypatch, capsys):
+    clone = _origin_and_clone(tmp_path)
+    monkeypatch.setattr(bidx, "ROOT", clone)
+    path = lb.state_path()
+    assert path == clone / ".git" / "lanes" / "last-brief.json"
+    monkeypatch.setattr(sys, "stdin", io.StringIO("OK pull: up to date\nCUE patent triage: 3\n"))
+    assert lb.main([]) == 0
+    assert "since" not in capsys.readouterr().out, "no saved Brief: the whole Brief"
+    assert path.is_file() and git("status", "--porcelain", cwd=clone) == ""
+    git("commit", "-q", "--allow-empty", "-m", "feat(ui): UI-7 — a landing", cwd=clone)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("OK pull: up to date\nCUE patent triage: 3\n"))
+    lb.main([])
+    out = capsys.readouterr().out.splitlines()
+    assert out[1].startswith("since ") and out[1].endswith(": landed UI-7"), "--since defaults to the saved tip"
+    worktree = tmp_path / "wt"
+    git("worktree", "add", "-q", str(worktree), "-b", "topic", cwd=clone)
+    monkeypatch.setattr(bidx, "ROOT", worktree)
+    assert lb.state_path().resolve() == path.resolve(), "every worktree of the clone reads the same Brief"
+
+
+def test_full_ignores_the_saved_brief_and_no_save_leaves_it(tmp_path, monkeypatch, capsys):
+    clone = _origin_and_clone(tmp_path)
+    monkeypatch.setattr(bidx, "ROOT", clone)
+    for argv in ([], ["--full"]):
+        monkeypatch.setattr(sys, "stdin", io.StringIO("OK pull: up to date\n"))
+        lb.main(argv)
+        assert not any(l.startswith("since ") for l in capsys.readouterr().out.splitlines()), argv
+    saved = lb.state_path().read_text(encoding="utf-8")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("OK pull: up to date\nOK doctor: 0 warn\n"))
+    lb.main(["--no-save"])
+    assert lb.state_path().read_text(encoding="utf-8") == saved
+    lb.state_path().write_text("not json", encoding="utf-8")
+    assert lb.load_state(lb.state_path()) is None, "an unreadable saved Brief means the whole Brief"

@@ -300,3 +300,13 @@ def test_the_brief_is_rendered_by_the_script_and_the_session_adds_only_judgment(
     assert [step7.index(r) for r in rows] == sorted(step7.index(r) for r in rows)   # the order is the rule
     assert "Bullets, one line each" not in step7
     assert "git.permanent_branches" in _startup().split("### 2x.", 1)[0]          # step 2 names the key
+
+
+def test_after_the_first_brief_step_7_says_only_what_changed_is_shown():
+    """LANES-68: the saved Brief lives in the clone's git directory, the next run says what
+    changed, and --full is the way back to everything."""
+    step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
+    assert "**After the first Brief, only what changed** (LANES-68)" in step7
+    for phrase in ("inside the clone's git directory", "never tracked", "`since <HH:MM>: …`", "`nothing\nchanged`",
+                   "`(was <LEVEL>)`", "`N in flight,\nunchanged`", "`--full` renders the\nwhole Brief"):
+        assert phrase in step7, phrase

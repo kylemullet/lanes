@@ -392,6 +392,18 @@ nothing to say:
 Show its output under the `Brief` header exactly as printed, in a code block, and add
 nothing to it. Every ID it cites carries its title.
 
+**After the first Brief, only what changed** (LANES-68). Each run saves what it reported
+inside the clone's git directory: per machine, shared by every worktree and session of the
+clone, never tracked. The next run, from any session on this machine, says only what changed
+since then. The `critical:` line, `due:`, the `--note` lines and the stat are always in full.
+A `since <HH:MM>: …` line follows the status lines: what landed (`--since` defaults to the tip
+the last Brief read), the issues opened and closed, the lanes started and ended, or `nothing
+changed`. A `CUE` whose level has not moved folds into `health:` as unchanged, and a check
+whose level moved shows once, an `OK` one marked `(was <LEVEL>)`. `lanes:` reads `N in flight,
+unchanged` and `branches:` is left out while their sets are the same. `--full` renders the
+whole Brief: when the operator asks for everything, or when a saved Brief is too old to
+compare against usefully.
+
 **Your judgment goes in as arguments, and only there.** `--critical` is for what is timely
 and urgent and no check reports: something blocking someone (the other operator above all),
 something needing a decision now (a verified branch awaiting the landing OK, a stale claim

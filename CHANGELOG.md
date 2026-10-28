@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.60 — after the first Brief, a startup reports only what changed since the last one (2026-10-28)
+
+- **Every startup re-reported the same news** (LANES-68, the last piece of the LANES-65 epic).
+  With four or five sessions open at once, each startup repeated the same landings, the same
+  canary run and the same lanes; "since last session" meant nothing.
+- **`lanes_brief.py` saves what it reported** in the clone's git directory
+  (`.git/lanes/last-brief.json`): per machine, shared by every worktree and session of the clone,
+  never tracked. The next run, from any session on the machine, renders only what changed:
+  - a `since <HH:MM>:` line with what landed (since the tip the last Brief read), the issues
+    opened and closed, and the lanes started and ended, or `nothing changed`;
+  - a `CUE` whose level has not moved folds into `health:` as unchanged, and a check whose level
+    moved shows once, an `OK` one marked `(was <LEVEL>)`;
+  - `lanes:` reads `N in flight, unchanged`, and `branches:` is left out, while their sets match.
+  - `critical:`, `due:`, the session's notes and the stat are always in full.
+- **`--full`** renders the whole Brief whatever was saved; **`--no-save`** leaves the saved Brief
+  alone. With no saved Brief, or an unreadable one, the whole Brief renders, as in 0.4.59.
+- Tests pin a repeat Brief that says nothing changed, the `since` line's kinds, a moved check,
+  another day's label, where the state lives (in the git directory, shared by a worktree, never in
+  `git status`), `--full` and `--no-save`, and step 7's wording.
+
 ## 0.4.59 — a script renders the Brief: critical first, lanes on one line, a title on every ID (2026-10-28)
 
 - **The session wrote the Brief from prose at every startup** (LANES-67, the LANES-65 epic). It

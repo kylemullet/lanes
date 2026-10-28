@@ -338,6 +338,12 @@ order: `critical:` (always: the `CRITICAL` lines, then the session's `--critical
 flight, one line), the session's `--note` lines, `branches:` (unlanded branches no claim
 names, minus `git.permanent_branches`), `landed:` (issues cited since the pull), `health:`,
 and the backlog stat. Every ID carries its title, and the same state prints the same text.
+Each run saves what it reported in the clone's git directory (`.git/lanes/last-brief.json`:
+per machine, shared by every worktree and session, never tracked), and the next run says only
+what changed (LANES-68): a `since <HH:MM>:` line with what landed, opened, closed and which
+lanes started or ended, an unchanged `CUE` folded into `health:`, a check whose level moved
+shown once, and `lanes:` reduced to `N in flight, unchanged`. `critical:`, `due:` and the
+session's notes are always in full; `--full` renders everything.
 
 ## Layout
 
