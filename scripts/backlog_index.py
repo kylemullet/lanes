@@ -1564,14 +1564,15 @@ DUE_FOLD = 5
 SECONDARY_COLS = ("type", "assignee", "epic", "opened", "commit", "resolution", "due")
 
 # The lanes mark (LANES-58): a main line with two lanes landing on it at staggered heights --
-# the strong stagger since LANES-59, which still reads as staggered at tab-icon size.
+# the strong stagger since LANES-59, which still reads as staggered at tab-icon size, and the
+# tall lane on the left since LANES-69, so the mark reads as an L.
 # Embedded, not read from the plugin's assets, because no plugin text names the icon files by
 # path (0.4.7). Keep it in step with the vector source when the mark changes.
 LOGO_BODY = ('<rect width="1024" height="1024" rx="224" fill="#181a20"/>'
              '<g fill="none" stroke="#e6b85c" stroke-width="112" stroke-linecap="round" '
              'stroke-linejoin="round"><path d="M512 840V176"/>'
-             '<path d="M276 840V768C276 680 512 672 512 580"/>'
-             '<path d="M748 840V540C748 420 512 400 512 296"/></g>')
+             '<path d="M276 840V540C276 420 512 400 512 296"/>'
+             '<path d="M748 840V768C748 680 512 672 512 580"/></g>')
 # Inline in the header: HTML needs no namespace on an <svg> element.
 LOGO_INLINE = f'<svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">{LOGO_BODY}</svg>'
 # The tab icon: a standalone SVG does need its namespace, so it is base64 in a data: URI -- the

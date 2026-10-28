@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.61 — the mark is mirrored, tall lane on the left, so it reads as an L (2026-10-28)
+
+- **The mark is flipped left to right** (LANES-69). Kyle: *"it looks more like an L this way"*.
+  The tall lane is now on the left, landing high on the main line, and the short lane on the
+  right, landing low. The strong stagger (0.4.55) is unchanged: the same landing heights,
+  stroke and colours, mirrored about the main line.
+- **Everywhere the mark lives:** the vector source and the alternate beside it, so the
+  alternate stays a swap; the copy embedded in `backlog_index.py` that draws the backlog view's
+  header and tab icon; and the 1024px listing PNG. The PNG's strokes are mirrored in place, and
+  every pixel outside them is unchanged, so it keeps its square, corners and format (RGB, white
+  corners). No text names either file by path (0.4.7).
+
 ## 0.4.60 — after the first Brief, a startup reports only what changed since the last one (2026-10-28)
 
 - **Every startup re-reported the same news** (LANES-68, the last piece of the LANES-65 epic).

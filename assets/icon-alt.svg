@@ -2,7 +2,7 @@
   <rect width="1024" height="1024" rx="224" fill="#181a20"/>
   <g fill="none" stroke="#e6b85c" stroke-width="112" stroke-linecap="round" stroke-linejoin="round">
     <path d="M512 840V176"/>
-    <path d="M276 840V700C276 610 512 590 512 500"/>
-    <path d="M748 840V600C748 500 512 460 512 360"/>
+    <path d="M276 840V600C276 500 512 460 512 360"/>
+    <path d="M748 840V700C748 610 512 590 512 500"/>
   </g>
 </svg>
