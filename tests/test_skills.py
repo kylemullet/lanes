@@ -249,3 +249,22 @@ def test_the_lane_works_from_the_acceptance_criteria_and_fills_their_test_ids():
     for step in (work, hold, final):
         assert "Acceptance criteria" in step
     assert "Test ID" in work and "Test ID" in final
+
+
+def test_startup_asks_the_project_beside_the_mode_in_one_dialog():
+    """LANES-64: the project question rides in the mode question's dialog, offers "Any project"
+    and the report's top three, narrows the proposals outside Critical, and never the Brief."""
+    text = _startup()
+    step8 = text.split("### 8. Ask the mode and the project, then propose 2–3", 1)[1].split("### 8a.", 1)[0]
+    assert "the mode first, the project second, in ONE call" in step8
+    assert "| **Any project** | Proposals from the whole backlog |" in step8
+    assert step8.index("**The mode question.**") < step8.index("**The project question.**")
+    assert "`PROJECTS` block" in step8 and "never re-rank them by judgment" in step8
+    assert "Critical answers the project as well" in step8                  # Critical never asks it
+    assert "which ignores the project answer" in step8                      # ...and ignores it in the dialog
+    assert "no project answer removes an item from it" in step8             # the critical: line stands
+    assert "`GA ui`" in step8 and "`GA deep dive CORE`" in step8            # triggers answer it
+    assert "`backlog.projects` lists a single project, never" in step8
+    assert "outside Critical, only from the chosen projects" in step8
+    assert "which backlog project, in the same dialog" in text.split("---", 2)[1]
+    assert "`PROJECTS` block is the project question's menu" in text       # step 5 points at it

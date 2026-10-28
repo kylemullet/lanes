@@ -1,6 +1,6 @@
 ---
 name: session-startup
-description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator (or reads it from the trigger, e.g. "GA housekeeping"), and offers 2–3 proposals for that mode — then STOPS and waits for the operator to name the work.
+description: Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include "GA", "good morning", "what's in the queue", "startup", "let's get started", "catch me up", or any session-opening signal. The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator — and which backlog project, in the same dialog (or reads either from the trigger, e.g. "GA housekeeping", "GA ui"), and offers 2–3 proposals for that mode and project — then STOPS and waits for the operator to name the work.
 ---
 
 # Startup sequence
@@ -229,9 +229,9 @@ whole queue — sortable, filterable, linking into each issue file — and it ca
 weight of "let me see everything and overrule the lane". Do NOT pass `--open` unless
 asked; a browser window stealing focus every session is noise.
 
-The report is the mechanical half. Yours: staleness judgment (step 6), the report blocks
-(step 7), the lane (step 8). Titles compress — **read the issue file body before acting
-on or recommending an item.**
+The report is the mechanical half, and its `PROJECTS` block is the project question's menu
+(step 8). Yours: staleness judgment (step 6), the report blocks (step 7), the lane (step 8).
+Titles compress — **read the issue file body before acting on or recommending an item.**
 
 Also sanity-check the tooling: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py
 --check`. A frontmatter problem, an orphaned claim, a `commit:` hash that is not an
@@ -365,11 +365,23 @@ It is the operator's escape hatch from every proposal below.
 mostly spent on sections nobody read. Step 8 puts it into the one mode the operator wants.
 (`incidents.md` → "The full table that oscillated".)
 
-### 8. Ask the mode, then propose 2–3
+### 8. Ask the mode and the project, then propose 2–3
 
-**The mode question.** Skip it when the trigger already names a mode (`GA housekeeping`,
-`startup ops`, `GA LANES-12`). Otherwise ask with the question tool, right after the
-`Sortable backlog` section, with these four options in this order (the tool adds "Other").
+**One dialog, two questions** (LANES-64). Right after the `Sortable backlog` section, ask
+with the question tool: the mode first, the project second, in ONE call. The tool takes
+several questions at once, so the project costs a choice, not a round trip. Ask only what
+the trigger has not already answered:
+
+- A mode word answers the mode (`GA housekeeping`, `startup ops`).
+- A project prefix answers the project, matched case-insensitively against
+  `backlog.projects` (`GA deep dive CORE`). Named alone, it answers the mode too: Deep Dive,
+  as an issue or epic ID does (`GA ui`, `GA LANES-12`).
+- Critical answers the project as well: it never asks one.
+
+When both are answered, ask nothing. When `backlog.projects` lists a single project, never
+ask the project.
+
+**The mode question.** These four options, in this order (the tool adds "Other").
 The line under each option is quoted from this table verbatim: the menu the operator sees
 and the rule the session follows are the same words, so they cannot drift.
 
@@ -393,10 +405,32 @@ code owner. **Solo mode** gets the same menu.
 "Other" takes free text: a project prefix, an epic ID, a theme. Treat it as Deep Dive
 scoped to what they named.
 
+**The project question.** Header `Project`, more than one answer allowed (a UI project with
+its UX twin, a process project with its infrastructure). These options, in this order:
+
+| Option | Line under it |
+| :-- | :-- |
+| **Any project** | Proposals from the whole backlog |
+| the first row of the report's `PROJECTS` block | `<N> open · <M> active in the last 3 days` |
+| its second row | the same |
+| its third row | the same |
+
+Step 5's `--report` ranks the projects mechanically: the ones with an issue opened, claimed
+or closed in the last three days first, then the most open, and a project with nothing open
+last. Take its first three rows with anything open; never re-rank them by judgment, or
+the menu drifts from one session to the next. Fewer such rows means fewer options. "Other"
+takes one or more prefixes, an epic ID, or a theme.
+
+**The project narrows the proposals, never the Brief.** It filters step 5b's eligible set
+before any proposal is drawn, in every mode but Critical, which ignores the project answer
+because urgent work cuts across projects. The `critical:` line is already rendered above
+the question, and no project answer removes an item from it. When the chosen projects have
+nothing for the chosen mode, say so in one line and propose from the whole backlog.
+
 **The proposals: 2–3, never one.** Each is a short table, so the operator chooses between
 them rather than taking or overruling one. Every proposal is drawn only from step 5b's
-eligible set — **no `in-progress` issue, nothing in the exclusion set, in any mode** — and
-every cited ID carries its IDENTICAL title. Sub-tasks within one issue are one row
+eligible set — **no `in-progress` issue, nothing in the exclusion set, in any mode** — and,
+outside Critical, only from the chosen projects. Every cited ID carries its IDENTICAL title. Sub-tasks within one issue are one row
 (`CORE-2 · 2 sub-tasks`). When a lane is in flight, say each proposal is the *next* work
 (*"after CORE-31 lands: …"*).
 

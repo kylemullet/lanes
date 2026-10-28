@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.57 — the startup sequence asks which project beside the mode (2026-10-27)
+
+- **The mode question had no room for a project** (LANES-64). An operator's sessions were
+  already one project each in practice, but the menu took a project only when it was typed into
+  "Other", so nobody saw the option. Kyle: *"a second question after the type of work where it
+  asks if we want to work on a specific project from the backlog"*.
+- **Step 8 asks the mode and the project in one dialog.** The question tool takes several
+  questions at once, so the project costs a choice, not a round trip. The project question offers
+  "Any project", then the top three rows of the report's new `PROJECTS` block, and allows more
+  than one answer; "Other" takes prefixes, an epic ID or a theme.
+- **Triggers answer either question.** A mode word answers the mode, a project prefix the project
+  (`GA deep dive CORE`), and a prefix alone means Deep Dive in that project (`GA ui`), as an issue
+  ID already did. Critical never asks the project, and ignores it when both are asked together.
+  A config with one project never asks it.
+- **The project narrows the proposals, never the Brief.** It filters the eligible set in every
+  mode but Critical, and the `critical:` line above the question is untouched by it.
+- **`backlog_index.py --report` ranks the projects** in a `PROJECTS` block between Due and the
+  backlog: those with an issue opened, claimed or closed in the last three days first, then the
+  most open, and a project with nothing open last. Each row gives its open count, how many of
+  those are high or critical, and its recent activity. The ranking is computed, so every session
+  offers the same three.
+- Tests pin the ranking, the activity window, the configured prefixes, the block's place in the
+  report and the skill's wording. Each fails with the change reverted.
+
 ## 0.4.56 — every issue carries an acceptance-criteria table: AC, test case, owner, test ID (2026-10-26)
 
 - **An issue had nowhere to say what done looks like** (LANES-60). A minted issue got Context,

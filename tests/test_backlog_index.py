@@ -1757,3 +1757,57 @@ def test_report_opens_with_a_due_block_for_every_operator(capsys):
     block = out[out.index("DUE —"):out.index("BACKLOG (mike)")]
     assert block.index("ADMIN-5") < block.index("BD-3") < block.index("BD-9") < block.index("BD-1") < block.index("BD-2")
     assert "2d OVERDUE" in block and "BD-4" not in block
+
+
+# --- the project question's ranking (LANES-64) ---------------------------------------------
+
+def _ranked():
+    """Recent work in INFRA and PIPE, more to pick in UI, a claimed project with nothing open."""
+    return [_issue("UI-1", opened=_today(-10)), _issue("UI-2", opened=_today(-10)),
+            _issue("UI-3", opened=_today(-10)),
+            _issue("PIPE-1", opened=_today(0)),
+            _issue("INFRA-1", status="closed", closed=_today(-1)),
+            _issue("INFRA-2", opened=_today(-30), priority="high"), _issue("INFRA-3", opened=_today(-30)),
+            _issue("PROD-1", type="epic", opened=_today(0)),
+            _issue("PROD-2", status="in-progress", opened=_today(-30), lane=f"PROD-2@{_today(0)}"),
+            _issue("BD-1", assignee="mike", opened=_today(0))]
+
+
+def test_projects_rank_recent_work_first_then_the_most_open_and_nothing_to_pick_last():
+    rows = bidx.project_activity(_ranked(), "kyle")
+    order = [r["project"] for r in rows]
+    # INFRA and PIPE were each touched once in the window; INFRA has more to pick. UI has the
+    # most open but no recent work. PROD was claimed today, but an epic and a claim are not
+    # open to pick, so it sorts with the empty projects, ahead of them by its activity.
+    assert order[:4] == ["INFRA", "PIPE", "UI", "PROD"]
+    by = {r["project"]: r for r in rows}
+    assert (by["INFRA"]["open"], by["INFRA"]["high"], by["INFRA"]["active"]) == (2, 1, 1)
+    assert (by["UI"]["open"], by["UI"]["active"]) == (3, 0)
+    assert (by["PROD"]["open"], by["PROD"]["active"]) == (0, 2)     # the claim's lane date counts
+    assert by["BD"]["open"] == 0 and by["BD"]["active"] == 0        # another operator's issue
+
+
+def test_projects_activity_window_is_the_last_three_days():
+    issues = [_issue("UI-1", opened=_today(-(bidx.ACTIVE_DAYS - 1))), _issue("PIPE-1", opened=_today(-bidx.ACTIVE_DAYS))]
+    by = {r["project"]: r for r in bidx.project_activity(issues, "kyle")}
+    assert by["UI"]["active"] == 1 and by["PIPE"]["active"] == 0
+
+
+def test_projects_are_the_configured_prefixes_and_both_counts_every_operator(monkeypatch):
+    monkeypatch.setattr(bidx, "PROJECTS", ["APP", "WEB"])
+    issues = [_issue("WEB-1", opened=_today(0)), _issue("APP-1", assignee="mike", opened=_today(0))]
+    assert [r["project"] for r in bidx.project_activity(issues, "kyle")] == ["WEB", "APP"]
+    both = {r["project"]: r["open"] for r in bidx.project_activity(issues, "both")}
+    assert both == {"APP": 1, "WEB": 1}
+
+
+def test_report_prints_the_projects_block_between_due_and_the_backlog(capsys):
+    issues = _ranked()
+    for i in issues:
+        i["_age"] = bidx._age(i.get("opened"))
+    bidx.render_report(issues, "kyle")
+    out = capsys.readouterr().out
+    assert "PROJECTS — most active first; the startup sequence's project question offers the top three" in out
+    block = out[out.index("PROJECTS —"):out.index("BACKLOG (kyle)")]
+    assert block.index("INFRA") < block.index("PIPE") < block.index("UI") < block.index("PROD")
+    assert "     INFRA    2 open ( 1 high)    1 active in the last 3 days" in block

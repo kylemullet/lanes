@@ -1497,6 +1497,41 @@ def overdue_count(dated):
     return sum(1 for i in dated if (d := _days_until(i["due"])) is not None and d < 0)
 
 
+# --- the project question (LANES-64) ----------------------------------------
+#
+# The startup sequence asks which project to work beside the mode, and the question tool
+# has room for three projects after "Any project". Which three is a ranking, so it is
+# computed here rather than judged per session: the projects this operator has been
+# working in lately (an issue opened, claimed or closed in the last ACTIVE_DAYS days)
+# come first, then the ones with the most to pick. A project with nothing open to pick
+# sorts last, since offering it would yield empty proposals.
+
+ACTIVE_DAYS = 3
+
+
+def _last_touched(it):
+    """The latest of an issue's opened, closed and lane (claim) dates, or None."""
+    dates = [it.get("opened"), it.get("closed"), str(it.get("lane") or "").rpartition("@")[2]]
+    days = [datetime.date.fromisoformat(d) for d in map(str, dates) if valid_date(d)]
+    return max(days, default=None)
+
+
+def project_activity(issues, who, today=None):
+    """One row per configured project, most active first: `open` (open, not an epic, so
+    pickable), `high` (of those, high or critical) and `active` (issues opened, claimed or
+    closed in the last ACTIVE_DAYS days), all scoped to `who`'s issues as the report is."""
+    today = today or datetime.date.today()
+    scoped = [i for i in issues if who == "both" or i.get("assignee") in (who, "shared")]
+    rows = []
+    for n, p in enumerate(PROJECTS):
+        mine = [i for i in scoped if i.get("project") == p]
+        pick = [i for i in mine if i.get("status") == "open" and i.get("type") != "epic"]
+        recent = [i for i in mine if (t := _last_touched(i)) and 0 <= (today - t).days < ACTIVE_DAYS]
+        rows.append({"project": p, "open": len(pick), "active": len(recent), "_order": n,
+                     "high": sum(1 for i in pick if i.get("priority") in ("critical", "high"))})
+    return sorted(rows, key=lambda r: (r["open"] == 0, -r["active"], -r["open"], r["_order"]))
+
+
 # --- the browsable HTML view (INFRA-14) ---------------------------------
 #
 # Same data as INDEX.md, same regeneration, but sortable and filterable, which
@@ -2230,6 +2265,13 @@ def render_report(issues, who):
             print(f"  {i['due']}  {due_label(_days_until(i['due'])):>12}  {i['id']:>10}  "
                   f"{i.get('status') or '?':<11} {i.get('priority') or '?':<8} {i['_title'][:70]}")
         print()
+    projects = project_activity(issues, who)
+    print(f"{'='*100}\nPROJECTS — most active first; the startup sequence's project question offers the "
+          f"top three\n{'='*100}")
+    for r in projects:
+        print(f"  {r['project']:>10}  {r['open']:>3} open ({r['high']:>2} high)  "
+              f"{r['active']:>3} active in the last {ACTIVE_DAYS} days")
+    print()
     activity = epic_activity(issues)
     print(f"{'='*100}\nBACKLOG ({who}) — {len(mine)} live\n{'='*100}")
     for i in sorted((i for i in mine if i.get("status") != "in-progress"),
