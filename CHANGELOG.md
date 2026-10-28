@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.59 — a script renders the Brief: critical first, lanes on one line, a title on every ID (2026-10-28)
+
+- **The session wrote the Brief from prose at every startup** (LANES-67, the LANES-65 epic). It
+  drifted between sessions, put the `critical:` line last, cited bare IDs ("New issues today:
+  DOC-115, INFRA-139, …"), gave each in-flight lane a line or more, and reported a reference
+  branch that will never land at every startup.
+- **`lanes_brief.py` renders it**, in one fixed order, leaving out a line with nothing to say:
+  `critical:` (always), the `CUE` and unmarked status lines, `due:` (overdue or within seven
+  days), `lanes:` (every lane in flight on one line), the session's notes, `branches:`,
+  `landed:` (issues cited by commits since the pull), `health:`, and the backlog stat (always).
+  It folds the status lines on stdin through `status_lines.py`, cuts every cited title to its
+  first clause, and prints the same text for the same state.
+- **The session's judgment goes in as arguments, and only there**: `--critical` for what is
+  urgent and no check reports (a stale claim, a landing to OK), `--note` for what the lanes need
+  (two lanes expecting one file, a branch's disposition, a staleness mark). The critical line no
+  longer takes the priority field: an issue is not urgent by having the top priority.
+- **`git.permanent_branches`** (fnmatch patterns, default `[]`) names branches meant never to
+  land, which the Brief never lists as unlanded.
+- Step 7 of `session-startup` runs the script and shows its output as printed; step 2 names the
+  new key. Tests pin the order, the critical line's sources, titles, the lane line, the
+  determinism, the branch filter, the landed range, the CLI and the config key; each fails
+  without the change.
+
 ## 0.4.58 — every startup check reports OK, CUE or CRITICAL, and the OK ones fold into one health line (2026-10-27)
 
 - **Most of the Brief said nothing changed** (LANES-66, the first piece of the LANES-65 epic). On

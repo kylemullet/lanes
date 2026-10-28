@@ -43,6 +43,8 @@ main_direct_paths = ["docs/", ".claude/lanes/", "*.md"]   # may reach main_branc
                                               # Default: backlog.dir alone. [] = every main-branch push waits for the OK
 # commit_guard = true                         # git pre-commit shim: refuses non-main-direct commits on main_branch
                                               # and any commit in the main clone off it. startup installs it.
+# permanent_branches = []                     # never reported as unlanded in the Brief: fnmatch patterns for
+                                              # branches meant never to land ("reference-impl", "bot/*")
 
 [tests]
 command = "pytest -q"

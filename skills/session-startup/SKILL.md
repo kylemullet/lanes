@@ -101,9 +101,11 @@ git fetch --prune && git branch -r --no-merged origin/<main_branch>
 ```
 
 Under the branch policy, code waits on a branch until a certifying machine clears it, so
-a branch pushed last session is live work, not litter. Surface any this operator owns,
-with what each is waiting on. A branch older than a couple of sessions is a staleness
-candidate for step 6.
+a branch pushed last session is live work, not litter. The Brief's `branches:` line lists
+every one no claim names (step 7); what each is waiting on is a `--note`. A branch older
+than a couple of sessions is a staleness candidate for step 6. A branch that is meant never
+to land (a reference implementation, a project's own bot branches) goes in
+`git.permanent_branches` once (fnmatch patterns, LANES-67), and is never reported again.
 
 **Before reporting what a branch is waiting on, grep the backlog for it:**
 
@@ -311,7 +313,8 @@ file sequences it (*"queued behind"*). A bare `links:` entry is not a conflict b
 The proposals (step 8) are drawn from what is left, and nothing else, whatever the mode.
 The Brief's `critical:` line may name an in-flight lane **only** when it needs a decision
 from the operator right now (a verified branch awaiting the landing OK, a stale claim to
-release) — mark it `🔒 in flight` so it cannot be mistaken for a pick. **The operator's own
+release) — pass it as a `--critical` item marked `🔒 in flight` (step 7) so it cannot be
+mistaken for a pick. **The operator's own
 lanes are not an exception** — a claim does not care whose it is. (`incidents.md` → "Our
 own claims in block V".)
 
@@ -332,12 +335,11 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add
 ### 7. Render the Brief and the view link
 
 Two sections, every time, each under a plain header — `Brief`, then `Sortable backlog` —
-with no numerals, and then the mode question (step 8). Keep item text to a short noun
-phrase.
+with no numerals, and then the mode question (step 8).
 
-**The status lines go through the fold** (LANES-66). Every check that reports into the
-Brief, the protocol's own and every `preflight.md` step, gives its result as one or more
-status lines in one spelling:
+**The status lines** (LANES-66). Every check that reports into the Brief, the protocol's
+own and every `preflight.md` step, gives its result as one or more status lines in one
+spelling:
 
 ```
 <LEVEL> <name>: <detail>          LEVEL is OK, CUE or CRITICAL; the name has no colon
@@ -345,19 +347,7 @@ status lines in one spelling:
 
 `OK` means nothing to read. `CUE` is worth a glance and is never a finding. `CRITICAL` also
 goes on the `critical:` line, whatever mode the operator picks. A line in any other spelling
-is shown in full, so an unmarked check is never folded out of sight. Pass every status line,
-verbatim, through the fold:
-
-```bash
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" status_lines.py <<'EOF'
-<every status line, one per line>
-EOF
-```
-
-It prints the `CRITICAL` lines, then the `CUE` lines, then any unmarked line, each as
-written, and last one `health:` line naming every `OK` check (`health: all clear — pull ·
-doctor · …` when nothing else printed). Those lines are the Brief's status bullets, as
-printed; an `OK` check never gets a bullet of its own.
+is shown in full, so an unmarked check is never folded out of sight.
 
 The protocol's own checks print in their own words, so write their status lines from this
 table. A result outside the `OK` column is a `CUE`, unless the `CRITICAL` column names it:
@@ -374,24 +364,42 @@ table. A result outside the `OK` column is a `CUE`, unless the `CRITICAL` column
 A `preflight.md` step prints its own lines in this spelling; the contract is in the template
 `/lanes:init` writes.
 
-**Brief.** Bullets, one line each: the fold's lines; what landed since last session;
-anything needing a decision right now; unlanded branches from step 2; **the in-flight lanes from
-step 5b — one line per LANE, as `--report`'s IN PROGRESS block groups them: the lane's name
-(`LANES-20/21/9`), each issue's ACTIVE/PENDING/RESERVED state, lane state, what it is
-waiting on**; **the due line, from the report's `DUE` block: every issue overdue or due
-within seven days, as `due: <ID> <date> (<countdown>), …`** (omit the line when there is
-none); the backlog stat (`N open · X critical · oldest Nd`); and, **always, the
-critical line**:
+**Brief.** A script renders it (LANES-67); never write the Brief by hand. Pass every status
+line, verbatim, on stdin, and your judgment as arguments:
 
-```
-critical: N — <ID> <noun phrase>, <ID> <noun phrase>, …        (or `critical: none`)
+```bash
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_brief.py [--critical "<item>" …] [--note "<line>" …] <<'EOF'
+<every status line, one per line>
+EOF
 ```
 
-Timely and urgent only: a red canary row, something blocking someone (the other operator
-above all), something needing a decision now, something actively costing. Not a priority
-dump. **It is in the Brief so that no mode answer can hide it**: the operator who asks for
-Housekeeping still sees the red row. Step 6's `⚠️` staleness marks ride on whatever line
-cites the issue.
+It folds the status lines through `status_lines.py` (every `OK` check becomes one name on
+the `health:` line) and prints the Brief in one fixed order, leaving out any line with
+nothing to say:
+
+| Line | What it carries |
+| :-- | :-- |
+| `critical: N — <item> · <item>` | **always** (`critical: none` when empty): every `CRITICAL` status line, then each `--critical` |
+| the `CUE` lines, then any unmarked line | the fold, as written |
+| `due: <ID> <title> <MM-DD> (<countdown>) · …` | every issue overdue or due within seven days |
+| `lanes: N — <name> <title> · …` | every lane in flight (step 5b), one line |
+| `⚠️ <note>` | each `--note` |
+| `branches: …` | unlanded branches no claim names, minus `git.permanent_branches` (step 2) |
+| `landed: <ID> <title> · …` | issues cited by commits since the pull (`--since`, default `ORIG_HEAD`) |
+| `health: …` | the fold |
+| `<N> live · <X> <top priority> · oldest <N>d` | **always**: the backlog stat |
+
+Show its output under the `Brief` header exactly as printed, in a code block, and add
+nothing to it. Every ID it cites carries its title.
+
+**Your judgment goes in as arguments, and only there.** `--critical` is for what is timely
+and urgent and no check reports: something blocking someone (the other operator above all),
+something needing a decision now (a verified branch awaiting the landing OK, a stale claim
+to release — mark an in-flight lane `🔒`), something actively costing. Not a priority dump:
+an issue is not urgent by having the top priority. **The critical line is in the Brief so
+that no mode answer can hide it**: the operator who asks for Housekeeping still sees the red
+row. `--note` carries a line the lanes need: two lanes expecting one file (step 5b), what a
+lane is waiting on, a branch's disposition from step 2, step 6's `⚠️` staleness marks.
 
 **Sortable backlog.** The view's link alone on its own line, immediately after the
 Brief — the `file://` path the generator printed (the main clone's, never a worktree's), or

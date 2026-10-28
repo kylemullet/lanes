@@ -245,3 +245,12 @@ def test_required_lines_scope_must_name_known_projects_and_types_and_not_be_empt
     assert any("is empty — omit it" in m for m in _errors(_lines({"label": "Toggle", "projects": [], "since": "2026-10-20"})))
     assert any("unknown key `backlog.required_lines[0].statuses`" in m
                for m in _warnings(_lines({"label": "Toggle", "since": "2026-10-20", "statuses": ["verified"]})))
+
+
+def test_permanent_branches_default_to_none_and_must_be_a_list_of_strings():
+    """LANES-67: branches the Brief never reports as unlanded, as fnmatch patterns."""
+    assert lc.resolve({})["permanent_branches"] == []
+    assert lc.resolve({"git": {"permanent_branches": ["ref-impl", "canary/*"]}})["permanent_branches"] == \
+        ["ref-impl", "canary/*"]
+    assert any("list of strings" in m for m in _errors({"git": {"permanent_branches": ["ok", 3]}}))
+    assert not any("permanent_branches" in m for m in _warnings({"git": {"permanent_branches": []}}))

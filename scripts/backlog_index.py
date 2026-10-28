@@ -125,6 +125,7 @@ def settings(root=None, raw=None):
         "VIEW_PORT": cfg["view_port"],
         "MAIN_BRANCH": cfg["main_branch"],
         "OK_FREE_PATHS": tuple(cfg["ok_free_paths"]),
+        "PERMANENT_BRANCHES": tuple(cfg["permanent_branches"]),
         "MACHINE": machine,
         "SOLO": cfg["solo"],
         "CERTIFIER_LABEL": certifier_label,

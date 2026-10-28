@@ -64,6 +64,7 @@ DEFAULTS: dict[str, Any] = {
         "main_direct_paths": ["docs/", ".claude/lanes/", "*.md"],
         "ok_free_paths": None,               # None -> [backlog.dir + "/"] (LANES-5)
         "commit_guard": True,                # the pre-commit shim (LANES-1)
+        "permanent_branches": [],            # never reported as unlanded (LANES-67); fnmatch patterns
     },
     "tests": {
         "command": "pytest -q",
@@ -90,7 +91,7 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "view_port": (int, False), "view_mode": (str, False),
     },
     "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False),
-            "ok_free_paths": (list, False), "commit_guard": (bool, False)},
+            "ok_free_paths": (list, False), "commit_guard": (bool, False), "permanent_branches": (list, False)},
     "tests": {"command": (str, False), "required_before_land": (bool, False), "rebase_rerun_command": (str, False)},
     "worktrees": {"port_command": (str, False)},
     "lanes": {"code": (list, False), "code_owner": (str, False)},
@@ -500,6 +501,7 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
         "land_requires_ok": merged["git"]["land_requires_ok"],
         "main_direct_paths": list(merged["git"]["main_direct_paths"]),
         "ok_free_paths": list(ok_free),
+        "permanent_branches": list(merged["git"]["permanent_branches"]),
         "test_command": merged["tests"]["command"],
         "tests_required_before_land": merged["tests"]["required_before_land"],
         "rebase_rerun_command": merged["tests"]["rebase_rerun_command"],

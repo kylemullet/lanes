@@ -130,7 +130,7 @@ stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualen
 
 | Skill | When | What it does |
 | :-- | :-- | :-- |
-| `session-startup` (the startup sequence) | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief (always with a `critical:` line), ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator — and the project, in one dialog (or read either from the trigger: `GA housekeeping`, `GA ui`), and offer 2–3 proposals for them; **stop** |
+| `session-startup` (the startup sequence) | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief with `lanes_brief.py` (`critical:` first, always), ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator — and the project, in one dialog (or read either from the trigger: `GA housekeeping`, `GA ui`), and offer 2–3 proposals for them; **stop** |
 | `worktree-increment` | "do CORE-7", "run the lane", "go" | claim the whole lane up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator with a written debrief (verdict, numbered verification steps, what is uncommitted — a message, before any harness end-of-turn box), close the doc loop, push the branch freely, land only with the OK, on the lane's own green (a rebase re-runs tests only after a hand-resolved logic conflict) |
 | `session-closeout` (the shutdown sequence) | "let's wrap", "shutdown", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
 
@@ -278,6 +278,7 @@ annotated reference; the short version:
 | `git.land_requires_ok` | `true` | the operator-OK gate is on landing, never on a branch push |
 | `git.main_direct_paths` | `["docs/", ".claude/lanes/", "*.md"]` | may reach the main branch with no branch and no suite run; the hook's carve-out |
 | `git.ok_free_paths` | `[<backlog.dir>/]` | may reach the main branch with no operator OK (`push_guard.py --ok-free`); deliberately narrower than `main_direct_paths` — `[]` makes every main-branch push wait for the OK |
+| `git.permanent_branches` | `[]` | branches the Brief never reports as unlanded, as fnmatch patterns: a reference implementation, a project's own bot branches (LANES-67) |
 | `tests.command` | `pytest -q` | |
 | `tests.required_before_land` | `true` | |
 | `tests.rebase_rerun_command` | — | prints the test args for the re-run after a rebase that needed a hand-resolved logic conflict (a clean rebase re-runs nothing); absent = full suite |
@@ -327,10 +328,16 @@ result as a status line:
 
 `OK` means nothing to read. `CUE` is worth a glance and is never a finding. `CRITICAL` also
 goes on the `critical:` line, whatever mode the operator picks. The startup sequence passes
-every status line, the protocol's own included, through `status_lines.py`, which prints the
-`CRITICAL` lines, then the `CUE` lines, then any line in another spelling, and last one
-`health:` line naming every `OK` check. A line in another spelling is shown in full, so an
-unmarked check is never folded out of sight.
+every status line, the protocol's own included, to `lanes_brief.py`, which folds them through
+`status_lines.py`: every `OK` check becomes one name on a `health:` line, and a line in
+another spelling is shown in full, so an unmarked check is never folded out of sight.
+
+**The Brief** (LANES-67) is rendered by `lanes_brief.py`, never written by hand, in one fixed
+order: `critical:` (always: the `CRITICAL` lines, then the session's `--critical` items), the
+`CUE` and unmarked lines, `due:` (overdue or within seven days), `lanes:` (every lane in
+flight, one line), the session's `--note` lines, `branches:` (unlanded branches no claim
+names, minus `git.permanent_branches`), `landed:` (issues cited since the pull), `health:`,
+and the backlog stat. Every ID carries its title, and the same state prints the same text.
 
 ## Layout
 
@@ -340,7 +347,7 @@ lanes/
 ├── hooks/hooks.json    the position guard (PreToolUse on the edit tools)
 ├── commands/           init.md, doctor.md, claim.md, new.md, split.md
 ├── skills/             session-startup, worktree-increment, session-closeout (+ references/incidents.md)
-├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, backlog_split.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, status_lines.py, _console.py
+├── scripts/            lanes_config.py (loader), lanes_init.py, lanes_doctor.py, backlog_index.py, backlog_new.py, backlog_split.py, lanes_claim.py, lanes_land.py, lanes_pull.py, push_guard.py, guard_position.py, guard_commit.py, view_hooks.py, release_tag.py, status_lines.py, lanes_brief.py, _console.py
 ├── templates/          config.toml + the three extension-point stubs + backlog-README.md
 ├── tests/              pytest, builds throwaway repos
 ├── CHANGELOG.md · LICENSE · README.md

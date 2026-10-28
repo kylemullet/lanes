@@ -144,9 +144,11 @@ def _startup():
 
 
 def test_startup_always_carries_the_critical_line():
-    """No mode answer may hide an urgent item: the Brief carries it whatever the mode."""
+    """No mode answer may hide an urgent item: the Brief carries it whatever the mode. Since
+    LANES-67 the script renders it, first, and the session's judgment goes in as arguments."""
     text = _startup()
-    assert "critical: N — <ID> <noun phrase>" in text and "critical: none" in text
+    assert "critical: N — <item> · <item>" in text and "critical: none" in text
+    assert "no mode answer can hide it" in text
 
 
 def test_startup_asks_the_mode_with_one_four_option_menu_and_no_fixed_blocks():
@@ -279,8 +281,22 @@ def test_the_status_line_contract_reads_the_same_in_the_skill_the_template_and_t
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert spelling in text and meaning in text, rel
     step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
-    assert 'scripts/lanes.sh" status_lines.py' in step7
+    assert 'scripts/lanes.sh" lanes_brief.py' in step7 and "status_lines.py" in step7   # the script folds (LANES-67)
     assert "an unmarked check is never folded out of sight" in step7
     for name in ("`pull`", "`doctor`", "`commit guard`", "`view hooks`", "`backfill`", "`backlog check`"):
         assert f"| {name} (step" in step7, name                     # the protocol's own checks are levelled
     assert "needs no Brief line" not in _startup()                   # superseded by the OK level
+
+
+def test_the_brief_is_rendered_by_the_script_and_the_session_adds_only_judgment():
+    """LANES-67: step 7 runs lanes_brief.py, shows its output as printed, and puts the
+    session's judgment in --critical and --note; the old hand-written bullet list is gone."""
+    step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
+    assert "never write the Brief by hand" in step7
+    assert "exactly as printed, in a code block, and add\nnothing to it" in step7
+    assert "**Your judgment goes in as arguments, and only there.**" in step7
+    rows = ["`critical: N — <item> · <item>`", "the `CUE` lines", "`due: <ID>", "`lanes: N —", "`⚠️ <note>`",
+            "`branches: …`", "`landed: <ID>", "`health: …`", "live · <X> <top priority>"]
+    assert [step7.index(r) for r in rows] == sorted(step7.index(r) for r in rows)   # the order is the rule
+    assert "Bullets, one line each" not in step7
+    assert "git.permanent_branches" in _startup().split("### 2x.", 1)[0]          # step 2 names the key
