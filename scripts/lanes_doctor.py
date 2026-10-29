@@ -6,6 +6,8 @@ read aloud. Exit 1 on any FAIL, or on any WARN with `--strict`.
 Checks, in order:
   position   where the session is (toplevel, branch, main clone or worktree) — informational
   config     `.claude/lanes/config.toml` present, parses, validates; mode summary
+  machine    this machine has an operator row (LANES-71); when it has none in a multi-operator
+             repo, the row to add or correct, or the one question to ask: whose machine it is
   tracked    the config is committed (a config only one machine can see protects nobody)
   version    every install that applies here (user scope + this repo's project scope) vs the
              `plugin_version` the repo expects, naming the copy this session runs (LANES-25)
@@ -148,6 +150,19 @@ def check_config(loaded: lc.Loaded) -> tuple[Check, dict]:
     if loaded.warnings:
         return Check(WARN, "config", detail + " — " + "; ".join(p.message for p in loaded.warnings)), cfg
     return Check(OK, "config", detail), cfg
+
+
+def check_machine(cfg: dict) -> Check:
+    """An unknown machine in a multi-operator repo has no permissions. The config line says
+    so in passing and was an OK, so nothing reached the Brief, and the session made up a
+    question: which existing machine's setup to copy (LANES-71). This says what settles it."""
+    m = cfg["machine"]
+    if cfg["solo"]:
+        return Check(OK, "machine", f"{m['id']} — solo mode, no row needed")
+    advice = lc.unknown_machine_advice(cfg)
+    if advice:
+        return Check(WARN, "machine", advice)
+    return Check(OK, "machine", f"{m['id']} ({m['short']})")
 
 
 def check_tracked(root: Path, loaded: lc.Loaded) -> Check:
@@ -573,6 +588,8 @@ def run(root: Path, now: Optional[datetime] = None) -> list:
     checks = [check_position(root)]
     cfg_check, cfg = check_config(loaded)
     checks.append(cfg_check)
+    if loaded.found and not loaded.parse_error and not loaded.errors:
+        checks.append(check_machine(cfg))
     checks.append(check_tracked(root, loaded))
     checks.append(check_version(cfg, root))
     checks.append(check_release_tag(cfg))

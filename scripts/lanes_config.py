@@ -535,6 +535,54 @@ def installed_version() -> Optional[str]:
         return None
 
 
+# The id suffix a suggested row gets, in the spelling machine ids already use (`kyle-mac`).
+PLATFORM_SUFFIX = {"darwin": "mac", "win32": "win", "linux": "linux"}
+
+
+def _toml_row(row: dict) -> str:
+    """One operators row on one line, its keys in the order a row is written."""
+    def val(v):
+        return ("true" if v else "false") if isinstance(v, bool) else f'"{v}"'
+    keys = ("name", "platform", "id", "short", "certifies", "may_edit_code")
+    return ", ".join(f"{k} = {val(row[k])}" for k in keys)
+
+
+def unknown_machine_advice(cfg: dict) -> Optional[str]:
+    """What settles an unknown machine in a multi-operator repo (LANES-71), or None when it
+    is known or the repo is in solo mode.
+
+    A row is a person's permissions, so the one open question is whose machine this is. An
+    active row with this git user name on another platform usually answers it: the row's
+    platform was a guess, or this is that person's second machine, so the advice names the
+    row to correct or the one to add, with that person's short and permissions. Otherwise
+    the advice is the question itself, over the active rows' shorts and "someone new". A
+    retired row is never offered (LANES-27), and neither is another person's permissions.
+    """
+    m = cfg["machine"]
+    if cfg["solo"] or m["known"]:
+        return None
+    name, platform = m["name"] or "", m["platform"]
+    suffix = PLATFORM_SUFFIX.get(platform, slug(platform))
+    head = f"`{name}` on {platform} has no operator row, so this machine has no permissions"
+    tail = "a config change for the certifying operator to make or OK"
+    kin = [r for r in active_operators(cfg["operators"]) if r.get("name") == name]
+    if kin:
+        short = kin[0]["short"]
+        row = {"name": name, "platform": platform, "id": f"{short}-{suffix}", "short": short,
+               "certifies": all(bool(r.get("certifies", False)) for r in kin),
+               "may_edit_code": all(bool(r.get("may_edit_code", True)) for r in kin)}
+        rows = ", ".join(f"{r['id']} ({r.get('platform')})" for r in kin)
+        fix = (f"if {kin[0]['id']}'s platform was a guess, change it to {platform}; if {short} works on both, "
+               if len(kin) == 1 else "")
+        return (f"{head}. `{name}` is {short}'s git user name, on {rows}: {fix}add a row: {_toml_row(row)}. "
+                f"It is {tail}.")
+    shorts = list(dict.fromkeys(r["short"] for r in active_operators(cfg["operators"]) if r.get("short")))
+    row = {"name": name, "platform": platform, "id": f"<short>-{suffix}", "short": "<short>",
+           "certifies": False, "may_edit_code": False}
+    return (f"{head}, and no active row has that git user name. Ask which operator this is ({' or '.join(shorts)}) "
+            f"or whether it is someone new, and nothing else; then add a row: {_toml_row(row)}. It is {tail}.")
+
+
 def describe_mode(cfg: dict) -> str:
     m = cfg["machine"]
     if cfg["solo"]:

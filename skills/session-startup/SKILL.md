@@ -31,8 +31,16 @@ The `config` line names the mode and THIS machine's operator row: id, `short`, w
 `certifies` (may land on the main branch and run the backfill) and whether it may edit
 code. Hold those four facts for the whole session. In solo mode the machine certifies
 and edits everything, and every two-operator step below is a no-op. In a multi-operator
-repo an unknown `(user.name, platform)` pair resolves to **no permissions**: ask, do not
-guess.
+repo an unknown `(user.name, platform)` pair resolves to **no permissions**, and the
+doctor's `machine` line says what settles it (LANES-71). Either it names the row to add,
+or the row to correct when this git user name already has a row on another platform, or it
+gives the one question to ask: which operator this is, from the active rows' shorts, or
+someone new. Ask that question and nothing else. 🚫 **Never ask which existing machine's
+setup to copy**: a row is a person's permissions, and a retired operator's row is never
+offered. The `machine` line goes on the Brief's `critical:` line (step 7). The session then
+continues read-only: the Brief, the view, and proposals from docs-lane issues. The row
+itself is a config change the certifying operator makes or OKs. (`incidents.md` → "The
+machine set up like someone else's".)
 
 Then make sure the commit guard is in place. It is idempotent and prints one line:
 
@@ -357,6 +365,7 @@ table. A result outside the `OK` column is a `CUE`, unless the `CRITICAL` column
 | :-- | :-- | :-- |
 | `pull` (step 2) | up to date, or a fast-forward | it refused |
 | `doctor` (step zero) | `0 warn, 0 fail` | any `fail` |
+| `machine` (step zero) | the doctor's `machine` line is `OK` | it is not: the machine has no operator row (the line's own words are the detail) |
 | `commit guard` (step zero) | `installed (unchanged)` | — |
 | `view hooks` (step zero) | `installed (unchanged)` or `off` | — |
 | `backfill` (step 2d) | nothing to close, or closed and pushed | it skips a verified issue |

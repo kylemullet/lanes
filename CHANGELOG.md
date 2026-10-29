@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.63 — an unknown machine gets the row to add, or one question: whose machine it is (2026-10-29)
+
+- **A new operator was asked whose machine setup to copy** (LANES-71). Kyle: the first startup
+  asked whether to set the machine up like one of two existing operators' machines, *"which makes
+  no sense … that would totally weird an incomprehensible to anyone else and was confusing for
+  him"*. Their row had guessed the other platform, so the machine resolved to no permissions. The
+  doctor said so only in passing, on an `OK` config line, so nothing reached the Brief. Step zero
+  said "ask, do not guess" and gave no question, so the session made one up. One of the two
+  machines it offered belonged to a retired operator.
+- **The doctor's new `machine` check** follows `config`. It is `OK` on a known machine and in solo
+  mode. On an unknown machine in a multi-operator repo it is a `WARN` that says what settles it:
+  - when an active row has this git user name on another platform, the row to correct (its
+    platform was a guess) or the row to add (the person's second machine), spelled out with that
+    person's short and permissions;
+  - otherwise, the one question to ask: which operator this is, from the active shorts, or someone
+    new, with the row to fill in.
+  It never offers a retired row (LANES-27) or another person's permissions.
+  `lanes_config.unknown_machine_advice()` holds the logic.
+- **The startup skill:** step zero follows the `machine` line, asks that question and nothing else,
+  and never asks which machine's setup to copy. Step 7's table makes the `machine` line `CRITICAL`.
+  The incident is "The machine set up like someone else's".
+
 ## 0.4.62 — the startup shows the Brief before it asks what to work on (2026-10-29)
 
 - **The operator never saw the Brief** (LANES-70). Kyle: *"its running the questionnaire before

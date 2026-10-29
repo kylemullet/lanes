@@ -254,3 +254,45 @@ def test_permanent_branches_default_to_none_and_must_be_a_list_of_strings():
         ["ref-impl", "canary/*"]
     assert any("list of strings" in m for m in _errors({"git": {"permanent_branches": ["ok", 3]}}))
     assert not any("permanent_branches" in m for m in _warnings({"git": {"permanent_branches": []}}))
+
+
+# --- an unknown machine (LANES-71) ---------------------------------------------------
+
+GUESSED = {"operators": [
+    {"name": "kylemullet", "platform": "darwin", "id": "kyle-mac", "short": "kyle", "certifies": True},
+    {"name": "kylemullet", "platform": "win32", "id": "kyle-win", "short": "kyle", "certifies": True},
+    {"name": "Leif Borden", "platform": "darwin", "id": "leif-mac", "short": "leif", "certifies": False,
+     "may_edit_code": False},
+    {"name": "Mike", "platform": "win32", "id": "mike-win", "short": "mike", "retired": True},
+]}
+
+
+def test_a_known_machine_or_solo_mode_needs_no_advice():
+    assert lc.unknown_machine_advice(lc.resolve(GUESSED, user_name="kylemullet", platform="win32")) is None
+    assert lc.unknown_machine_advice(lc.resolve({}, user_name="anyone", platform="linux")) is None
+
+
+def test_a_git_user_name_with_a_row_elsewhere_names_the_row_to_correct_or_add():
+    """The incident: the person's row guessed the other platform. Their git user name is the
+    answer to "whose machine is this", so the advice carries their short and permissions."""
+    advice = lc.unknown_machine_advice(lc.resolve(GUESSED, user_name="Leif Borden", platform="win32"))
+    assert advice.startswith("`Leif Borden` on win32 has no operator row, so this machine has no permissions.")
+    assert "if leif-mac's platform was a guess, change it to win32" in advice
+    assert ('name = "Leif Borden", platform = "win32", id = "leif-win", short = "leif", '
+            'certifies = false, may_edit_code = false') in advice
+    assert "kyle" not in advice and "mike" not in advice, "never another person's row or permissions"
+
+
+def test_a_certifying_persons_second_machine_is_offered_their_permissions():
+    two = {"operators": [GUESSED["operators"][0], GUESSED["operators"][2]]}
+    advice = lc.unknown_machine_advice(lc.resolve(two, user_name="kylemullet", platform="linux"))
+    assert 'id = "kyle-linux", short = "kyle", certifies = true, may_edit_code = true' in advice
+
+
+def test_an_unknown_name_asks_whose_machine_it_is_and_never_offers_a_retired_row():
+    for name in ("Pat", "Mike"):            # a stranger, and a retired operator's machine
+        advice = lc.unknown_machine_advice(lc.resolve(GUESSED, user_name=name, platform="win32"))
+        assert "no active row has that git user name" in advice
+        assert "Ask which operator this is (kyle or leif) or whether it is someone new, and nothing else" in advice
+        assert 'short = "<short>", certifies = false, may_edit_code = false' in advice
+        assert "mike" not in advice and "kyle-win" not in advice

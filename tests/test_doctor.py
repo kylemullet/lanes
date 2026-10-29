@@ -436,3 +436,26 @@ def test_the_doctor_runs_the_required_lines_check(repo):
     li.scaffold(repo, force=False, projects=["CORE"])
     c = by_label(ld.run(repo, now=NOW))["required lines"]
     assert c.status == ld.OK and c.detail.startswith("Docs: (built in)")
+
+
+def test_the_machine_check_is_ok_when_known_and_warns_with_the_advice_when_not():
+    """LANES-71: the config line said "no permissions" in passing, as an OK, so nothing
+    reached the Brief and the session made up a question."""
+    ops = {"operators": [
+        {"name": "kylemullet", "platform": "darwin", "id": "kyle-mac", "short": "kyle", "certifies": True},
+        {"name": "Leif Borden", "platform": "darwin", "id": "leif-mac", "short": "leif", "certifies": False,
+         "may_edit_code": False}]}
+    known = ld.check_machine(lc.resolve(ops, user_name="kylemullet", platform="darwin"))
+    assert (known.status, known.label, known.detail) == (ld.OK, "machine", "kyle-mac (kyle)")
+    solo = ld.check_machine(lc.resolve({}, user_name="Tester", platform="linux"))
+    assert solo.status == ld.OK and "solo mode" in solo.detail
+    cfg = lc.resolve(ops, user_name="Leif Borden", platform="win32")
+    unknown = ld.check_machine(cfg)
+    assert unknown.status == ld.WARN and unknown.detail == lc.unknown_machine_advice(cfg)
+
+
+def test_the_doctor_runs_the_machine_check_after_a_valid_config_only(repo):
+    assert "machine" not in by_label(ld.run(repo, now=NOW)), "no config: nothing to resolve the machine against"
+    li.scaffold(repo, force=False, projects=["CORE"])
+    labels = [c.label for c in ld.run(repo, now=NOW)]
+    assert labels.index("machine") == labels.index("config") + 1

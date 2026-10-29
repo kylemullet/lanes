@@ -3,6 +3,21 @@
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
 
+## The machine set up like someone else's (2026-10-28)
+
+A new, non-code operator ran a first startup on a laptop. Their row had guessed the other
+operating system. The machine resolved to no permissions, and the doctor said so only in
+passing, on an `OK` config line, so nothing reached the Brief. Step zero said "ask, do not
+guess" and gave no question. The session made one up: should this machine be set up like
+one of the two existing machines on that platform? One of those belonged to a retired
+operator. The operator later called the question incomprehensible: they could not answer
+it and did not know why it was asked. A row is a person's permissions, so the only question
+an unknown machine raises is whose it is. When a row already has the same git user name,
+that answers it: the platform was a guess, or this is the person's second machine. The
+doctor now has a `machine` check that names the row to add or correct, or asks that one
+question. The Brief carries it as `CRITICAL`, and the skill forbids offering another
+machine's setup.
+
 ## The Brief behind the question (2026-10-28)
 
 Until the Brief had a script, the session wrote it, so it was text in the reply before the

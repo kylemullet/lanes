@@ -324,3 +324,17 @@ def test_the_brief_is_text_in_the_reply_before_the_question():
     assert step7.index("**Show it:") < step7.index("**Sortable backlog.**")
     inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
     assert "## The Brief behind the question (2026-10-28)" in inc
+
+
+def test_an_unknown_machine_gets_the_doctors_advice_and_one_question_at_most():
+    """LANES-71: step zero said "ask, do not guess" and gave no question, so the session
+    asked a new operator which existing machine's setup to copy."""
+    zero = _startup().split("## Step zero", 1)[1].split("## Procedure", 1)[0]
+    assert "the\ndoctor's `machine` line says what settles it (LANES-71)" in zero
+    assert "Ask that question and nothing else" in zero
+    assert "🚫 **Never ask which existing machine's\nsetup to copy**" in zero
+    assert "ask, do not\nguess" not in zero
+    step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
+    assert "| `machine` (step zero) | the doctor's `machine` line is `OK` |" in step7
+    inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The machine set up like someone else's (2026-10-28)" in inc

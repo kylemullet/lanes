@@ -20,7 +20,8 @@ Diagnose the `lanes` setup for the repository the session is in.
    detail; it was written to be read.
 
 3. For each `FAIL` or `WARN`, say what fixes it when the script said so (it names
-   `/lanes:init` for a missing config or stub, the two versions on drift, and the
+   the operators row to add or correct, or the one question to ask, for a `machine` with no
+   row; `/lanes:init` for a missing config or stub, the two versions on drift, and the
    `release_tag.py --ensure --push` line for a pin with no release tag).
 
 4. **Stale-claim candidates are questions, never actions.** If the doctor lists an

@@ -100,7 +100,8 @@ naming the cause — a guard that cannot ask git never waves a write through (LA
   The guard is held back while a file it wrote is uncommitted and outside `git.main_direct_paths`
   (by default `settings.json`), since it would refuse that commit, so the sequence on a fresh repo is
   `/lanes:init`, the commit it prints, `/lanes:init` again, then `/lanes:doctor`, which reads 0 warn.
-- **`/lanes:doctor [--strict] [--json]`** — one line per check: config valid, config tracked,
+- **`/lanes:doctor [--strict] [--json]`** — one line per check: config valid, this machine has an
+  operator row (and, when it has none, the row to add or the one question to ask), config tracked,
   every install scope vs the expected version, stubs present, backlog integrity, every `in-progress` claim
   classified (live / setting up / reserved / **stale-claim candidate**), settings pin the plugin (committed AND
   unmodified in the working tree), this machine's registered marketplace source and installed commit
@@ -296,8 +297,12 @@ would break it silently.
 An empty `operators` list means *whoever is here certifies and edits everything*. Every
 two-operator rule in the protocol degrades to a no-op, never an error. Fill in `[[operators]]`
 only when a second person or machine works the repo; an unknown `(user.name, platform)` pair
-in a multi-operator repo resolves to *no permissions*, which the skills treat as "ask, don't
-guess".
+in a multi-operator repo resolves to *no permissions*. The doctor's `machine` check says what
+settles it (LANES-71): when a row already carries this git user name on another platform, the
+row to correct (a guessed platform) or to add (the person's second machine), with that person's
+short and permissions; otherwise the one question to ask, which operator this is, from the
+active shorts, or someone new. The startup's Brief carries it as `CRITICAL`. A retired row is
+never offered.
 
 When someone leaves, mark their row `retired = true` rather than deleting it. Removing it would fail
 `--check` on every closed issue that names them. A retired row grants nothing and never matches the
