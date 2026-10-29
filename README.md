@@ -343,7 +343,10 @@ per machine, shared by every worktree and session, never tracked), and the next 
 what changed (LANES-68): a `since <HH:MM>:` line with what landed, opened, closed and which
 lanes started or ended, an unchanged `CUE` folded into `health:`, a check whose level moved
 shown once, and `lanes:` reduced to `N in flight, unchanged`. `critical:`, `due:` and the
-session's notes are always in full; `--full` renders everything.
+session's notes are always in full; `--full` renders everything. Its stdout is the reply
+itself (LANES-70): `**Brief**`, the Brief in a code block, then `**Sortable backlog**` and the
+view's link, which the session pastes before it asks the mode question. A tool result never
+reaches the operator, and the session had been reading "ran the script" as "showed the Brief".
 
 ## Layout
 

@@ -293,7 +293,7 @@ def test_the_brief_is_rendered_by_the_script_and_the_session_adds_only_judgment(
     session's judgment in --critical and --note; the old hand-written bullet list is gone."""
     step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
     assert "never write the Brief by hand" in step7
-    assert "exactly as printed, in a code block, and add\nnothing to it" in step7
+    assert "Paste\nit into your reply as printed and add nothing to it" in step7
     assert "**Your judgment goes in as arguments, and only there.**" in step7
     rows = ["`critical: N — <item> · <item>`", "the `CUE` lines", "`due: <ID>", "`lanes: N —", "`⚠️ <note>`",
             "`branches: …`", "`landed: <ID>", "`health: …`", "live · <X> <top priority>"]
@@ -310,3 +310,17 @@ def test_after_the_first_brief_step_7_says_only_what_changed_is_shown():
     for phrase in ("inside the clone's git directory", "never tracked", "`since <HH:MM>: …`", "`nothing\nchanged`",
                    "`(was <LEVEL>)`", "`N in flight,\nunchanged`", "`--full` renders the\nwhole Brief"):
         assert phrase in step7, phrase
+
+
+def test_the_brief_is_text_in_the_reply_before_the_question():
+    """LANES-70: running the script showed the operator nothing; the session asked the mode
+    question with the Brief still in a collapsed tool result."""
+    step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
+    step8 = _startup().split("### 8. Ask the mode", 1)[1].split("### 8a.", 1)[0]
+    assert "Both are **text in your reply**" in step7
+    assert "**Show it: running the script shows the operator nothing** (LANES-70)" in step7
+    assert "before the question call" in step7 and "addressed to you, not to the\noperator" in step7
+    assert "never in place of it" in step8 and "choose blind" in step8
+    assert step7.index("**Show it:") < step7.index("**Sortable backlog.**")
+    inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The Brief behind the question (2026-10-28)" in inc

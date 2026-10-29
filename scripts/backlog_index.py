@@ -123,6 +123,7 @@ def settings(root=None, raw=None):
         "REQUIRED_LINES": tuple(cfg["required_lines"]),
         "CLAIM_MARKER_EXEMPT": set(cfg["claim_marker_exempt"]),
         "VIEW_PORT": cfg["view_port"],
+        "VIEW_MODE": cfg["view_mode"],
         "MAIN_BRANCH": cfg["main_branch"],
         "OK_FREE_PATHS": tuple(cfg["ok_free_paths"]),
         "PERMANENT_BRANCHES": tuple(cfg["permanent_branches"]),

@@ -335,7 +335,8 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add
 ### 7. Render the Brief and the view link
 
 Two sections, every time, each under a plain header — `Brief`, then `Sortable backlog` —
-with no numerals, and then the mode question (step 8).
+with no numerals, and then the mode question (step 8). Both are **text in your reply**: the
+operator reads nothing else this step produces.
 
 **The status lines** (LANES-66). Every check that reports into the Brief, the protocol's
 own and every `preflight.md` step, gives its result as one or more status lines in one
@@ -389,8 +390,15 @@ nothing to say:
 | `health: …` | the fold |
 | `<N> live · <X> <top priority> · oldest <N>d` | **always**: the backlog stat |
 
-Show its output under the `Brief` header exactly as printed, in a code block, and add
-nothing to it. Every ID it cites carries its title.
+Every ID it cites carries its title.
+
+**Show it: running the script shows the operator nothing** (LANES-70). Its output is a tool
+result, and the operator never sees a tool result: the harness folds it into a collapsed
+line. The script's stdout is already the reply's first two sections, exactly as they go in:
+`**Brief**`, the Brief in a code block, `**Sortable backlog**` and the view's link. Paste
+it into your reply as printed and add nothing to it, in the same message as step 8's
+question and before the question call. Its one stderr line is addressed to you, not to the
+operator. (`incidents.md` → "The Brief behind the question".)
 
 **After the first Brief, only what changed** (LANES-68). Each run saves what it reported
 inside the clone's git directory: per machine, shared by every worktree and session of the
@@ -414,8 +422,9 @@ row. `--note` carries a line the lanes need: two lanes expecting one file (step 
 lane is waiting on, a branch's disposition from step 2, step 6's `⚠️` staleness marks.
 
 **Sortable backlog.** The view's link alone on its own line, immediately after the
-Brief — the `file://` path the generator printed (the main clone's, never a worktree's), or
-`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. Nothing else in the section.
+Brief — the `file://` path to the main clone's view (never a worktree's), or
+`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. The script prints it as the
+last line of its output. Nothing else in the section.
 It is the operator's escape hatch from every proposal below.
 
 **There is no full-backlog table**, and no fixed Critical / Quick-wins / Lane sections
@@ -426,7 +435,9 @@ mostly spent on sections nobody read. Step 8 puts it into the one mode the opera
 ### 8. Ask the mode and the project, then propose 2–3
 
 **One dialog, two questions** (LANES-64). Right after the `Sortable backlog` section, ask
-with the question tool: the mode first, the project second, in ONE call. The tool takes
+with the question tool: the mode first, the project second, in ONE call. The question
+follows the pasted Brief in the same message, never in place of it: a question asked before
+the operator has read the Brief asks them to choose blind (LANES-70). The tool takes
 several questions at once, so the project costs a choice, not a round trip. Ask only what
 the trigger has not already answered:
 

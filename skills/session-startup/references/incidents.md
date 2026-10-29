@@ -3,6 +3,22 @@
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
 
+## The Brief behind the question (2026-10-28)
+
+Until the Brief had a script, the session wrote it, so it was text in the reply before the
+mode question. On the day the script landed, the session began running the script and then
+asking the question in its next message without showing the Brief. Every startup after
+that was the same: three of three, against seven of seven before. The script's output was a
+tool result. The harness folded it into a "ran N commands" line and showed its own
+one-sentence summary of the turn in its place, so the operator answered the mode and the
+project with no Brief and no view link in front of them. The operator's words: the Brief
+"isn't particularly useful if you get it after you're asked what you want to work on". It
+also broke the diff Brief: the second startup reported `lanes: 2 in flight, unchanged`
+against a Brief nobody had read, so the operator never saw either lane. The script now
+prints the reply's two sections ready to paste, and a line on stderr tells the session the
+operator has not seen them. Step 7 states the rule in its own heading, because "show its
+output" had been read as satisfied by running the script.
+
 ## The clone the mirror had already updated (2026-10-10)
 
 A directory in the repository is both git-tracked and mirrored by a file-sync client, so

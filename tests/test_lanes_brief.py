@@ -160,14 +160,47 @@ def test_landed_ids_are_the_issues_cited_since_the_ref_oldest_first_minus_backlo
     assert lb.landed_ids("HEAD") == [] and lb.landed_ids("no-such-ref") == [] and lb.landed_ids(None) == []
 
 
+def _brief(out: str) -> list[str]:
+    """The Brief's own lines: what the reply block carries between its code fences."""
+    lines = out.splitlines()
+    return lines[lines.index("```") + 1:len(lines) - lines[::-1].index("```") - 1]
+
+
 def test_the_cli_reads_the_status_lines_on_stdin_and_takes_judgment_as_arguments(monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", io.StringIO("CRITICAL nightly: RED at c634eb8\nOK pull: up to date\n"))
     assert lb.main(["--critical", "a stale claim on UI-1 to release", "--since", "no-such-ref"]) == 0
-    assert capsys.readouterr().out.splitlines() == [
+    assert _brief(capsys.readouterr().out) == [
         "critical: 2 — nightly: RED at c634eb8 · a stale claim on UI-1 to release",
         "health: 1 ok — pull",
         "0 live · 0 critical",
     ]
+
+
+# --- the reply (LANES-70) --------------------------------------------------------------------
+
+def test_stdout_is_the_reply_ready_to_paste_and_stderr_tells_the_session_it_is_unseen(monkeypatch, capsys):
+    """LANES-70: the session ran the script and asked the mode question with the Brief still in a
+    collapsed tool result. stdout is now both sections exactly as they go in the reply."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO("OK pull: up to date\n"))
+    assert lb.main(["--since", "no-such-ref"]) == 0
+    out, err = capsys.readouterr()
+    assert out.splitlines() == ["**Brief**", "", "```", "critical: none", "health: all clear — pull", "0 live · 0 critical",
+                                "```", "", "**Sortable backlog**", "", lb.view_link()]
+    assert err.strip() == lb.SHOW_IT
+    assert "has not seen this" in err and "before you ask the mode question" in err
+
+
+def test_the_link_is_the_main_clones_view_from_any_worktree_or_the_served_url(tmp_path, monkeypatch):
+    clone = _origin_and_clone(tmp_path)
+    worktree = tmp_path / "wt"
+    git("worktree", "add", "-q", str(worktree), "-b", "topic", cwd=clone)
+    monkeypatch.setattr(bidx, "ROOT", worktree)
+    monkeypatch.setattr(bidx, "VIEW_MODE", "file")
+    link = lb.view_link()
+    assert link.startswith("file://") and link.endswith("/clone/docs/backlog/index.html"), link
+    monkeypatch.setattr(bidx, "VIEW_MODE", "serve")
+    monkeypatch.setattr(bidx, "VIEW_PORT", 8123)
+    assert lb.view_link() == "http://127.0.0.1:8123/"
 
 
 # --- since the last Brief (LANES-68) ---------------------------------------------------------
@@ -241,7 +274,7 @@ def test_the_saved_brief_lives_in_the_clone_git_dir_shared_by_worktrees_and_neve
     git("commit", "-q", "--allow-empty", "-m", "feat(ui): UI-7 — a landing", cwd=clone)
     monkeypatch.setattr(sys, "stdin", io.StringIO("OK pull: up to date\nCUE patent triage: 3\n"))
     lb.main([])
-    out = capsys.readouterr().out.splitlines()
+    out = _brief(capsys.readouterr().out)
     assert out[1].startswith("since ") and out[1].endswith(": landed UI-7"), "--since defaults to the saved tip"
     worktree = tmp_path / "wt"
     git("worktree", "add", "-q", str(worktree), "-b", "topic", cwd=clone)

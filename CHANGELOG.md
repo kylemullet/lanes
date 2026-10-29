@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.62 — the startup shows the Brief before it asks what to work on (2026-10-29)
+
+- **The operator never saw the Brief** (LANES-70). Kyle: *"its running the questionnaire before
+  the brief. The brief isn't particularly useful if you get it after youre asked what you want
+  to work on."* Since 0.4.59 a script renders the Brief, and its output is a tool result the
+  harness folds out of sight. The session ran it, took that as having shown the Brief, and
+  asked the mode and project questions with neither the Brief nor the view link in front of the
+  operator. That happened in all three startups since 0.4.59; all seven before it showed the Brief.
+  It also undermined 0.4.60's diff Brief, which compared each startup against a Brief nobody had read.
+- **`lanes_brief.py` prints the reply itself:** `**Brief**`, the Brief in a code block, then
+  `**Sortable backlog**` and the view's link (the main clone's `file://` view, or the served
+  URL), ready to paste. One stderr line tells the session the operator has not seen it.
+- **The startup skill says so in step 7's own heading**, "running the script shows the operator
+  nothing", and step 8 asks the question after the pasted Brief in the same message, never in
+  its place. The incident is "The Brief behind the question".
+
 ## 0.4.61 — the mark is mirrored, tall lane on the left, so it reads as an L (2026-10-28)
 
 - **The mark is flipped left to right** (LANES-69). Kyle: *"it looks more like an L this way"*.

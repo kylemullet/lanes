@@ -42,6 +42,13 @@ and never tracked. The next run reads it and says only what changed:
 `--full` renders the whole Brief whatever was saved. A run with no saved Brief renders the whole
 Brief too, and `--since` then defaults to ORIG_HEAD, which the startup pull sets.
 
+The reply (LANES-70). stdout is the operator's two sections exactly as they go in the session's
+reply: `**Brief**`, the lines above in a code block, then `**Sortable backlog**` and the view's
+link (the main clone's file:// path, or the served URL). stderr carries one line to the session:
+none of this reaches the operator until it is pasted. A session that ran the script read it as
+having shown the Brief, and asked the mode question with the Brief still in a collapsed tool
+result: every startup after LANES-67, until this.
+
 Why. The session wrote the Brief from prose at every startup: it drifted between sessions, put
 the one line that must be read last, cited bare IDs, and spent most of its lines saying nothing
 had changed (7 of 14 on one project's Brief). With four or five sessions open at once, every
@@ -65,6 +72,8 @@ TITLE_WIDTH = 48
 SINCE_ITEMS = 5          # per kind on the `since` line, then "+N more"
 SEP = " · "
 STATE_REL = Path("lanes") / "last-brief.json"    # under `git rev-parse --git-common-dir`
+SHOW_IT = ("lanes: the operator has not seen this. Put everything above in your reply, as printed, "
+           "before you ask the mode question: a tool result never reaches the operator (LANES-70).")
 
 
 def short_title(title: str) -> str:
@@ -115,6 +124,21 @@ def landed_ids(since: str | None) -> list[str]:
             if iid not in out:
                 out.append(iid)
     return out
+
+
+# --- the reply (LANES-70) -------------------------------------------------------------------
+
+def view_link() -> str:
+    """The `Sortable backlog` link: the served URL, or the main clone's file:// view, which
+    is the one to bookmark whichever checkout runs this (LANES-11)."""
+    if bidx.VIEW_MODE == "serve":
+        return f"http://127.0.0.1:{bidx.VIEW_PORT}/"
+    return (Path(bidx.main_clone()) / bidx.BACKLOG_REL / "index.html").as_uri()
+
+
+def reply(brief: list[str], link: str) -> list[str]:
+    """The two headed sections, ready to paste: the Brief in a code block, then the link."""
+    return ["**Brief**", "", "```", *brief, "```", "", "**Sortable backlog**", "", link]
 
 
 # --- the saved Brief (LANES-68) -------------------------------------------------------------
@@ -319,9 +343,12 @@ def main(argv=None) -> int:
         since = tip if reachable else "ORIG_HEAD"
     branches = unlanded_branches(issues)
     now = datetime.datetime.now()
-    for line in render(issues, status, who=who, critical=args.critical, notes=args.note,
-                       branches=branches, landed=landed_ids(since), last=last, now=now):
+    brief = render(issues, status, who=who, critical=args.critical, notes=args.note,
+                   branches=branches, landed=landed_ids(since), last=last, now=now)
+    for line in reply(brief, view_link()):
         print(line)
+    sys.stdout.flush()
+    print(SHOW_IT, file=sys.stderr)
     if not args.no_save:
         save_state(path, snapshot(issues, status, branches=branches, tip=_git("rev-parse", "HEAD"), now=now))
     return 0
