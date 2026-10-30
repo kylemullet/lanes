@@ -147,7 +147,7 @@ def test_startup_always_carries_the_critical_line():
     """No mode answer may hide an urgent item: the Brief carries it whatever the mode. Since
     LANES-67 the script renders it, first, and the session's judgment goes in as arguments."""
     text = _startup()
-    assert "critical: N — <item> · <item>" in text and "critical: none" in text
+    assert "`🔴 **Critical (N)** — <item>`" in text and "`🟢 **Critical** — none`" in text   # LANES-73's spelling
     assert "no mode answer can hide it" in text
 
 
@@ -295,11 +295,28 @@ def test_the_brief_is_rendered_by_the_script_and_the_session_adds_only_judgment(
     assert "never write the Brief by hand" in step7
     assert "Paste\nit into your reply as printed and add nothing to it" in step7
     assert "**Your judgment goes in as arguments, and only there.**" in step7
-    rows = ["`critical: N — <item> · <item>`", "the `CUE` lines", "`due: <ID>", "`lanes: N —", "`⚠️ <note>`",
-            "`branches: …`", "`landed: <ID>", "`health: …`", "live · <X> <top priority>"]
+    rows = ["`🔴 **Critical (N)** — <item>`", "`🟡 **<name>** — <detail>`", "`🕘 **Since HH:MM**`", "`📅 **Due this week** —",
+            "`🔒 **Lanes (N)** —", "`⚠️ <note>`", "`🌿 **Branches** —", "`📦 **Landed** —", "`✅ **Health** — N ok`",
+            "live · <X> <top priority>"]
     assert [step7.index(r) for r in rows] == sorted(step7.index(r) for r in rows)   # the order is the rule
     assert "Bullets, one line each" not in step7
     assert "git.permanent_branches" in _startup().split("### 2x.", 1)[0]          # step 2 names the key
+
+
+def test_the_brief_is_markdown_bullets_and_the_judgment_is_one_clause_each():
+    """LANES-73: the first pasted Brief was a code block the chat pane wrapped into a wall of
+    monospace; the reply is Markdown bullets, and the session's arguments stay short."""
+    step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
+    assert "**Markdown, never a code block** (LANES-73)" in step7
+    assert "**Markdown bullets, one item each**" in step7
+    assert "**`--critical` and `--note` are one\nclause each**" in step7
+    assert "never the OK checks' names" in step7 and "cut at a word boundary" in step7
+    assert "code block" not in step7.split("**Markdown, never a code block**", 1)[0]   # the old container is gone
+    assert "in a code block" not in step7.split("**Show it:", 1)[1]
+    inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The Brief that wrapped (2026-10-29)" in inc
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Markdown\nbullets" in readme and "the Brief in a code block" not in readme
 
 
 def test_after_the_first_brief_step_7_says_only_what_changed_is_shown():

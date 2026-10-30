@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.64 — the Brief is Markdown bullets, never a code block (2026-10-29)
+
+- **The first pasted Brief was unreadable** (LANES-73). Kyle, on the first startup after
+  0.4.62 showed the Brief before the mode question: *"Can we fix the LANES brief it looks like
+  absolute dog shit."* The script wrapped the Brief in a code block, so the chat pane rendered
+  fourteen `·`-joined lines of 150–300 characters in a monospace face about ninety characters
+  wide: every line wrapped two or three times, the `due:` and `lanes:` lists ran into each other,
+  titles were cut mid-word (`lanes_brie…`), the `health:` line named all eleven checks it had
+  folded away, a note carried two ⚠️, and the session's `--critical` and `--note` arguments were
+  whole sentences. The incident is "The Brief that wrapped".
+- **`lanes_brief.py` prints Markdown.** A `**Brief** — <machine> · <time> · <main> at <tip>`
+  header line; then one bullet per item — `🔴 **Critical (N)**`, each `🟡 **<name>** — <detail>`
+  cue, `🕘 **Since HH:MM**` with a nested bullet per kind, `📅 **Due this week**`, `🔒 **Lanes
+  (N)**`, `⚠️ <note>`, `🌿 **Branches**`, `📦 **Landed**`, `✅ **Health** — N ok`; the stat under
+  them; then `**Sortable backlog** — <link>`. A bullet joins at most three items with ` · `; past
+  that they nest one per line. Titles are cut at a word boundary (`TITLE_WIDTH` 40), never on a
+  word that opens a bracket. `Health` is counts only — the OK names were folded away so there
+  was nothing to read, and listing them put it back. A note already starting with ⚠️ is not
+  marked twice. `render` still prints the plain one-line spelling the saved Brief and the tests
+  read; `assemble` builds both from one structure, so the delta logic (LANES-68) is unchanged.
+- **The startup skill:** step 7's table is the bullet spelling; `--critical` and `--note` are one
+  clause each, with the reason left to the issue file; "Markdown, never a code block" states the
+  rule in its own heading.
+
 ## 0.4.63 — an unknown machine gets the row to add, or one question: whose machine it is (2026-10-29)
 
 - **A new operator was asked whose machine setup to copy** (LANES-71). Kyle: the first startup

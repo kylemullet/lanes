@@ -334,23 +334,26 @@ result as a status line:
 `OK` means nothing to read. `CUE` is worth a glance and is never a finding. `CRITICAL` also
 goes on the `critical:` line, whatever mode the operator picks. The startup sequence passes
 every status line, the protocol's own included, to `lanes_brief.py`, which folds them through
-`status_lines.py`: every `OK` check becomes one name on a `health:` line, and a line in
+`status_lines.py`: every `OK` check becomes one count on the `Health` bullet, and a line in
 another spelling is shown in full, so an unmarked check is never folded out of sight.
 
-**The Brief** (LANES-67) is rendered by `lanes_brief.py`, never written by hand, in one fixed
-order: `critical:` (always: the `CRITICAL` lines, then the session's `--critical` items), the
-`CUE` and unmarked lines, `due:` (overdue or within seven days), `lanes:` (every lane in
-flight, one line), the session's `--note` lines, `branches:` (unlanded branches no claim
-names, minus `git.permanent_branches`), `landed:` (issues cited since the pull), `health:`,
-and the backlog stat. Every ID carries its title, and the same state prints the same text.
+**The Brief** (LANES-67) is rendered by `lanes_brief.py`, never written by hand, as Markdown
+bullets in one fixed order (LANES-73: never a code block — the chat pane wrapped one into a
+wall of monospace): `Critical` (always: the `CRITICAL` lines, then the session's `--critical`
+items), the `CUE` and unmarked lines, `Due this week` (overdue or within seven days), `Lanes`
+(every lane in flight), the session's `--note` lines, `Branches` (unlanded branches no claim
+names, minus `git.permanent_branches`), `Landed` (issues cited since the pull), `Health` (counts
+only), and the backlog stat under them. A bullet joins at most three items; past that they nest
+one per line. Every ID carries its title, cut at a word boundary, and the same state prints the
+same text.
 Each run saves what it reported in the clone's git directory (`.git/lanes/last-brief.json`:
 per machine, shared by every worktree and session, never tracked), and the next run says only
 what changed (LANES-68): a `since <HH:MM>:` line with what landed, opened, closed and which
 lanes started or ended, an unchanged `CUE` folded into `health:`, a check whose level moved
 shown once, and `lanes:` reduced to `N in flight, unchanged`. `critical:`, `due:` and the
 session's notes are always in full; `--full` renders everything. Its stdout is the reply
-itself (LANES-70): `**Brief**`, the Brief in a code block, then `**Sortable backlog**` and the
-view's link, which the session pastes before it asks the mode question. A tool result never
+itself (LANES-70): the `**Brief**` header line (machine, time, tip), the bullets, then
+`**Sortable backlog** — <link>`, which the session pastes before it asks the mode question. A tool result never
 reaches the operator, and the session had been reading "ran the script" as "showed the Brief".
 
 ## Layout

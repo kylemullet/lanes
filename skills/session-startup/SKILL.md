@@ -342,9 +342,9 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add
 
 ### 7. Render the Brief and the view link
 
-Two sections, every time, each under a plain header — `Brief`, then `Sortable backlog` —
-with no numerals, and then the mode question (step 8). Both are **text in your reply**: the
-operator reads nothing else this step produces.
+Two sections, every time — the Brief under its `**Brief**` header line, then the
+`**Sortable backlog**` line — with no numerals, and then the mode question (step 8).
+Both are **text in your reply**: the operator reads nothing else this step produces.
 
 **The status lines** (LANES-66). Every check that reports into the Brief, the protocol's
 own and every `preflight.md` step, gives its result as one or more status lines in one
@@ -383,28 +383,41 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_brief.py [--critical "<item>" 
 EOF
 ```
 
-It folds the status lines through `status_lines.py` (every `OK` check becomes one name on
-the `health:` line) and prints the Brief in one fixed order, leaving out any line with
-nothing to say:
+It folds the status lines through `status_lines.py` (every `OK` check becomes one count on
+the `Health` bullet) and prints the Brief as **Markdown bullets, one item each**, in one fixed
+order, leaving out any bullet with nothing to say:
 
-| Line | What it carries |
+| Bullet | What it carries |
 | :-- | :-- |
-| `critical: N — <item> · <item>` | **always** (`critical: none` when empty): every `CRITICAL` status line, then each `--critical` |
-| the `CUE` lines, then any unmarked line | the fold, as written |
-| `due: <ID> <title> <MM-DD> (<countdown>) · …` | every issue overdue or due within seven days |
-| `lanes: N — <name> <title> · …` | every lane in flight (step 5b), one line |
+| `🔴 **Critical (N)** — <item>` | **always** (`🟢 **Critical** — none` when empty): every `CRITICAL` status line, then each `--critical` |
+| `🟡 **<name>** — <detail>` | each `CUE` line; an unmarked line as written |
+| `🕘 **Since HH:MM**` | after the first Brief: what landed, opened and closed, the lanes started and ended, one kind per nested bullet; or `— nothing changed` |
+| `📅 **Due this week** — <ID> <title> <MM-DD> (<countdown>)` | every issue overdue or due within seven days |
+| `🔒 **Lanes (N)** — <name> <title>` | every lane in flight (step 5b) |
 | `⚠️ <note>` | each `--note` |
-| `branches: …` | unlanded branches no claim names, minus `git.permanent_branches` (step 2) |
-| `landed: <ID> <title> · …` | issues cited by commits since the pull (`--since`, default `ORIG_HEAD`) |
-| `health: …` | the fold |
-| `<N> live · <X> <top priority> · oldest <N>d` | **always**: the backlog stat |
+| `🌿 **Branches** — …` | unlanded branches no claim names, minus `git.permanent_branches` (step 2) |
+| `📦 **Landed** — <ID> <title>` | issues cited by commits since the pull (`--since`, default `ORIG_HEAD`) |
+| `✅ **Health** — N ok` | the fold, as counts only — never the OK checks' names |
+| `<N> live · <X> <top priority> · oldest <N>d` | **always**: the backlog stat, on its own line under the bullets |
 
-Every ID it cites carries its title.
+Every ID it cites carries its title, cut at a word boundary. A bullet joins at most three
+items with ` · `; past that, they nest one per line.
+
+**Markdown, never a code block** (LANES-73). The reply lands in a chat pane that wraps a
+monospace line every ~90 characters, and a Brief line ran to 300: the first pasted Brief was
+fourteen lines wrapped two or three times each, with the `due` and `lanes` lists running
+into each other, titles cut mid-word and the fold naming every check it had folded away.
+Bullets wrap at a word boundary with a hanging indent, so each item stays one visual unit.
+The shape is the script's; what you add to it is short: **`--critical` and `--note` are one
+clause each** (*`BD-64 Gary: NDA before his file, due tomorrow`*), never a sentence with a
+reason in it — the issue file carries the reason. A note already starting with ⚠️ is not
+marked twice. (`incidents.md` → "The Brief that wrapped".)
 
 **Show it: running the script shows the operator nothing** (LANES-70). Its output is a tool
 result, and the operator never sees a tool result: the harness folds it into a collapsed
 line. The script's stdout is already the reply's first two sections, exactly as they go in:
-`**Brief**`, the Brief in a code block, `**Sortable backlog**` and the view's link. Paste
+the `**Brief**` header line, the bullets with the stat under them, and `**Sortable backlog**`
+with the view's link. Paste
 it into your reply as printed and add nothing to it, in the same message as step 8's
 question and before the question call. Its one stderr line is addressed to you, not to the
 operator. (`incidents.md` → "The Brief behind the question".)
@@ -430,8 +443,8 @@ that no mode answer can hide it**: the operator who asks for Housekeeping still 
 row. `--note` carries a line the lanes need: two lanes expecting one file (step 5b), what a
 lane is waiting on, a branch's disposition from step 2, step 6's `⚠️` staleness marks.
 
-**Sortable backlog.** The view's link alone on its own line, immediately after the
-Brief — the `file://` path to the main clone's view (never a worktree's), or
+**Sortable backlog.** The view's link on the `**Sortable backlog** — <link>` line, right
+after the Brief — the `file://` path to the main clone's view (never a worktree's), or
 `http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. The script prints it as the
 last line of its output. Nothing else in the section.
 It is the operator's escape hatch from every proposal below.

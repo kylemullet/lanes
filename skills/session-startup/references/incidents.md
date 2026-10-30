@@ -18,6 +18,22 @@ doctor now has a `machine` check that names the row to add or correct, or asks t
 question. The Brief carries it as `CRITICAL`, and the skill forbids offering another
 machine's setup.
 
+## The Brief that wrapped (2026-10-29)
+
+The first Brief a startup pasted as printed was a code block: fourteen lines of 150 to 300
+characters, each a label and a `·`-joined list. The chat pane renders a code block in a
+monospace face about ninety characters wide and hard-wraps the rest, so every line wrapped
+two or three times, the `due:` and `lanes:` lists ran into each other with no visual
+boundary, titles were cut mid-word (`lanes_brie…`), the `health:` line named all eleven
+checks it had folded away, one note carried two ⚠️, and three lines said one thing (the
+doctor's two hook warnings, then the two re-point lines). The session's own `--critical` and
+`--note` arguments were 20- to 40-word sentences, because nothing said otherwise. The
+operator's words: "it looks like absolute dog shit". The code block had been chosen so the
+paste could not drift; Markdown bullets are just as verbatim and wrap at a word boundary with
+a hanging indent, so each item stays one visual unit. The script now prints bullets, one item
+each, nested past three, with titles cut between words, the fold as counts only, a header
+naming the machine, the time and the tip, and the judgment arguments are one clause each.
+
 ## The Brief behind the question (2026-10-28)
 
 Until the Brief had a script, the session wrote it, so it was text in the reply before the

@@ -42,12 +42,30 @@ and never tracked. The next run reads it and says only what changed:
 `--full` renders the whole Brief whatever was saved. A run with no saved Brief renders the whole
 Brief too, and `--since` then defaults to ORIG_HEAD, which the startup pull sets.
 
-The reply (LANES-70). stdout is the operator's two sections exactly as they go in the session's
-reply: `**Brief**`, the lines above in a code block, then `**Sortable backlog**` and the view's
-link (the main clone's file:// path, or the served URL). stderr carries one line to the session:
-none of this reaches the operator until it is pasted. A session that ran the script read it as
-having shown the Brief, and asked the mode question with the Brief still in a collapsed tool
-result: every startup after LANES-67, until this.
+The reply (LANES-70). stdout is the operator's reply exactly as it goes in: a `**Brief**` header
+line (machine, time, the tip read), the lines above as Markdown bullets, the stat under them,
+then `**Sortable backlog** — <link>` (the main clone's file:// path, or the served URL). stderr
+carries one line to the session: none of this reaches the operator until it is pasted. A
+session that ran the script read it as having shown the Brief, and asked the mode question
+with the Brief still in a collapsed tool result: every startup after LANES-67, until this.
+
+Markdown, never a code block (LANES-73). The first pasted Brief was a code block of fourteen
+`·`-joined lines, 150–300 characters each: the chat pane wrapped every one two or three times
+in a monospace face, the `due:` and `lanes:` lists ran into each other, titles were cut mid-word
+and `health:` named every check it had folded away. Kyle: "it looks like absolute dog shit".
+Bullets wrap at word boundaries with a hanging indent, so each item stays one visual unit:
+
+  - 🔴 **Critical (N)** — <item>           or nested, one item per line, past INLINE_ITEMS
+  - 🟡 **<name>** — <detail>               each CUE line; an unmarked line as written
+  - 🕘 **Since HH:MM** — nothing changed   or nested: `landed …`, `opened …`, `lanes started …`
+  - 📅 **Due this week** — a · b · c       nested past INLINE_ITEMS; so are lanes, branches, landed
+  - 🔒 **Lanes (N)** — …
+  - ⚠️ <note>                              one ⚠️, whether or not the session wrote it
+  - ✅ **Health** — N ok, M cues unchanged (<names>)   counts only, never the OK names
+  <the stat>
+
+Titles are cut at a word boundary (TITLE_WIDTH), never mid-word. `render` still prints the plain
+one-line spelling, which the tests and the saved Brief read; `markdown` is what the reply carries.
 
 Why. The session wrote the Brief from prose at every startup: it drifted between sessions, put
 the one line that must be read last, cited bare IDs, and spent most of its lines saying nothing
@@ -68,8 +86,9 @@ import backlog_index as bidx           # noqa: E402
 import status_lines                    # noqa: E402
 
 DUE_DAYS = 7
-TITLE_WIDTH = 48
+TITLE_WIDTH = 40
 SINCE_ITEMS = 5          # per kind on the `since` line, then "+N more"
+INLINE_ITEMS = 3         # a bullet joins at most this many items with SEP; more become a nested list
 SEP = " · "
 STATE_REL = Path("lanes") / "last-brief.json"    # under `git rev-parse --git-common-dir`
 SHOW_IT = ("lanes: the operator has not seen this. Put everything above in your reply, as printed, "
@@ -77,9 +96,15 @@ SHOW_IT = ("lanes: the operator has not seen this. Put everything above in your 
 
 
 def short_title(title: str) -> str:
-    """A title's first clause (before ` — `), cut at TITLE_WIDTH."""
+    """A title's first clause (before ` — `), cut at a word boundary within TITLE_WIDTH (LANES-73:
+    a cut at a character count landed mid-word, `lanes_brie…`)."""
     head = (title or "").split(" — ", 1)[0].strip()
-    return head if len(head) <= TITLE_WIDTH else head[:TITLE_WIDTH - 1].rstrip() + "…"
+    if len(head) <= TITLE_WIDTH:
+        return head
+    window = head[:TITLE_WIDTH]
+    cut = window.rsplit(" ", 1)[0] if " " in window else head[:TITLE_WIDTH - 1]
+    cut = re.sub(r"\s*[(\[]\S*$", "", cut)        # never end on an opening bracket's word
+    return cut.rstrip(" ,;:-–") + "…"
 
 
 def _cited(it: dict) -> str:
@@ -136,9 +161,24 @@ def view_link() -> str:
     return (Path(bidx.main_clone()) / bidx.BACKLOG_REL / "index.html").as_uri()
 
 
-def reply(brief: list[str], link: str) -> list[str]:
-    """The two headed sections, ready to paste: the Brief in a code block, then the link."""
-    return ["**Brief**", "", "```", *brief, "```", "", "**Sortable backlog**", "", link]
+def header(now: datetime.datetime, tip: str = "") -> str:
+    """The Brief's first line: where and when it was rendered, and the tip it read."""
+    parts = ["**Brief**", "—"]
+    machine = (bidx.MACHINE or {}).get("id")
+    if machine:
+        parts += [machine, "·"]
+    parts.append(now.strftime("%Y-%m-%d %H:%M"))
+    if tip:
+        parts += ["·", f"{bidx.MAIN_BRANCH} at {tip[:7]}"]
+    return " ".join(parts)
+
+
+def reply(brief_md: list[str], link: str, head: str = "**Brief**") -> list[str]:
+    """The reply, ready to paste: the header, the Brief as Markdown bullets with the stat
+    under them, then the `Sortable backlog` link on its own line (LANES-73: never a code
+    block — the pane wraps a 200-character monospace line three times, and a wrapped
+    `·`-joined list reads as prose)."""
+    return [head, "", *brief_md, "", f"**Sortable backlog** — {link}"]
 
 
 # --- the saved Brief (LANES-68) -------------------------------------------------------------
@@ -208,65 +248,65 @@ def _lane_segment(ln: dict, here: str | None) -> str:
 
 # --- the Brief ------------------------------------------------------------------------------
 
-def render(issues: list, status: list[str], *, who: str, critical=(), notes=(),
-           branches=(), landed=(), today: datetime.date | None = None,
-           last: dict | None = None, now: datetime.datetime | None = None) -> list[str]:
-    """The Brief's lines, in order: the whole Brief, or with `last` (a saved snapshot) only
+def assemble(issues: list, status: list[str], *, who: str, critical=(), notes=(),
+             branches=(), landed=(), today: datetime.date | None = None,
+             last: dict | None = None, now: datetime.datetime | None = None) -> list[tuple]:
+    """The Brief's parts, in order — `(kind, payload)` pairs that `render` prints as plain
+    lines and `markdown` as bullets: the whole Brief, or with `last` (a saved snapshot) only
     what changed since it. Pure: everything it reads is an argument."""
     now = now or datetime.datetime.now()
     today = today or now.date()
     by_id = {i["id"]: i for i in issues if i.get("id")}
     folded = status_lines.fold(status)
-    health = [l for l in folded if l.startswith("health: ")]
     shown = [l for l in folded if not l.startswith("health: ")]
     crit_status = [l[len("CRITICAL "):] for l in shown if l.startswith("CRITICAL ")]
     rest = [l for l in shown if not l.startswith("CRITICAL ")]
+    ok = list(dict.fromkeys(p[1] for p in map(status_lines.parse, status) if p and p[0] == "OK"))
 
     # Timely and urgent only, never a priority dump: a top-priority issue that has waited for
     # weeks is not news. Urgency is the checks' CRITICAL lines and the session's judgment.
-    items = crit_status + list(critical)
-    out = [f"critical: {len(items)} — {SEP.join(items)}" if items else "critical: none"]
+    out = [("critical", crit_status + list(critical))]
 
     then = (last or {}).get("checks", {})
     unchanged = []
     if last is None:
-        out += rest
+        out += [("status", l) for l in rest]
     else:
         for line in rest:                    # a CUE that has not moved is not news
             parsed = status_lines.parse(line)
             if parsed and then.get(parsed[1]) == parsed[0]:
                 unchanged.append(parsed[1])
             else:
-                out.append(line)
+                out.append(("status", line))
         for line in status:                  # a check that came back to OK says so once
             parsed = status_lines.parse(line)
             if parsed and parsed[0] == "OK" and then.get(parsed[1]) not in (None, "OK"):
-                out.append(f"{line.strip()} (was {then[parsed[1]]})")
+                out.append(("status", f"{line.strip()} (was {then[parsed[1]]})"))
 
         changed = []
         if landed:
-            changed.append(_capped("landed", [_cited(by_id[x]) if x in by_id else x for x in landed]))
+            changed.append(("landed", [_cited(by_id[x]) if x in by_id else x for x in landed]))
         known, live_then = set(last.get("known", [])), set(last.get("live", []))
         # A new issue already claimed is told once, as the lane it started.
         opened = sorted((i for i in issues if i.get("id") and i["id"] not in known
                          and i.get("status") in bidx.LIVE_STATUSES and i.get("status") != "in-progress"),
                         key=bidx.sort_key)
         if opened:
-            changed.append(_capped("opened", [_cited(i) for i in opened]))
+            changed.append(("opened", [_cited(i) for i in opened]))
         closed = sorted((i for i in issues if i.get("id") in live_then and i["id"] not in landed
                          and i.get("status") in ("verified", "closed")), key=bidx.sort_key)
         if closed:
-            changed.append(_capped("closed", [_cited(i) for i in closed]))
+            changed.append(("closed", [_cited(i) for i in closed]))
         lanes_now = {ln["key"]: ln for ln in bidx.lanes_in_flight(issues)}
         here = (bidx.MACHINE or {}).get("id")
         started = [k for k in lanes_now if k not in last.get("lanes", [])]
         ended = [k for k in last.get("lanes", []) if k not in lanes_now]
         if started:
-            changed.append(_capped("lanes started", [_lane_segment(lanes_now[k], here) for k in started]))
+            changed.append(("lanes started", [_lane_segment(lanes_now[k], here) for k in started]))
         if ended:
             lead = [k.split("@", 1)[0] for k in ended]
-            changed.append(_capped("lanes ended", [_cited(by_id[x]) if x in by_id else x for x in lead]))
-        out.append(f"since {_since_label(last['at'], now)}: " + ("; ".join(changed) or "nothing changed"))
+            changed.append(("lanes ended", [_cited(by_id[x]) if x in by_id else x for x in lead]))
+        out.append(("since", (_since_label(last["at"], now), changed)))
 
     due = []
     for i in bidx.due_issues(issues):
@@ -277,26 +317,21 @@ def render(issues: list, status: list[str], *, who: str, critical=(), notes=(),
         if days <= DUE_DAYS:
             due.append(f"{_cited(i)} {str(i['due'])[5:]} ({bidx.due_label(days)})")
     if due:
-        out.append(f"due: {SEP.join(due)}")
+        out.append(("due", due))
 
     here = (bidx.MACHINE or {}).get("id")
     lanes = bidx.lanes_in_flight(issues)
     if last is not None and lanes and [ln["key"] for ln in lanes] == list(last.get("lanes", [])):
-        out.append(f"lanes: {len(lanes)} in flight, unchanged")
+        out.append(("lanes unchanged", len(lanes)))
     elif lanes:
-        out.append(f"lanes: {len(lanes)} — {SEP.join(_lane_segment(ln, here) for ln in lanes)}")
-    out += [f"⚠️ {n}" for n in notes]
+        out.append(("lanes", [_lane_segment(ln, here) for ln in lanes]))
+    out += [("note", n) for n in notes]
     if branches and (last is None or list(branches) != list(last.get("branches", []))):
-        out.append(f"branches: {SEP.join(branches)}")
+        out.append(("branches", list(branches)))
     if landed and last is None:
-        out.append(f"landed: {SEP.join(_cited(by_id[x]) if x in by_id else x for x in landed)}")
-    if unchanged:
-        ok = [n for n, lvl in ((p[1], p[0]) for p in map(status_lines.parse, status) if p) if lvl == "OK"]
-        ok = list(dict.fromkeys(ok))
-        cues = f"{len(unchanged)} cue{'s' if len(unchanged) > 1 else ''} unchanged ({', '.join(unchanged)})"
-        out.append(f"health: {len(ok)} ok, {cues}" + (f" — {SEP.join(ok)}" if ok else ""))
-    else:
-        out += health
+        out.append(("landed", [_cited(by_id[x]) if x in by_id else x for x in landed]))
+    if ok or unchanged:
+        out.append(("health", (len(ok), unchanged)))
 
     mine = [i for i in issues if i.get("status") in bidx.LIVE_STATUSES
             and (who == "both" or i.get("assignee") in (who, bidx.lc.SHARED_ASSIGNEE))]
@@ -304,7 +339,121 @@ def render(issues: list, status: list[str], *, who: str, critical=(), notes=(),
     ages = [a for a in (bidx._age(i.get("opened")) for i in mine if i.get("status") in ("open", "in-progress"))
             if a is not None]
     n_top = sum(1 for i in mine if i.get("priority") == top)
-    out.append(f"{len(mine)} live · {n_top} {top or 'top priority'}" + (f" · oldest {max(ages)}d" if ages else ""))
+    out.append(("stat", f"{len(mine)} live · {n_top} {top or 'top priority'}" + (f" · oldest {max(ages)}d" if ages else "")))
+    return out
+
+
+def _note(text: str) -> str:
+    """A note carries one ⚠️, whether or not the session already wrote it (LANES-73)."""
+    return text if text.startswith("⚠️") else f"⚠️ {text}"
+
+
+def _health(n_ok: int, unchanged: list[str]) -> str:
+    """Counts only. The OK checks were folded so there was nothing to read; naming eleven of
+    them on the fold line put it back (LANES-73)."""
+    text = f"{n_ok} ok"
+    if unchanged:
+        text += f", {len(unchanged)} cue{'s' if len(unchanged) > 1 else ''} unchanged ({', '.join(unchanged)})"
+    return text
+
+
+def _plain(kind: str, payload) -> str:
+    """One part as a plain line: the spelling `render` keeps, which the tests and the saved
+    Brief read."""
+    if kind == "critical":
+        return f"critical: {len(payload)} — {SEP.join(payload)}" if payload else "critical: none"
+    if kind in ("status", "stat"):
+        return payload
+    if kind == "since":
+        label, changed = payload
+        return f"since {label}: " + ("; ".join(_capped(k, c) for k, c in changed) or "nothing changed")
+    if kind == "lanes unchanged":
+        return f"lanes: {payload} in flight, unchanged"
+    if kind == "lanes":
+        return f"lanes: {len(payload)} — {SEP.join(payload)}"
+    if kind == "note":
+        return _note(payload)
+    if kind == "health":
+        return f"health: {_health(*payload)}"
+    return f"{kind}: {SEP.join(payload)}"          # due, branches, landed
+
+
+def render(issues: list, status: list[str], **kw) -> list[str]:
+    """The Brief's plain lines, in order (see `assemble`)."""
+    return [_plain(kind, payload) for kind, payload in assemble(issues, status, **kw)]
+
+
+# --- the Brief as Markdown (LANES-73) -------------------------------------------------------
+
+ICONS = {"critical": "🔴", "due": "📅", "lanes": "🔒", "since": "🕘", "branches": "🌿",
+         "landed": "📦", "health": "✅", "cue": "🟡", "ok": "✅"}
+
+
+def _bullet(icon: str, label: str, items: list[str], depth: int = 0) -> list[str]:
+    """One bullet, its items inline when there are at most INLINE_ITEMS, else nested one
+    level: the pane wraps a long line, and a wrapped `·`-joined list reads as prose."""
+    pad = "  " * depth
+    head = f"{pad}- {icon} **{label}**".rstrip()
+    if not items:
+        return [head]
+    if len(items) <= INLINE_ITEMS:
+        return [f"{head} — {SEP.join(items)}"]
+    return [head] + [f"{pad}  - {it}" for it in items]
+
+
+def _since_md(label: str, changed: list[tuple[str, list[str]]]) -> list[str]:
+    if not changed:
+        return [f"- {ICONS['since']} **Since {label}** — nothing changed"]
+    out = [f"- {ICONS['since']} **Since {label}**"]
+    for kind, cited in changed:
+        shown = cited[:SINCE_ITEMS]
+        more = [f"+{len(cited) - SINCE_ITEMS} more"] if len(cited) > SINCE_ITEMS else []
+        if len(shown) + len(more) <= INLINE_ITEMS:
+            out.append(f"  - {kind} {SEP.join(shown + more)}")
+        else:
+            out.append(f"  - {kind} ({len(cited)})")
+            out += [f"    - {c}" for c in shown + more]
+    return out
+
+
+def _status_md(line: str) -> str:
+    parsed = status_lines.parse(line)
+    if parsed is None:                        # an unmarked check: shown in full, as written
+        return f"- {line}"
+    level, name, detail = parsed
+    icon = ICONS["cue"] if level == "CUE" else ICONS["ok"] if level == "OK" else ICONS["critical"]
+    return f"- {icon} **{name}** — {detail}"
+
+
+def markdown(parts: list[tuple]) -> list[str]:
+    """The Brief as Markdown bullets, the stat on its own line under them: what the reply
+    carries. One item per bullet; `due`, `lanes`, `branches` and `landed` nest past
+    INLINE_ITEMS; `health` is counts only; a note carries one ⚠️."""
+    out = []
+    for kind, payload in parts:
+        if kind == "critical":
+            out += (_bullet(ICONS["critical"], f"Critical ({len(payload)})", payload) if payload
+                    else [f"- 🟢 **Critical** — none"])
+        elif kind == "status":
+            out.append(_status_md(payload))
+        elif kind == "since":
+            out += _since_md(*payload)
+        elif kind == "due":
+            out += _bullet(ICONS["due"], "Due this week", payload)
+        elif kind == "lanes unchanged":
+            out.append(f"- {ICONS['lanes']} **Lanes ({payload})** — in flight, unchanged")
+        elif kind == "lanes":
+            out += _bullet(ICONS["lanes"], f"Lanes ({len(payload)})", payload)
+        elif kind == "note":
+            out.append(f"- {_note(payload)}")
+        elif kind == "branches":
+            out += _bullet(ICONS["branches"], "Branches", payload)
+        elif kind == "landed":
+            out += _bullet(ICONS["landed"], "Landed", payload)
+        elif kind == "health":
+            out.append(f"- {ICONS['health']} **Health** — {_health(*payload)}")
+        elif kind == "stat":
+            out += ["", payload]
     return out
 
 
@@ -343,14 +492,15 @@ def main(argv=None) -> int:
         since = tip if reachable else "ORIG_HEAD"
     branches = unlanded_branches(issues)
     now = datetime.datetime.now()
-    brief = render(issues, status, who=who, critical=args.critical, notes=args.note,
-                   branches=branches, landed=landed_ids(since), last=last, now=now)
-    for line in reply(brief, view_link()):
+    tip = _git("rev-parse", "HEAD")
+    parts = assemble(issues, status, who=who, critical=args.critical, notes=args.note,
+                     branches=branches, landed=landed_ids(since), last=last, now=now)
+    for line in reply(markdown(parts), view_link(), header(now, tip)):
         print(line)
     sys.stdout.flush()
     print(SHOW_IT, file=sys.stderr)
     if not args.no_save:
-        save_state(path, snapshot(issues, status, branches=branches, tip=_git("rev-parse", "HEAD"), now=now))
+        save_state(path, snapshot(issues, status, branches=branches, tip=tip, now=now))
     return 0
 
 
