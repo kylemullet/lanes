@@ -18,6 +18,21 @@ doctor now has a `machine` check that names the row to add or correct, or asks t
 question. The Brief carries it as `CRITICAL`, and the skill forbids offering another
 machine's setup.
 
+## The frontmatter that parsed at home (2026-10-25 → 2026-10-30)
+
+Release 0.4.54 rewrote this skill's and `session-closeout`'s `description:` to say "The
+startup sequence: pulls …". A `: ` inside an unquoted YAML value is a mapping indicator, so a
+strict parser rejects the line. The author's Claude Code was lenient: the local `claude plugin
+validate --strict` passed, both skills showed their descriptions in the listing, and the
+landing read the release tag, which is minted whether or not the plugin's `ci` is green. CI's
+runner installs the newest Claude Code, whose validator is strict, and it failed both skills on
+every push for ten releases with "at runtime this skill loads with empty metadata". Nobody
+read it. Had a strict release reached an operator's machine first, the two protocol skills
+would have lost their names and descriptions, and with them every trigger: "GA" and "wrap up"
+would have done nothing, with no error anywhere. Both descriptions are quoted now, and
+`tests/test_frontmatter_yaml.py` reads every skill's and command's frontmatter with a strict
+reader of its own, so the local suite fails where only CI's validator did.
+
 ## The Brief that wrapped (2026-10-29)
 
 The first Brief a startup pasted as printed was a code block: fourteen lines of 150 to 300

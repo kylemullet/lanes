@@ -233,8 +233,13 @@ def test_startup_and_shutdown_read_as_sequences_and_keep_their_identifiers():
     stop = (ROOT / "skills/session-closeout/SKILL.md").read_text(encoding="utf-8")
     assert "\nname: session-startup\n" in start and "\n# Startup sequence\n" in start
     assert "\nname: session-closeout\n" in stop and "\n# Shutdown sequence\n" in stop
-    assert "The startup sequence:" in start.split("---", 2)[1]
-    assert "The shutdown sequence:" in stop.split("---", 2)[1] and '"shutdown"' in stop.split("---", 2)[1]
+    # Read the descriptions as YAML gives them, not the raw text: both are double-quoted since
+    # LANES-74 (a `: ` inside an unquoted value is a mapping indicator), so a quoted trigger
+    # word sits in the file as `\"shutdown\"`.
+    from test_frontmatter_yaml import parse_frontmatter
+    assert "The startup sequence:" in parse_frontmatter(start)["description"]
+    stop_desc = parse_frontmatter(stop)["description"]
+    assert "The shutdown sequence:" in stop_desc and '"shutdown"' in stop_desc
     for f in _prose_files():
         text = f.read_text(encoding="utf-8")
         assert not re.search(r"\bsession (startup|closeout)\b", text, re.I), f

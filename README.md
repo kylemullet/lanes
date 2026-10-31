@@ -391,6 +391,12 @@ claude plugin validate --strict .claude-plugin/marketplace.json
 CI (`.github/workflows/ci.yml`) runs exactly these on every push. All three are named because which
 target descends into `skills/` and `commands/` has differed between machines on the same CLI version.
 
+The validator's strictness also differs by Claude Code version: a frontmatter the local CLI accepts
+can fail on CI's newer one and, in its words, load the skill "with empty metadata" at runtime.
+`tests/test_frontmatter_yaml.py` reads every skill's and command's frontmatter with a strict
+flat-YAML reader of its own, so that failure is red in the local suite too (LANES-74). Quote a
+`description` that carries a `: ` or a ` #`.
+
 ### Releasing
 
 A release is a commit that bumps `version` in `.claude-plugin/plugin.json` and adds its

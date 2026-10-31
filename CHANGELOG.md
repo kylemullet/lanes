@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.65 — the startup and shutdown skills' frontmatter parses under a strict YAML reader (2026-10-30)
+
+- **The lanes `ci` had been red for ten releases, and nobody read it** (LANES-74). Since 0.4.54
+  (LANES-57) both `description:` values said "The startup sequence: pulls …" and "The shutdown
+  sequence: sweeps …". A `: ` inside an unquoted YAML plain scalar is a mapping indicator, so the
+  strict parser in the newest Claude Code rejects the line, and `claude plugin validate --strict`
+  on CI's runner failed both skills with *"At runtime this skill loads with empty metadata (all
+  frontmatter fields silently dropped)"*. The author's Claude Code was lenient: the local
+  validator passed, the skill listing showed both descriptions, and the landing read the release
+  tag, which is minted whether or not `ci` is green. On a strict release the two protocol skills
+  would have lost their `name` and `description`, and with them every trigger — "GA" and "wrap
+  up" would have done nothing, with no error anywhere. The incident is "The frontmatter that
+  parsed at home".
+- **Both descriptions are double-quoted**, their inner quotes escaped, the way
+  `worktree-increment`'s has been all along.
+- **`tests/test_frontmatter_yaml.py` reads every `skills/*/SKILL.md` and `commands/*.md`
+  frontmatter with a strict flat-mapping reader** (stdlib only — the suite adds no PyYAML): a
+  value is double-quoted with YAML escapes and no bare `"` inside, single-quoted with `''` as its
+  one escape, a balanced flow collection, or a plain scalar with no `: ` or ` #`, no indicator
+  first and no trailing `:`. Anything else fails the suite at home, where the lenient validator
+  did not. The reader is itself tested against the exact line CI flagged.
+
 ## 0.4.64 — the Brief is Markdown bullets, never a code block (2026-10-29)
 
 - **The first pasted Brief was unreadable** (LANES-73). Kyle, on the first startup after

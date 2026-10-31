@@ -1,6 +1,6 @@
 ---
 name: session-closeout
-description: Use when the operator is wrapping up a working session on a repo that runs the lanes protocol and wants the loose ends tied off. Triggers include "let's wrap", "session close", "wrap up", "let's call it", "before I go", "end of session", "close out", "shutdown", or any explicit end-of-session signal. The shutdown sequence: sweeps every worktree, commits shared text, reconciles the backlog and releases this session's unreached claims, runs the project's pre-land checks and the test gate, pushes branches freely, and confirms before anything lands on the main branch.
+description: "Use when the operator is wrapping up a working session on a repo that runs the lanes protocol and wants the loose ends tied off. Triggers include \"let's wrap\", \"session close\", \"wrap up\", \"let's call it\", \"before I go\", \"end of session\", \"close out\", \"shutdown\", or any explicit end-of-session signal. The shutdown sequence: sweeps every worktree, commits shared text, reconciles the backlog and releases this session's unreached claims, runs the project's pre-land checks and the test gate, pushes branches freely, and confirms before anything lands on the main branch."
 ---
 
 # Shutdown sequence
