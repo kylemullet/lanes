@@ -197,9 +197,26 @@ def test_stdout_is_the_reply_ready_to_paste_and_stderr_tells_the_session_it_is_u
     lines = out.splitlines()
     assert re.fullmatch(r"\*\*Brief\*\* — test-box · \d{4}-\d{2}-\d{2} \d{2}:\d{2}", lines[0]), lines[0]   # no repo: no tip
     assert lines[1:] == ["", "- 🟢 **Critical** — none", "- ✅ **Health** — 1 ok", "", "0 live · 0 critical", "",
-                         f"**Sortable backlog** — {lb.view_link()}"]
+                         f"**Sortable backlog** — {lb.view_link()}", "",
+                         lb.next_line([])]                      # no issues: nothing open, no project clause
     assert err.strip() == lb.SHOW_IT
-    assert "has not seen this" in err and "before you ask the mode question" in err
+    assert "has not seen this" in err and "LAST thing in this turn" in err
+    assert "in the next turn" in err and "before you ask" not in err   # LANES-75: the dialog is never this turn's
+
+
+def test_the_next_line_poses_the_mode_question_in_words_with_the_reports_top_three_projects():
+    """LANES-75: the Brief ends its turn (a dialog in the same turn hides it in the desktop app),
+    so its last line asks in words what the dialog would, and the operator answers in the reply."""
+    assert lb.next_line(["UI", "PIPE", "BD"]) == (
+        "**Next** — name a mode (Critical · Deep Dive · Housekeeping · Ops), a project (UI · PIPE · BD · any) "
+        'or an issue ID — or say "menu" for the dialog.')
+    assert lb.next_line([]) == (
+        '**Next** — name a mode (Critical · Deep Dive · Housekeeping · Ops) or an issue ID — or say "menu" for the dialog.')
+    rows = [{"project": p, "open": o} for p, o in (("LANES", 6), ("DOC", 2), ("INFRA", 10), ("UI", 28), ("UX", 0))]
+    assert lb.top_projects(rows) == ["LANES", "DOC", "INFRA"]     # the report's order, top three with anything open
+    assert lb.top_projects([{"project": "UX", "open": 0}]) == []
+    assert lb.reply(["- x"], "file:///v", nxt=lb.next_line([]))[-2:] == ["", lb.next_line([])]
+    assert lb.reply(["- x"], "file:///v")[-1] == "**Sortable backlog** — file:///v"
 
 
 # --- Markdown, never a code block (LANES-73) -------------------------------------------------

@@ -334,18 +334,31 @@ def test_after_the_first_brief_step_7_says_only_what_changed_is_shown():
         assert phrase in step7, phrase
 
 
-def test_the_brief_is_text_in_the_reply_before_the_question():
+def test_the_brief_is_text_in_the_reply_and_ends_its_turn_before_the_question():
     """LANES-70: running the script showed the operator nothing; the session asked the mode
-    question with the Brief still in a collapsed tool result."""
+    question with the Brief still in a collapsed tool result. LANES-75: pasted before the dialog
+    in the same turn, the desktop app folded it away and the operator chose blind again — so the
+    Brief ends its turn, the script's `Next` line asks in words, and the dialog is the next turn's."""
     step7 = _startup().split("### 7. Render the Brief", 1)[1].split("### 8.", 1)[0]
     step8 = _startup().split("### 8. Ask the mode", 1)[1].split("### 8a.", 1)[0]
-    assert "Both are **text in your reply**" in step7
+    assert "Both are **text in your reply**" in step7 and "**They end the turn.**" in step7
     assert "**Show it: running the script shows the operator nothing** (LANES-70)" in step7
-    assert "before the question call" in step7 and "addressed to you, not to the\noperator" in step7
+    assert "addressed to you,\nnot to the operator" in step7
+    assert "**The Brief ends its turn; the dialog is the next turn's** (LANES-75)" in step7
+    assert "the question tool is never called in that turn" in step7
+    assert "before the question call" not in step7 and "in the same message as step 8" not in step7
+    assert "**Next.**" in step7 and '"menu" for the dialog' in step7
+    assert step7.index("**Show it:") < step7.index("**Sortable backlog.**") < step7.index("**Next.**")
+    assert "**In the turn after the Brief, never the same one** (LANES-75)" in step8
+    assert "FIRST call of that turn" in step8
     assert "never in place of it" in step8 and "choose blind" in step8
-    assert step7.index("**Show it:") < step7.index("**Sortable backlog.**")
+    assert step8.index("(LANES-75)") < step8.index("**One dialog, two questions** (LANES-64)")
+    assert "ends the turn on it" in _startup().split("---", 2)[1]       # the frontmatter description says so
     inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
     assert "## The Brief behind the question (2026-10-28)" in inc
+    assert "## The Brief hidden by the dialog (2026-10-30)" in inc
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "end the turn on it" in readme and "before it asks the mode question" not in readme
 
 
 def test_an_unknown_machine_gets_the_doctors_advice_and_one_question_at_most():

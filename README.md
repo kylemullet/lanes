@@ -131,7 +131,7 @@ stdlib-only Python (3.11+, for `tomllib`) and run on a machine with no virtualen
 
 | Skill | When | What it does |
 | :-- | :-- | :-- |
-| `session-startup` (the startup sequence) | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief with `lanes_brief.py` (`critical:` first, always), ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator — and the project, in one dialog (or read either from the trigger: `GA housekeeping`, `GA ui`), and offer 2–3 proposals for them; **stop** |
+| `session-startup` (the startup sequence) | "GA", "what's in the queue", any session-opening signal | pull first; identify the operator and machine from the config; run `preflight.md`; close verified issues on the certifying machine; build the exclusion set of in-flight claims; render the Brief with `lanes_brief.py` (`critical:` first, always) and end the turn on it; in the next turn ask the session mode — Critical / Deep Dive / Housekeeping / Ops, one menu for every operator — and the project, in one dialog, unless the trigger or the reply already names them (`GA housekeeping`, `GA ui`, a reply of `ops`), and offer 2–3 proposals for them; **stop** |
 | `worktree-increment` | "do CORE-7", "run the lane", "go" | claim the whole lane up front (`WORKTREE PENDING` / `RESERVED`), one worktree per issue worked sequentially, rebase-then-verify against the baseline, hold for the operator with a written debrief (verdict, numbered verification steps, what is uncommitted — a message, before any harness end-of-turn box), close the doc loop, push the branch freely, land only with the OK, on the lane's own green (a rebase re-runs tests only after a hand-resolved logic conflict) |
 | `session-closeout` (the shutdown sequence) | "let's wrap", "shutdown", "close out" | sweep every worktree, commit shared text, reconcile the backlog and release this session's unreached claims, run `pre-land.md`, the test gate, rebase, confirm the landing by lane |
 
@@ -353,7 +353,10 @@ lanes started or ended, an unchanged `CUE` folded into `health:`, a check whose 
 shown once, and `lanes:` reduced to `N in flight, unchanged`. `critical:`, `due:` and the
 session's notes are always in full; `--full` renders everything. Its stdout is the reply
 itself (LANES-70): the `**Brief**` header line (machine, time, tip), the bullets, then
-`**Sortable backlog** — <link>`, which the session pastes before it asks the mode question. A tool result never
+`**Sortable backlog** — <link>`, then a `**Next**` line posing the mode question in words. The
+session pastes it as the last thing in its turn and asks the mode dialog in the next turn, only
+when the reply has not answered (LANES-75: in the desktop app a dialog hides the text pasted
+above it in the same turn, so the operator chose blind with the Brief in the reply). A tool result never
 reaches the operator, and the session had been reading "ran the script" as "showed the Brief".
 
 ## Layout

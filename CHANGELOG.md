@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.67 — the Brief ends its turn; the mode dialog is the next turn's (2026-11-01)
+
+- **The startup Brief was invisible in the Claude desktop app** (LANES-75). Since 0.4.62 the
+  session pasted `lanes_brief.py`'s output into its reply and called the mode dialog in the same
+  message, as step 7 said. In the desktop app, text written before a tool call in the same turn
+  folds into the collapsed working lines, and only a turn's final message and a dialog reach the
+  operator — so the dialog came up with nothing above it, the operator chose a mode blind, and
+  read the Brief only when the session re-pasted it afterwards. LANES-70's fix had moved the
+  Brief one layer up on a premise this client does not hold, and the skill's own words then
+  guaranteed the failure. The incident is "The Brief hidden by the dialog".
+- **The fix is ordering, not rendering.** Step 7: the pasted Brief is the last thing in its
+  turn, and the question tool is never called in that turn; where the harness has an
+  end-of-turn box, the Brief message comes before the box call and the box carries the question
+  alone. Step 8: the operator's reply is read first, by the trigger's grammar (a mode word, a
+  project prefix, an issue ID), and the dialog is the first call of the next turn, only when the
+  reply has not answered.
+- **`lanes_brief.py` closes the reply with a `**Next**` line** that poses the question in words —
+  the four modes, the report's top three projects with anything open (the project question's
+  own ranking, `project_activity`) plus `any`, or an issue ID, or "menu" for the dialog — so the
+  turn can end on the Brief without costing the operator a blind round trip. A single configured
+  project, or nothing open, drops the project clause. Its stderr line now says to paste as the
+  LAST thing in the turn and to ask in the next one. README, the skill's description and the
+  incidents file say the same.
+
 ## 0.4.66 — the landing runs `backlog --check` before it pushes (2026-10-30)
 
 - **`lanes_land.py` refuses a landing whose backlog check is red** (LANES-62). Its pre-landing

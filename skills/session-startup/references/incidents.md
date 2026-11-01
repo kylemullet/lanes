@@ -3,6 +3,25 @@
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
 
+## The Brief hidden by the dialog (2026-10-30)
+
+Two days after "The Brief behind the question", the Brief was text in the reply, pasted as
+printed before the mode dialog in the same message, exactly as step 7 then said. The operator,
+in the Claude desktop app, saw the dialog with nothing above it, answered the mode and the
+project blind, and read the Brief only when the session re-pasted it as a whole message
+afterwards: "why aren't we rendering the brief at all? ... it should be delivered at the
+beginning so the user can make an informed decision on what to work on." In that client, text
+an assistant writes mid-turn, before a tool call, folds into the collapsed working lines; only a
+turn's final message and a dialog reach the operator. LANES-70 had moved the Brief one layer up,
+from a tool result into reply text, on the premise that text before a tool call is shown, and
+the skill's own words then guaranteed the failure ("in the same message as step 8's question and
+before the question call"). The fix is ordering, not rendering: the pasted Brief is the last
+thing in its turn, the script closes it with a `**Next**` line that poses the question in words
+(a mode, a project, an issue ID, or "menu"), and the dialog is asked in the next turn, only when
+the operator's reply has not already answered it. It is the ordering `worktree-increment` holds
+for the debrief ("The debrief that ended in the box"): the content is the message, the box or
+the dialog carries the question.
+
 ## The machine set up like someone else's (2026-10-28)
 
 A new, non-code operator ran a first startup on a laptop. Their row had guessed the other

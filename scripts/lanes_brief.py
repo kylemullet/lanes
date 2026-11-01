@@ -44,8 +44,12 @@ Brief too, and `--since` then defaults to ORIG_HEAD, which the startup pull sets
 
 The reply (LANES-70). stdout is the operator's reply exactly as it goes in: a `**Brief**` header
 line (machine, time, the tip read), the lines above as Markdown bullets, the stat under them,
-then `**Sortable backlog** — <link>` (the main clone's file:// path, or the served URL). stderr
-carries one line to the session: none of this reaches the operator until it is pasted. A
+then `**Sortable backlog** — <link>` (the main clone's file:// path, or the served URL), then the
+`**Next**` line posing the mode question in words (LANES-75: the Brief ends its turn and the dialog
+is the next turn's — in the desktop app a dialog hides the text pasted above it in the same turn,
+so the operator chose blind with the Brief in the reply). stderr
+carries one line to the session: none of this reaches the operator until it is pasted, as the
+last thing in the turn. A
 session that ran the script read it as having shown the Brief, and asked the mode question
 with the Brief still in a collapsed tool result: every startup after LANES-67, until this.
 
@@ -91,8 +95,12 @@ SINCE_ITEMS = 5          # per kind on the `since` line, then "+N more"
 INLINE_ITEMS = 3         # a bullet joins at most this many items with SEP; more become a nested list
 SEP = " · "
 STATE_REL = Path("lanes") / "last-brief.json"    # under `git rev-parse --git-common-dir`
-SHOW_IT = ("lanes: the operator has not seen this. Put everything above in your reply, as printed, "
-           "before you ask the mode question: a tool result never reaches the operator (LANES-70).")
+SHOW_IT = ("lanes: the operator has not seen this. Put everything above in your reply, as printed, as the "
+           "LAST thing in this turn — a tool result never reaches the operator (LANES-70), and neither does "
+           "text above a dialog in the same turn (LANES-75). Ask the mode question in the next turn, only "
+           "if the reply has not answered it.")
+MODES = "Critical · Deep Dive · Housekeeping · Ops"
+TOP_PROJECTS = 3         # the `Next` line names the report's top projects, as the project question does
 
 
 def short_title(title: str) -> str:
@@ -173,12 +181,26 @@ def header(now: datetime.datetime, tip: str = "") -> str:
     return " ".join(parts)
 
 
-def reply(brief_md: list[str], link: str, head: str = "**Brief**") -> list[str]:
+def top_projects(rows: list[dict]) -> list[str]:
+    """The project question's menu: the report's top projects with anything open, in its own
+    order (`backlog_index.project_activity`), at most TOP_PROJECTS of them."""
+    return [r["project"] for r in rows if r.get("open")][:TOP_PROJECTS]
+
+
+def next_line(projects: list[str]) -> str:
+    """The reply's last line (LANES-75): step 8's question in words, so the Brief can end its
+    turn and the operator can answer in their reply without a dialog. No project clause when
+    there is nothing to choose between (a single configured project, or nothing open)."""
+    choices = f", a project ({SEP.join([*projects, 'any'])})" if projects else ""
+    return f'**Next** — name a mode ({MODES}){choices} or an issue ID — or say "menu" for the dialog.'
+
+
+def reply(brief_md: list[str], link: str, head: str = "**Brief**", nxt: str | None = None) -> list[str]:
     """The reply, ready to paste: the header, the Brief as Markdown bullets with the stat
-    under them, then the `Sortable backlog` link on its own line (LANES-73: never a code
+    under them, the `Sortable backlog` link on its own line (LANES-73: never a code
     block — the pane wraps a 200-character monospace line three times, and a wrapped
-    `·`-joined list reads as prose)."""
-    return [head, "", *brief_md, "", f"**Sortable backlog** — {link}"]
+    `·`-joined list reads as prose), then the `Next` line (LANES-75)."""
+    return [head, "", *brief_md, "", f"**Sortable backlog** — {link}", *(["", nxt] if nxt else [])]
 
 
 # --- the saved Brief (LANES-68) -------------------------------------------------------------
@@ -495,7 +517,8 @@ def main(argv=None) -> int:
     tip = _git("rev-parse", "HEAD")
     parts = assemble(issues, status, who=who, critical=args.critical, notes=args.note,
                      branches=branches, landed=landed_ids(since), last=last, now=now)
-    for line in reply(markdown(parts), view_link(), header(now, tip)):
+    projects = top_projects(bidx.project_activity(issues, who)) if len(bidx.PROJECTS) > 1 else []
+    for line in reply(markdown(parts), view_link(), header(now, tip), nxt=next_line(projects)):
         print(line)
     sys.stdout.flush()
     print(SHOW_IT, file=sys.stderr)

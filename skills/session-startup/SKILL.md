@@ -1,6 +1,6 @@
 ---
 name: session-startup
-description: "Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include \"GA\", \"good morning\", \"what's in the queue\", \"startup\", \"let's get started\", \"catch me up\", or any session-opening signal. The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief, asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator — and which backlog project, in the same dialog (or reads either from the trigger, e.g. \"GA housekeeping\", \"GA ui\"), and offers 2–3 proposals for that mode and project — then STOPS and waits for the operator to name the work."
+description: "Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include \"GA\", \"good morning\", \"what's in the queue\", \"startup\", \"let's get started\", \"catch me up\", or any session-opening signal. The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief and ends the turn on it, then — in the next turn — asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator — and which backlog project, in the same dialog (or reads either from the trigger or the reply, e.g. \"GA housekeeping\", \"GA ui\"), and offers 2–3 proposals for that mode and project — then STOPS and waits for the operator to name the work."
 ---
 
 # Startup sequence
@@ -343,8 +343,10 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add
 ### 7. Render the Brief and the view link
 
 Two sections, every time — the Brief under its `**Brief**` header line, then the
-`**Sortable backlog**` line — with no numerals, and then the mode question (step 8).
-Both are **text in your reply**: the operator reads nothing else this step produces.
+`**Sortable backlog**` line — with no numerals, closed by the `**Next**` line that poses the
+mode question in words. Both are **text in your reply**: the operator reads nothing else this
+step produces. **They end the turn.** The mode dialog (step 8) is the next turn's, never this
+one's.
 
 **The status lines** (LANES-66). Every check that reports into the Brief, the protocol's
 own and every `preflight.md` step, gives its result as one or more status lines in one
@@ -415,12 +417,24 @@ marked twice. (`incidents.md` → "The Brief that wrapped".)
 
 **Show it: running the script shows the operator nothing** (LANES-70). Its output is a tool
 result, and the operator never sees a tool result: the harness folds it into a collapsed
-line. The script's stdout is already the reply's first two sections, exactly as they go in:
-the `**Brief**` header line, the bullets with the stat under them, and `**Sortable backlog**`
-with the view's link. Paste
-it into your reply as printed and add nothing to it, in the same message as step 8's
-question and before the question call. Its one stderr line is addressed to you, not to the
-operator. (`incidents.md` → "The Brief behind the question".)
+line. The script's stdout is already the reply, exactly as it goes in: the `**Brief**` header
+line, the bullets with the stat under them, `**Sortable backlog**` with the view's link, and
+the `**Next**` line. Paste
+it into your reply as printed and add nothing to it. Its one stderr line is addressed to you,
+not to the operator. (`incidents.md` → "The Brief behind the question".)
+
+**The Brief ends its turn; the dialog is the next turn's** (LANES-75). In the desktop app, text
+written before a tool call in the same turn is not reliably shown either: it folds into the
+collapsed working lines, and only a turn's final message and a dialog reach the operator. So a
+Brief pasted in the same message as the mode dialog is a Brief the operator never read, and they
+choose a mode blind — the LANES-70 failure one layer up, guaranteed by the old wording "in the
+same message as the question". The order is the fix: **the pasted Brief is the last thing in its
+turn, and the question tool is never called in that turn.** The `**Next**` line already poses
+the question in words — a mode, a project, an issue ID, or "menu" — so the operator answers in
+their reply, and step 8 asks the dialog only when that reply has not answered. Where the
+harness has an end-of-turn box, the Brief message comes before the box call and the box carries
+the question alone, never the Brief (`worktree-increment` holds the same line for the debrief).
+(`incidents.md` → "The Brief hidden by the dialog".)
 
 **After the first Brief, only what changed** (LANES-68). Each run saves what it reported
 inside the clone's git directory: per machine, shared by every worktree and session of the
@@ -445,9 +459,15 @@ lane is waiting on, a branch's disposition from step 2, step 6's `⚠️` stalen
 
 **Sortable backlog.** The view's link on the `**Sortable backlog** — <link>` line, right
 after the Brief — the `file://` path to the main clone's view (never a worktree's), or
-`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. The script prints it as the
-last line of its output. Nothing else in the section.
+`http://127.0.0.1:<view_port>/` when `view_mode = "serve"`. Nothing else in the section.
 It is the operator's escape hatch from every proposal below.
+
+**Next.** The script's last line, `**Next** — name a mode (Critical · Deep Dive · Housekeeping ·
+Ops), a project (<the report's top three> · any) or an issue ID — or say "menu" for the dialog.`
+It is step 8's question in words, so the turn can end on the Brief and the operator can answer
+without a dialog. The projects are the report's `PROJECTS` block's top three with anything open
+(step 8's menu, from the same ranking); with a single configured project the clause is left
+out.
 
 **There is no full-backlog table**, and no fixed Critical / Quick-wins / Lane sections
 (LANES-24): the operator usually acts on one of them, so analysis spent on all three was
@@ -456,17 +476,24 @@ mostly spent on sections nobody read. Step 8 puts it into the one mode the opera
 
 ### 8. Ask the mode and the project, then propose 2–3
 
-**One dialog, two questions** (LANES-64). Right after the `Sortable backlog` section, ask
-with the question tool: the mode first, the project second, in ONE call. The question
-follows the pasted Brief in the same message, never in place of it: a question asked before
-the operator has read the Brief asks them to choose blind (LANES-70). The tool takes
-several questions at once, so the project costs a choice, not a round trip. Ask only what
-the trigger has not already answered:
+**In the turn after the Brief, never the same one** (LANES-75). The Brief's turn ended on the
+`**Next**` line, which asked the question in words. The operator's reply is read first: it
+usually answers. The dialog is for a reply that does not — an acknowledgement, "menu", a
+question about the Brief (answer it, then ask) — and it is the FIRST call of that turn, with
+nothing to say before it. A dialog in the Brief's own turn hides the Brief, so it follows the
+pasted Brief in the next turn, never in place of it: a question asked before the operator has
+read the Brief asks them to choose blind (LANES-70, LANES-75).
 
-- A mode word answers the mode (`GA housekeeping`, `startup ops`).
+**One dialog, two questions** (LANES-64). Ask with the question tool: the mode first, the project second, in ONE call.
+The tool takes several questions at once, so the project costs a choice, not a round trip.
+Ask only what the trigger or the reply has not already answered — the two are read by the
+same grammar:
+
+- A mode word answers the mode (`GA housekeeping`, `startup ops`, a reply of `ops`).
 - A project prefix answers the project, matched case-insensitively against
-  `backlog.projects` (`GA deep dive CORE`). Named alone, it answers the mode too: Deep Dive,
-  as an issue or epic ID does (`GA ui`, `GA LANES-12`).
+  `backlog.projects` (`GA deep dive CORE`, a reply of `deep dive CORE`). Named alone, it
+  answers the mode too: Deep Dive, as an issue or epic ID does (`GA ui`, `GA LANES-12`, a reply
+  of `LANES-12`).
 - Critical answers the project as well: it never asks one.
 
 When both are answered, ask nothing. When `backlog.projects` lists a single project, never
