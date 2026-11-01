@@ -30,7 +30,11 @@ The sequence, each step gating the next:
 
   1. Refuse, touching nothing, when this is the main clone or the main branch, the
      tree has uncommitted or untracked changes, or this machine's operator row does
-     not certify.
+     not certify. Then run `backlog_index.py --check` over the lane's tree and refuse
+     on red (LANES-62): the consumer's per-push CI check is gone (its workflow billed a
+     whole minute per push), so the local check the other lanes scripts run before
+     they push is the landing's backlog gate too. Skipped when the tree has no backlog
+     dir; `--dry-run` reports it like every other check.
   2. Fetch, and refuse unless `origin/<main>` is an ancestor of HEAD (a fast-forward).
      Losing that race is routine with concurrent sessions; the answer is rebase (a
      re-run only after a hand-resolved logic conflict, LANES-34), never force. Refuse, too, a landing that moves `plugin_version` to a
@@ -106,6 +110,24 @@ def git(*args, cwd):
 
 def ancestor(a, b, cwd):
     return git("merge-base", "--is-ancestor", a, b, cwd=cwd)[0] == 0
+
+
+def backlog_check(top, cfg):
+    """`backlog_index.py --check` over the lane's tree. Returns (ran, ok, summary): ran is
+    False when the tree has no backlog dir; summary is the check's own last line, or its
+    whole output when red."""
+    if not (top / cfg["backlog_dir"]).is_dir():
+        return False, True, f"skipped — no {cfg['backlog_dir']} in the lane's tree"
+    script = Path(__file__).resolve().parent / "backlog_index.py"
+    try:
+        proc = subprocess.run([sys.executable, str(script), "--root", str(top), "--check"], cwd=top,
+                              capture_output=True, text=True, encoding="utf-8", timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        return True, False, f"backlog_index.py --check did not run: {e}"
+    out = (proc.stdout + proc.stderr).strip()
+    if proc.returncode == 0:
+        return True, True, (out.splitlines() or [""])[-1]
+    return True, False, out
 
 
 class Refused(Exception):
@@ -184,6 +206,10 @@ def plan(cwd, onto=None):
         raise Refused("the worktree has uncommitted or untracked changes — commit or remove them first"
                       + (f" ({dirty.splitlines()[0]}" + (f" +{len(dirty.splitlines()) - 1} more)" if len(dirty.splitlines()) > 1 else ")")
                          if dirty else f": {err}"))
+    ran_check, check_ok, check_summary = backlog_check(top, cfg)
+    if not check_ok:
+        raise Refused("backlog --check is red on the lane's tree — fix the issue files it names, "
+                      "commit them to the lane and run this again:\n" + check_summary)
     rc, _, err = git("fetch", "-q", "origin", cwd=top)
     if rc:
         raise Refused(f"git fetch origin failed: {err}")
@@ -198,7 +224,8 @@ def plan(cwd, onto=None):
     _, head, _ = git("rev-parse", "HEAD", cwd=top)
     return {"top": top, "main_clone": main_clone, "branch": branch, "main": main,
             "upstream": upstream, "head": head, "pin_note": pin_note,
-            "lands_on_main": main == cfg["main_branch"], "has_backlog": (top / cfg["backlog_dir"]).is_dir()}
+            "check_note": f"backlog --check: {check_summary}" if ran_check else None,
+            "lands_on_main": main == cfg["main_branch"], "has_backlog": ran_check}
 
 
 def land(p):
@@ -278,6 +305,8 @@ def main(argv=None):
         print(f"NOT LANDED — {e}. Nothing was pushed, removed or deleted.", file=sys.stderr)
         return NOT_LANDED
     short = p["head"][:7]
+    if p["check_note"]:
+        print(p["check_note"])
     if p["pin_note"]:
         print(p["pin_note"])
     pinned = cwd_pins(p["top"])

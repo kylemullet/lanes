@@ -412,7 +412,10 @@ python3 scripts/release_tag.py --check 0.4.32      # is that version's tag on th
 ```
 
 The consumer side is guarded too. `lanes_land.py` refuses to land a pin to an untagged version,
-and `/lanes:doctor` warns on one. `LANES_RELEASE_REMOTE` points both lookups at another remote,
+and `/lanes:doctor` warns on one. It also runs `backlog_index.py --check` over the lane's tree
+before it pushes anything and refuses the landing on red (LANES-62), the same gate `push_guard.py`
+and `lanes_claim.py` apply before their pushes — a consumer that took its backlog check off the
+push trigger (a job billed a whole minute per push) keeps the gate at every landing. `LANES_RELEASE_REMOTE` points both lookups at another remote,
 and set but empty it turns them off (offline). Releases 0.4.10 to 0.4.30 went out untagged and
 turned a consumer's CI red for about 250 pushes before anyone noticed (LANES-33).
 

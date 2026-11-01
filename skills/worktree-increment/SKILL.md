@@ -509,7 +509,11 @@ step fails the push gate.
    `Docs:` line. The hash rule is exactly what a rebase manufactures, and the subject rule
    can only hold once the resolving commit exists, so it runs after the commit and the
    rebase, not before. A docs-only push has no suite run, which is when this manual check
-   is the only thing standing there.
+   is the only thing standing there. **`lanes_land.py` runs the same check itself, over the
+   lane's tree, before it pushes anything, and refuses the landing on red** (LANES-62): a
+   consumer whose per-push CI check is gone gets its backlog gate from the landing, not from
+   this step being remembered. Run it here anyway — a refusal at 9.7 costs a round trip this
+   step would have saved.
 5. **Push the branch first — no OK needed:**
 
    ```bash

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.66 — the landing runs `backlog --check` before it pushes (2026-10-30)
+
+- **`lanes_land.py` refuses a landing whose backlog check is red** (LANES-62). Its pre-landing
+  checks covered position, certification, a clean tree, the fast-forward and the pin's release
+  tag, and never `backlog_index.py --check`. `push_guard.py --ok-free` and `lanes_claim.py` run
+  that check before their pushes; the landing, the one push that carries a lane's `verified`
+  issue, did not, so its backlog gate was `worktree-increment` step 9.4 being remembered, and
+  after it the consumer's per-push CI job — which readlines took off the push trigger on
+  2026-10-27 (INFRA-138: GitHub bills every job a whole minute, and 2,135 nine-second runs
+  billed ~2,480 minutes in a month). The check now runs over the lane's tree right after the
+  clean-tree check, before the fetch, and a red result is a refusal: exit 1, nothing pushed,
+  the check's own findings in the message. A tree with no backlog dir skips it silently.
+- **`--dry-run` reports it like every other check**: a green check prints its summary line
+  beside the pin note, a red one refuses the dry run the way a dirty tree or a lost
+  fast-forward does.
+
 ## 0.4.65 — the startup and shutdown skills' frontmatter parses under a strict YAML reader (2026-10-30)
 
 - **The lanes `ci` had been red for ten releases, and nobody read it** (LANES-74). Since 0.4.54

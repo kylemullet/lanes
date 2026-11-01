@@ -218,6 +218,72 @@ def test_off_windows_the_worktree_form_is_unchanged(lane, monkeypatch, tmp_path)
     assert not wt.exists()
 
 
+# --- the backlog check gates the landing (LANES-62) --------------------------
+
+def _red_issue_in_the_lane(wt):
+    """A backlog file no parser accepts, committed to the lane: the shape push_guard's
+    own red-check test uses."""
+    d = wt / "docs" / "backlog" / "CORE"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "CORE-4-thing.md").write_text("no frontmatter\n", encoding="utf-8")
+    git("add", "docs/backlog/CORE/CORE-4-thing.md", cwd=wt)
+    git("commit", "-q", "-m", "docs(backlog): a broken issue file", cwd=wt)
+    git("push", "-q", "origin", "core-1-work", cwd=wt)
+
+
+def test_a_red_backlog_check_is_refused_before_anything_moves(lane, tmp_path, capsys):
+    """AC1: the per-push CI check is gone on the consumer side, so the landing runs the
+    local one itself and pushes nothing when it is red."""
+    origin, clone, wt = lane
+    _red_issue_in_the_lane(wt)
+    before = _remote_heads(origin, tmp_path)
+    assert run([]) == ll.NOT_LANDED
+    assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
+    assert git("branch", "--list", "core-1-work", cwd=clone).strip()
+    err = capsys.readouterr().err
+    assert "NOT LANDED" in err and "--check is red" in err and "CORE-4-thing.md" in err
+
+
+def test_dry_run_reports_a_red_backlog_check(lane, tmp_path, capsys):
+    """AC2: `--dry-run` runs every check, so a red check is reported there too."""
+    origin, clone, wt = lane
+    _red_issue_in_the_lane(wt)
+    before = _remote_heads(origin, tmp_path)
+    assert run(["--dry-run"]) == ll.NOT_LANDED
+    assert _remote_heads(origin, tmp_path) == before and wt.is_dir()
+    assert "--check is red" in capsys.readouterr().err
+
+
+def test_dry_run_reports_a_green_backlog_check(lane, tmp_path, capsys):
+    """AC2: the green result is printed among the checks, not only the red one."""
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    assert run(["--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "backlog --check: backlog check OK" in out and "dry run:" in out
+
+
+def test_a_green_backlog_check_lands_as_before(lane, tmp_path, capsys):
+    """AC3: a lane whose backlog is green lands, cleans up and closes exactly as it did."""
+    origin, clone, wt = lane
+    _verify_in_the_resolving_commit(wt)
+    tip = git("rev-parse", "--short=7", "HEAD", cwd=wt)
+    assert run([]) == 0
+    assert not wt.exists() and "core-1-work" not in _remote_heads(origin, tmp_path)
+    out = capsys.readouterr().out
+    assert "backlog --check: backlog check OK" in out and "landed:" in out and "close:" in out
+    text = _origin_issue(origin, tmp_path)          # landed, then closed on origin by the backfill
+    assert "status: closed" in text and f"commit: {tip}" in text
+
+
+def test_a_lane_without_a_backlog_dir_skips_the_check(lane, tmp_path, capsys):
+    """The default fixture has no backlog dir: the landing says nothing about the check
+    and lands as before."""
+    origin, clone, wt = lane
+    assert run([]) == 0
+    assert "backlog --check" not in capsys.readouterr().out
+
+
 # --- close the landed issue (LANES-21) --------------------------------------
 
 ISSUE = """---
