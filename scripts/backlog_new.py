@@ -51,10 +51,21 @@ Regenerates the local (gitignored) views afterwards.
 
 `--push` (LANES-5) commits the new file by explicit path and pushes it under the
 OK-free guard (`push_guard.py --ok-free`): an issue minted mid-session used to wait for
-"the next push", invisible to every other machine until then. Only from the main clone
-on the main branch -- an issue a lane mints rides in the lane's own commit -- and
-refused BEFORE anything is minted when that position is wrong. When the guard refuses
-(other work on local main), the issue is committed and stays local: exit 2.
+"the next push", invisible to every other machine until then. From a lane worktree,
+`--push` mints into the MAIN CLONE (the checkout this worktree shares its refs with) and
+pushes from there; it is refused BEFORE anything is minted when the main clone is off the
+main branch. When the guard refuses (other work on local main), the issue is committed and
+stays local: exit 2.
+
+A mint in a lane worktree WITHOUT `--push` is refused (LANES-63): exit 1, nothing written.
+An issue minted there reaches origin only when the lane lands, hours later, and for that
+whole window its number is free in every other checkout -- scan 2 cannot see a file that is
+on no ref yet, and `--check` cannot see the pair until the loser's rebase puts both files in
+one tree. On the project this was extracted from, two lanes each minted UI-114 and the
+suite found the duplicate forty minutes later. `--in-lane` is the deliberate exception (a
+repo with no origin, an issue that must ride in the lane's commit) and says so on stderr.
+`--context` writes the Context section at mint time, so one `--push` carries a complete
+issue.
 """
 import argparse, datetime, os, re, subprocess, sys
 from pathlib import Path
@@ -82,13 +93,12 @@ that proves it, and stays blank for a manual case.)
 | AC1 | | | |
 """
 
-BODY_STUB = """\
-## Context
-
+CONTEXT_STUB = """\
 (What this is and why it exists. Overwrite to current understanding — history
 lives in git blame + linked session assets, not in stacked amendments.)
+"""
 
-""" + ACCEPTANCE_STUB + """
+BODY_STUB = "## Context\n\n" + CONTEXT_STUB + "\n" + ACCEPTANCE_STUB + """
 ## Current status
 
 (Where it stands right now. Overwrite in place.)
@@ -246,7 +256,7 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
                  status="open", blocked_on=None, opened=None, closed=None,
                  commit=None, links=None, body=None,
                  regen_index=True, backlog=None, epic=None, reported_by=None,
-                 resolution=None, fetch=True, due=None):
+                 resolution=None, fetch=True, due=None, context=None):
     """Write the issue file and return its Path. Raises on invalid enums.
 
     `assignee` defaults to the configured default (the solo operator, or the first
@@ -269,6 +279,9 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
     `due` is the YYYY-MM-DD the issue stops being movable (a deadline, a dated
     event); written only when set, and the views open with the dated issues in
     calendar order (LANES-46).
+
+    `context` replaces the Context stub in the body (LANES-63), so an issue minted
+    with `--push` can be complete in the one commit that reserves its number.
     """
     if assignee is None:
         assignee = bidx.DEFAULT_ASSIGNEE
@@ -308,7 +321,10 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
     if epic:
         meta["epic"] = epic
     path = pdir / f"{iid}-{slugify(title)}.md"
-    content = f"{format_frontmatter(meta)}\n\n# {iid} — {title}\n\n{body or BODY_STUB}"
+    text = body or BODY_STUB
+    if context:
+        text = text.replace(CONTEXT_STUB, context.strip() + "\n", 1)
+    content = f"{format_frontmatter(meta)}\n\n# {iid} — {title}\n\n{text}"
     if not content.endswith("\n"):
         content += "\n"
     path.write_text(content, encoding="utf-8")
@@ -353,14 +369,36 @@ def main(argv=None):
                     help="parent epic (an existing issue with type: epic)")
     ap.add_argument("--no-fetch", dest="fetch", action="store_false",
                     help="number from the refs already fetched; skip `git fetch origin` (offline)")
+    ap.add_argument("--context", default=None, metavar="TEXT",
+                    help="the Context section, written at mint time in place of the stub")
     ap.add_argument("--push", action="store_true",
-                    help="commit the new issue alone and push it under the OK-free guard "
-                         "(main clone, main branch only)")
+                    help="commit the new issue alone and push it under the OK-free guard; from a "
+                         "lane worktree it mints into the main clone (LANES-63)")
+    ap.add_argument("--in-lane", dest="in_lane", action="store_true",
+                    help="mint into this lane worktree anyway, without reserving the ID on origin "
+                         "(the issue rides in the lane's commit; another lane can land the same number first)")
     args = ap.parse_args(argv)
-    if args.push:
+    where = push_guard.position(ROOT, bidx.MAIN_BRANCH)
+    if args.push and where and where.startswith(push_guard.IN_WORKTREE):
+        # A lane reserves its finding's number by minting on the main branch (LANES-63): from
+        # a worktree, --push targets the main clone this worktree shares its refs with.
+        bidx.configure(Path(bidx.main_clone()).resolve())
+        ROOT, BACKLOG, BACKLOG_REL = bidx.ROOT, bidx.BACKLOG, bidx.BACKLOG_REL
         where = push_guard.position(ROOT, bidx.MAIN_BRANCH)
+        print(f"--push from a lane: minting into the main clone {ROOT} (LANES-63)", file=sys.stderr)
+    if args.push:
         if where:
-            ap.error(f"--push: {where} — mint without --push; the issue rides in the lane's commit")
+            ap.error(f"--push: {where} — an ID is reserved on the main branch, so the main clone "
+                     f"must be on `{bidx.MAIN_BRANCH}`")
+    elif where and where.startswith(push_guard.IN_WORKTREE) and not args.in_lane:
+        print(f"refused: {where}. An issue minted here reaches origin only when the lane lands, so "
+              "until then its number is free in every other checkout (LANES-63). Add --push: it mints "
+              "into the main clone and pushes that one file under the OK-free guard, and the lane cites "
+              "the ID. --in-lane mints here anyway.", file=sys.stderr)
+        return 1
+    elif where and where.startswith(push_guard.IN_WORKTREE):
+        print("in-lane mint: this ID is on no ref until the lane lands, and another lane can take it "
+              "first (LANES-63)", file=sys.stderr)
     if args.reported_by == ME:
         # Explicit, never a default: the operator typed /lanes:new, so the reporter is the
         # operator row this machine resolves to. An unknown machine in a multi-operator
@@ -376,7 +414,7 @@ def main(argv=None):
                         blocked_on=args.blocked_on,
                         opened=args.opened or datetime.date.today().isoformat(),
                         links=[x.strip() for x in args.links.split(",")] if args.links else None,
-                        epic=args.epic, fetch=args.fetch, due=args.due)
+                        epic=args.epic, fetch=args.fetch, due=args.due, context=args.context)
     rel = path.relative_to(ROOT).as_posix()
     print(f"created {rel}")
     if args.push:

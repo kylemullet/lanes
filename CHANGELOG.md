@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.68 — a finding logged mid-lane is minted on the main branch, with `--push` (2026-11-01)
+
+- **An issue minted in a lane worktree could take an ID another lane landed first** (LANES-63).
+  `backlog_new.py` numbers from the union of the local tree and every fetched ref, which
+  cannot see a file that is on no ref yet. `worktree-increment` step 8 said to mint an
+  out-of-scope finding in the worktree so it rode in the lane's commit, and for the hours
+  until the lane landed its number was free in every other checkout. On the consumer, two
+  lanes each minted UI-114; the loser's rebase was clean (the filenames differ after the ID)
+  and left two files with one number, which the suite found forty minutes later through a
+  toggle's `clock_issue`. The incident is "The ID minted twice".
+- **`--push` from a worktree mints into the main clone** — the checkout the worktree shares
+  its refs with — and pushes the one file under the OK-free guard, so the ID is on origin the
+  moment it exists and the lane cites it. The main clone off the main branch is refused
+  before anything is minted. `push_guard.IN_WORKTREE` names the worktree reason once, so the
+  mint keys on a constant rather than prose.
+- **A worktree mint without `--push` is refused** (exit 1, nothing written), naming `--push`
+  and the exception: `--in-lane` mints into the worktree anyway and says on stderr that the
+  number is reserved on no ref.
+- **`--context "<text>"`** writes the Context section at mint time, so one `--push` carries a
+  complete issue; `/lanes:new` passes it and always pushes, from the main clone, inside a lane
+  too (it used to skip the push there). Step 8, the README and the incidents file say the
+  same; `--check`'s duplicate-ID finding, which already named both files, now has a test.
+
 ## 0.4.67 — the Brief ends its turn; the mode dialog is the next turn's (2026-11-01)
 
 - **The startup Brief was invisible in the Claude desktop app** (LANES-75). Since 0.4.62 the

@@ -393,14 +393,23 @@ Findings come back informally; sort each one in step 8.
 - **Suspected regression** → before treating it as one, re-run headless against the
   documented baseline (the issue's or feature doc's recorded numbers). Byte-identical to
   the record = pre-existing, not this increment's problem — say so with the evidence.
-- **Out-of-scope finding** → log it as a new backlog issue in the worktree:
+- **Out-of-scope finding** → log it as a new backlog issue **on the main branch, now** —
+  never in the worktree (LANES-63):
 
   ```bash
-  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py <PROJECT> "<title>" --type=… --assignee=… --reported-by=…
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py <PROJECT> "<title>" --type=… --assignee=… --reported-by=… --context "<what, where, why>" --push
   ```
 
   `--reported-by` is REQUIRED — the operator's short when their verification surfaced
-  it, `claude` when the lane did. It rides in this increment's commit.
+  it, `claude` when the lane did. **`--push` reserves the number**: run from the worktree, it
+  mints into the main clone and pushes that one file under the OK-free guard, so the ID is on
+  origin the moment it exists; the lane cites the ID and never carries the file. An issue
+  minted in the worktree reaches origin only when the lane lands, and for that whole window
+  its number is free in every other checkout — two lanes each minted the same ID, and the
+  loser's rebase left two files with one number that the suite found forty minutes later.
+  The script refuses a mint in a worktree without `--push`; `--in-lane` is the deliberate
+  exception (no origin, an issue that must ride in this commit), and `--check` names both
+  files of a duplicated ID after the rebase. (`incidents.md` → "The ID minted twice".)
 - Repeat 4→8 until the operator is satisfied.
 
 ### 8a. Close the doc loop

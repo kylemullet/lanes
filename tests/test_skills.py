@@ -373,3 +373,20 @@ def test_an_unknown_machine_gets_the_doctors_advice_and_one_question_at_most():
     assert "| `machine` (step zero) | the doctor's `machine` line is `OK` |" in step7
     inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
     assert "## The machine set up like someone else's (2026-10-28)" in inc
+
+
+def test_a_finding_logged_mid_lane_is_minted_on_the_main_branch_with_push():
+    """LANES-63: step 8 said to mint the finding in the worktree, where its number was free in
+    every other checkout until the lane landed; two lanes minted one ID."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    step8 = text.split("### 8. Triage findings", 1)[1].split("### 8a.", 1)[0]
+    assert "**on the main branch, now** —\n  never in the worktree (LANES-63)" in step8
+    assert '--context "<what, where, why>" --push' in step8
+    assert "**`--push` reserves the number**" in step8 and "mints into the main clone" in step8
+    assert "refuses a mint in a worktree without `--push`" in step8 and "`--in-lane`" in step8
+    assert "It rides in this increment's commit" not in step8
+    inc = (ROOT / "skills/worktree-increment/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The ID minted twice (2026-10-27)" in inc
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "**A finding logged mid-lane is minted on the main branch, with `--push`** (LANES-63)" in readme
+    assert '[--context "<why>"] [--push | --in-lane]' in readme

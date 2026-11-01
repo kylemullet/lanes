@@ -150,11 +150,20 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --check      # exit
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # aged view for this machine's operator (--who <short>|both)
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # view_mode = "serve": the HTML view on backlog.view_port, re-parsed per request
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit | --push]
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short> [--push]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short> [--context "<why>"] [--push | --in-lane]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py CORE-12 "a piece" "another" --reported-by=<short> [--dry-run | --push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free [--push] [--add <paths> -m "<subject>"]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py [--ff-only] [--dry-run]           # sync the main branch; reconciles a mirror-delivered tree
 ```
+
+**A finding logged mid-lane is minted on the main branch, with `--push`** (LANES-63). An issue minted
+in a lane worktree reaches origin only when the lane lands, and for that whole window its number is
+free in every other checkout: two lanes each minted the same ID, and the loser's rebase left two files
+with one number that the suite found forty minutes later. From a worktree, `backlog_new.py --push`
+mints into the main clone and pushes that one file under the OK-free guard, so the ID is on origin the
+moment it exists and the lane cites it; `--context` writes the Context section at mint time so the one
+push carries a complete issue. A worktree mint without `--push` is refused; `--in-lane` is the
+deliberate exception, and `--check` names both files of a duplicated ID.
 
 `lanes_pull.py` is the pull every skill runs on the main branch (LANES-38). A directory that is both
 git-tracked and mirrored by a file-sync client receives a landing's bytes before the next pull, so the

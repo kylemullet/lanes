@@ -206,12 +206,16 @@ def commit_paths(root, paths, subject):
     return (err or "git commit failed") if rc else None
 
 
+IN_WORKTREE = "this is a lane worktree"
+
+
 def position(root, main):
-    """None when root is the main clone on the main branch, else why not."""
+    """None when root is the main clone on the main branch, else why not. The worktree
+    reason starts with IN_WORKTREE, which `backlog_new.py --push` keys on (LANES-63)."""
     _, git_dir, _ = git("rev-parse", "--absolute-git-dir", cwd=root)
     _, common, _ = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=root)
     if git_dir and common and Path(git_dir).resolve() != Path(common).resolve():
-        return "this is a lane worktree — an OK-free push is made from the main clone"
+        return f"{IN_WORKTREE} — an OK-free push is made from the main clone"
     _, branch, _ = git("rev-parse", "--abbrev-ref", "HEAD", cwd=root)
     if branch != main:
         return f"the main clone is on `{branch}`, not `{main}`"

@@ -179,11 +179,14 @@ def test_backlog_new_push_mints_commits_and_publishes(setup, monkeypatch):
     assert git("show", "--name-only", "--format=", "main", cwd=origin) == "docs/backlog/CORE/CORE-4-a-raised-issue.md"
 
 
-def test_backlog_new_push_is_refused_in_a_worktree_before_minting(setup, monkeypatch):
-    _, clone, _ = setup
+def test_backlog_new_push_from_a_worktree_mints_into_the_main_clone_and_pushes(setup, monkeypatch, capsys):
+    """LANES-5 refused --push from a worktree; LANES-63 turns it into the way a lane reserves a
+    finding's number: the mint lands in the main clone and on origin, never in the worktree."""
+    origin, clone, _ = setup
     wt = clone.parent / "proj-lane"
     git("worktree", "add", "-q", "-b", "lane", str(wt), cwd=clone)
-    with pytest.raises(SystemExit) as e:
-        bn.main(["--root", str(wt), "CORE", "a raised issue", "--reported-by=claude", "--push"])
-    assert e.value.code == 2
-    assert not list((wt / "docs/backlog/CORE").glob("CORE-4-*"))
+    assert bn.main(["--root", str(wt), "CORE", "a raised issue", "--reported-by=claude", "--push"]) == 0
+    assert "minting into the main clone" in capsys.readouterr().err
+    assert not list((wt / "docs/backlog/CORE").glob("CORE-4-*"))          # the worktree never gets the file
+    assert list((clone / "docs/backlog/CORE").glob("CORE-4-*"))
+    assert git("show", "--name-only", "--format=", "main", cwd=origin) == "docs/backlog/CORE/CORE-4-a-raised-issue.md"

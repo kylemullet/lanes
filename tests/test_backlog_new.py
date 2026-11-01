@@ -456,3 +456,97 @@ def test_the_new_command_writes_acceptance_criteria_from_what_done_looks_like():
     from pathlib import Path
     text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
     assert "Acceptance criteria" in text and "Test ID" in text and "leave the table's stub" in text
+
+
+# --- a finding logged mid-lane is minted on the main branch (LANES-63) --------------------
+
+def _lane_repo(tmp_path, monkeypatch):
+    """A repo with a lanes config (so --root re-reads it), one valid issue, and a worktree."""
+    repo = _repo(tmp_path)
+    (repo / ".claude" / "lanes").mkdir(parents=True)
+    (repo / ".claude" / "lanes" / "config.toml").write_text(
+        '[backlog]\nprojects = ["INFRA", "UI"]\n', encoding="utf-8")
+    _git(repo, "config", "user.name", "Tester")       # the subprocess --check resolves the solo assignee from this
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "config")
+    wt = tmp_path / "repo-lane"
+    _git(repo, "worktree", "add", "-q", str(wt), "-b", "lane-work")
+    monkeypatch.setattr(bidx, "regenerate", lambda: None)
+    monkeypatch.setattr(bidx, "refresh_main_view", lambda: None)
+    return repo, wt
+
+
+def test_a_mint_in_a_lane_worktree_without_push_is_refused_and_names_the_fix(tmp_path, monkeypatch, capsys):
+    """LANES-63: an issue minted in a worktree is on no ref until the lane lands, so another
+    lane can take its number first. Refused, nothing written, --push and --in-lane named."""
+    repo, wt = _lane_repo(tmp_path, monkeypatch)
+    assert bn.main(["--root", str(wt), "UI", "found mid-lane", "--reported-by", "claude", "--no-fetch"]) == 1
+    out, err = capsys.readouterr()
+    assert "created" not in out and not list((wt / "docs" / "backlog").glob("UI/*.md"))
+    assert "refused: this is a lane worktree" in err and "LANES-63" in err
+    assert "Add --push" in err and "--in-lane mints here anyway" in err
+
+
+def test_in_lane_mints_into_the_worktree_and_says_the_number_is_unreserved(tmp_path, monkeypatch, capsys):
+    repo, wt = _lane_repo(tmp_path, monkeypatch)
+    assert bn.main(["--root", str(wt), "UI", "rides in the commit", "--reported-by", "claude",
+                    "--no-fetch", "--in-lane"]) == 0
+    out, err = capsys.readouterr()
+    assert out.startswith("created docs/backlog/UI/UI-1-rides-in-the-commit.md")
+    assert (wt / "docs/backlog/UI/UI-1-rides-in-the-commit.md").exists()
+    assert not (repo / "docs/backlog/UI").exists()
+    assert "in-lane mint" in err and "LANES-63" in err
+
+
+def test_push_from_a_lane_worktree_mints_into_the_main_clone_and_reserves_the_id_on_origin(tmp_path, monkeypatch, capsys):
+    """LANES-63: --push from a worktree targets the main clone the worktree shares refs with,
+    pushes the one file under the OK-free guard, and the worktree never gets the file."""
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", str(origin))
+    repo, wt = _lane_repo(tmp_path, monkeypatch)
+    _git(repo, "remote", "add", "origin", str(origin))
+    _git(repo, "push", "-q", "-u", "origin", "HEAD:refs/heads/main")
+    _git(repo, "branch", "-q", "-M", "main")
+    (repo / "docs/backlog/INFRA/INFRA-1-thing.md").unlink()      # the stub has no frontmatter; --check must pass
+    _git(repo, "commit", "-qam", "drop the stub")
+    _git(repo, "push", "-q", "origin", "main")
+    assert bn.main(["--root", str(wt), "UI", "reserved on origin", "--reported-by", "claude", "--push"]) == 0
+    out, err = capsys.readouterr()
+    assert "minting into the main clone" in err and "LANES-63" in err
+    assert out.startswith("created docs/backlog/UI/UI-1-reserved-on-origin.md")
+    assert (repo / "docs/backlog/UI/UI-1-reserved-on-origin.md").exists()
+    assert not (wt / "docs/backlog/UI").exists()
+    _git(repo, "fetch", "-q", "origin")
+    on_origin = _git(repo, "ls-tree", "-r", "--name-only", "origin/main").stdout
+    assert "docs/backlog/UI/UI-1-reserved-on-origin.md" in on_origin
+
+
+def test_push_is_refused_when_the_main_clone_is_off_the_main_branch(tmp_path, monkeypatch, capsys):
+    repo, wt = _lane_repo(tmp_path, monkeypatch)
+    _git(repo, "checkout", "-q", "-b", "elsewhere")
+    with pytest.raises(SystemExit):
+        bn.main(["--root", str(wt), "UI", "x", "--reported-by", "claude", "--push", "--no-fetch"])
+    assert "must be on `main`" in capsys.readouterr().err
+    assert not (repo / "docs/backlog/UI").exists() and not (wt / "docs/backlog/UI").exists()
+
+
+def test_context_replaces_the_stub_so_one_push_carries_a_complete_issue(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _point_at(monkeypatch, repo)
+    path = bn.create_issue("UI", "with context", reported_by="claude", regen_index=False, fetch=False,
+                           context="The problem, where it shows, the fix suggested.\n")
+    text = path.read_text(encoding="utf-8")
+    assert "## Context\n\nThe problem, where it shows, the fix suggested.\n\n## Acceptance criteria" in text
+    assert bn.CONTEXT_STUB not in text
+    plain = bn.create_issue("UI", "without", reported_by="claude", regen_index=False, fetch=False)
+    assert bn.CONTEXT_STUB in plain.read_text(encoding="utf-8") and bn.BODY_STUB.startswith("## Context\n\n(What this is")
+
+
+def test_the_new_command_pushes_from_the_main_clone_even_inside_a_lane():
+    """LANES-63: /lanes:new used to skip the push inside a worktree; the issue then took a
+    number another lane could land first."""
+    from pathlib import Path
+    text = (Path(__file__).resolve().parent.parent / "commands" / "new.md").read_text(encoding="utf-8")
+    assert "--reported-by=me [--context" in text and "--push" in text and "LANES-63" in text
+    assert "skip this: the issue rides in the lane" not in text

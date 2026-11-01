@@ -177,3 +177,22 @@ a habit, and the new contract removed the habit's slot. Now the debrief is the h
 specified deliverable, its contents are listed, and the skill says where it goes: a
 message, before the box. A ground rule says the same for anything else the operator is
 handed to read or run.
+
+## The ID minted twice (2026-10-27)
+
+Step 8 said to log an out-of-scope finding in the worktree, so it rode in the lane's commit.
+`backlog_new.py` numbers from the union of the local tree and every ref it has fetched, which
+catches a sibling lane's committed issue; it cannot catch a file that is on no ref yet. A UI
+lane minted two issues in its worktree, UI-114 (a toggle's cleanup clock, cited in code as
+`clock_issue="UI-114"`) and UI-115. Another lane then minted and landed its own UI-114 on the
+main branch. The first lane's rebase was clean, because the filenames differ after the ID, and
+its worktree then held two `UI-114-*.md` files. The toggle test resolved the clock issue to the
+other one and failed two cases, which cost a full-suite re-run of about forty minutes before
+anyone read the pair. Nothing had warned: the mint, the rebase and `--check` (which was not run
+between the rebase and the suite) were all silent. The fix was to re-mint both issues on the
+main branch with `--push` (they became UI-115 and UI-116) and renumber every reference. The
+number has to be reserved where every checkout can see it, which is origin: a finding is now
+minted with `--push`, which from a worktree mints into the main clone and pushes the one file
+under the OK-free guard, and the lane cites the ID. The script refuses a worktree mint without
+`--push`, `--in-lane` is the deliberate exception, and `--check` names both files of a
+duplicated ID.

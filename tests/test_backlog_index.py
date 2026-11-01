@@ -1811,3 +1811,17 @@ def test_report_prints_the_projects_block_between_due_and_the_backlog(capsys):
     block = out[out.index("PROJECTS —"):out.index("BACKLOG (kyle)")]
     assert block.index("INFRA") < block.index("PIPE") < block.index("UI") < block.index("PROD")
     assert "     INFRA    2 open ( 1 high)    1 active in the last 3 days" in block
+
+
+def test_check_names_both_files_of_a_duplicated_id(tmp_path, monkeypatch):
+    """LANES-63: after the loser's rebase a tree holds two files with one ID; --check names the
+    pair, so the first check after the rebase finds what the suite found forty minutes in."""
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "BACKLOG", tmp_path / "docs" / "backlog")
+    monkeypatch.setattr(bidx, "BACKLOG_REL", "docs/backlog")
+    put(tmp_path, "UI-1", title="a clock")
+    put(tmp_path, "UI-1", title="a theme", filename="UI-1-a-theme.md")
+    issues, problems = bidx.load_issues()
+    dup = [p for p in problems if "DUPLICATE id UI-1" in p]
+    assert len(dup) == 1 and "UI-1-a-clock.md" in dup[0] and "UI-1-a-theme.md" in dup[0], problems
+    assert any("DUPLICATE" in p for p in bidx.check_problems(issues, problems))
