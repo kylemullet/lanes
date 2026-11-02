@@ -201,8 +201,8 @@ warns and numbers from what is here; `--no-fetch` skips it.
 (LANES-5). `--ok-free`: every path ahead of `origin/<main>` is under `git.ok_free_paths`
 (default: the backlog dir alone), `--check` is green, and no commit edits a claim marker
 another machine wrote. `--claim`: every path is main-direct (the claim push's rule). The
-backfill close, `backlog_new.py --push`, a staleness fix, the ACTIVE flip and the shutdown sequence's
-release of an unreached claim all go through it; `--add` commits exactly the named paths
+backfill close, `backlog_new.py --push`, a staleness fix, the ACTIVE flip and a released claim
+(`lanes_claim.py --release`, LANES-81) all go through it; `--add` commits exactly the named paths
 first. Exit 0 passed (and pushed) · 1 refused, nothing pushed · 2 passed, push failed.
 
 One for the start of a lane, run in the main clone on the operator's directive (also
@@ -222,6 +222,12 @@ lane of its own by mistake; `--dry-run` prints the markers). A marker names its
 owner as `<Short>'s session on <machine id>@<host>`. `--resume <ID>` moves the operator's own
 ACTIVE lane to a second machine: it makes the worktree from the pushed branch, re-stamps the
 marker to this machine and pushes it. Another person's lane is refused (LANES-7).
+`--release <ID> … [--reason "<why>"]` undoes this machine's own claim in one backlog-only push
+(LANES-81): each issue goes back to the status its marker recorded as prior, loses its `lane:`
+and `lane_name:` lines, and keeps one line saying why, and anything queued behind it is
+re-queued. `session-closeout` releases the reservations a session never reached this way, and a
+lane releases a claim that was itself the mistake (an issue too big for one landing) before
+`backlog_split.py` makes it the epic. A worktree or branch the claim named is never touched.
 
 And one for the end of a lane, run from its worktree after the operator's landing OK:
 

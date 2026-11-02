@@ -84,7 +84,8 @@ routes around the issue exactly as it would for an active lane; nothing has to b
 inferred.
 
 A reserved issue the session never reaches is **released at shutdown**, not left claimed:
-set it back to the status it should carry and clear the marker and the `lane:` and `lane_name:` lines. An `in-progress` issue
+set it back to the status it should carry and clear the marker and the `lane:` and `lane_name:` lines,
+which `lanes_claim.py --release` does in one push (LANES-81). An `in-progress` issue
 with no live worktree and no session behind it poisons every future conflict scan.
 
 Concretely, handed "CORE-64, UI-40, INFRA-31": claim all three now (CORE-64 PENDING, the
@@ -185,7 +186,43 @@ Work happens in the MAIN checkout before the worktree exists:
    treat any hit NOT in the frontmatter list as stale-until-proven-live — fix it rather
    than reporting a conflict. `backlog.claim_marker_exempt` lists the issues that
    legitimately quote one.
-3. **Claim** — unless it is already made (`session-startup` 8b: frontmatter `in-progress`,
+3. **Ask before claiming: will this land in one go?** A lane is one landing. An issue that
+   will not land in one go is split before anything is claimed, and only its pieces become
+   lanes: a claim on work the repository cannot finish shows as an ACTIVE LANE for days
+   while its real state is "waiting on the operator" (`incidents.md` → "The application
+   that held a lane"). Read the issue for the signals it already carries — a `due:` date
+   well beyond one increment; steps outside the repository in its Context (forms, a fee,
+   emails, a video, a call, a signature); phases or parts; independent deliverables; more
+   than one session's work — and route it before the claim:
+
+   - **It lands in one go** → claim it, below.
+   - **It has repository pieces and more** → say so, and on the operator's yes split it
+     from the main clone, `backlog_split.py <ID> "<piece>" … --reported-by=claude --push`
+     (`/lanes:split`): the issue becomes the epic, the pieces its children, and the lane
+     claims the first child in its place.
+   - **It has no repository piece at all** → claim nothing. Left open with its `due:` date,
+     it stays off the lanes board and still heads the dated list; the session prepares and
+     records, and the operator acts.
+
+   Say which route you took in the message that runs the claim or the split, so the
+   operator can overrule it. When `session-startup` 8b made the claim, it asked this already.
+
+   **Claimed it, and only then saw it won't land in one go? Release your own claim first,
+   then split.** `backlog_split.py` makes an UNCLAIMED issue the epic, but on a claimed one
+   it takes the partial-landing path (step 9.1): the issue is demoted to a child under a
+   newly minted epic, and its ID, which other issues and docs cite as the whole piece of
+   work, ends up meaning only its first part. From the main clone, on the main branch:
+
+   ```bash
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py --release <ID> --reason "<why>"
+   ```
+
+   It refuses anything but this machine's own claim, puts back the status the marker
+   recorded as prior, removes the `lane:` and `lane_name:` lines, replaces the marker with
+   one line saying why, and pushes under the OK-free guard. A worktree and branch the claim
+   named are left exactly as they are: commit or park what is in them first.
+
+   **Then claim it** — unless it is already made (`session-startup` 8b: frontmatter `in-progress`,
    the ⏳ marker names this session, the claim commit is on `origin/<main_branch>`). If so,
    confirm the expected-files list and skip to step 2. Otherwise claim it — from the MAIN
    CHECKOUT, on the main branch — with the same script startup uses:
@@ -499,7 +536,8 @@ step fails the push gate.
    of them; otherwise they are claimed like any other issue. Only a lane that lands NOTHING
    (parked, abandoned) goes back to the queue: the status it should carry, Current status
    saying where it stopped, and no `lane:` or `lane_name:` line — `--check` fails one on an
-   open, blocked or paused issue.
+   open, blocked or paused issue. `lanes_claim.py --release <ID> --reason "<where it
+   stopped>"`, from the main clone, writes all three in one push (LANES-81).
 
    **A project may require more Resolution lines than `Docs:`** (`[[backlog.required_lines]]`,
    which `/lanes:doctor` lists — a `Toggle:` line on every story, say). A verified issue in

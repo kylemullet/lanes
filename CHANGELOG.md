@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.75 — ask "will this land in one go?" before claiming, and release your own claim by script (2026-11-01)
+
+- **A lane is one landing** (LANES-81; Kyle, 2026-11-01: *"if it's going to be in progress for a
+  couple of weeks it should be an epic and off the lanes board"*). A readlines application issue
+  — portal forms, a fee, a video, emails, one drafted document — was claimed to draft the
+  document and showed as an ACTIVE LANE for five days whose real state was "waiting on Kyle's
+  review". `worktree-increment` step 1.3 now asks before the claim, from the signals the issue
+  carries (a `due:` well beyond one increment, steps outside the repository, phases, more than one
+  session's work), and routes it: claim it; split it first and claim the first child; or, with no
+  repository piece at all, claim nothing and let its `due:` keep it on the dated list.
+  `session-startup` 8b.1 reads the same signals.
+- **Splitting a claimed issue demotes it**, and the skill now says so: `backlog_split.py` makes an
+  UNCLAIMED issue the epic, but takes the partial-landing path on a claimed one, so the issue's ID
+  would come to mean its first piece. Release your own claim first, then split.
+- **`lanes_claim.py --release <ID> … [--reason "<why>"]`** is that release. Every named ID must be
+  `in-progress` under a marker this machine wrote, or nothing is written. Each goes back to the
+  status its marker recorded as prior (`open` when none), loses `lane:` and `lane_name:`, and its
+  marker becomes one `↩ CLAIM RELEASED (…)` line naming the state it left and why; a reservation
+  queued behind a released issue is re-queued behind what that issue was queued behind. One commit
+  by explicit path, `--check`ed and pushed under the OK-free guard; exit `2` when something else
+  ahead of origin holds the push. A worktree or branch named by a released ACTIVE marker is
+  listed and left alone. `--dry-run` prints the lines.
+- **`session-closeout` releases unreached reservations with it**, replacing three hand edits per
+  issue and a marker written from memory, and `worktree-increment` 9.1's parked lane points at it.
+
 ## 0.4.74 — a lane carries a name, required at claim and shown after its IDs (2026-11-01)
 
 - **A lane was identified by its issue IDs alone** (LANES-80; Kyle's screenshot: the card read

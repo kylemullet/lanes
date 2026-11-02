@@ -162,10 +162,12 @@ current understanding. At every shutdown, either operator:
 - **Release every RESERVED claim the session never reached.** A lane claims all its
   issues up front, so a session that runs out of time leaves `status: in-progress` on
   issues with no worktree and nobody behind them, and those poison every future conflict
-  scan. For each lane issue still marked `RESERVED, NOT STARTED`: set `status` back to
-  what it should now carry (`open`, or `blocked` / `paused` if that was its prior state),
-  delete its `lane:` and `lane_name:` lines, and overwrite the ⏳ marker to say it was claimed and not reached. An issue that WAS
-  worked and is parked mid-flight keeps its claim — that is a live lane.
+  scan. Release every lane issue still marked `RESERVED, NOT STARTED` with the claim
+  script (LANES-81): it sets `status` back to the prior state its marker recorded (`open`,
+  or `blocked` / `paused`), deletes its `lane:` and `lane_name:` lines, overwrites the ⏳
+  marker with one line saying it was claimed and not reached, and re-queues anything that
+  waited behind it. An issue that WAS worked and is parked mid-flight keeps its claim —
+  that is a live lane.
 
   🚫 **Release only THIS session's own claims.** Shutdown is where a claim is released
   precisely because the session releasing it is the one that made it. Another session's
@@ -175,12 +177,15 @@ current understanding. At every shutdown, either operator:
 
   ```bash
   grep -rln "RESERVED, NOT STARTED" <backlog.dir>
-  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free --push --add <released files> -m "docs(backlog): release <IDs> — claimed, not reached"
+  sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py --release <IDs> --reason "claimed, not reached"
   ```
 
-  The release is a backlog-only push and needs no OK. The guard refuses a commit that
-  edits a marker another machine wrote, which catches the cross-machine half of the rule
-  above; two sessions on one machine share an id, so that half stays yours to keep.
+  The release is a backlog-only push and needs no OK; when something else is ahead of
+  origin on local main, it commits and exits `2`, and the release rides with the next push
+  the operator OKs. The script refuses a claim another machine wrote, which catches the
+  cross-machine half of the rule above (a release the operator names on another machine's
+  claim is still made by hand); two sessions on one machine share an id, so that half stays
+  yours to keep.
 - **Run the backlog check:**
 
   ```bash

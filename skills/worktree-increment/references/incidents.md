@@ -203,3 +203,22 @@ which is exactly the window above, once per child. Now `--push` from a lane mint
 and the wrapping epic into the main clone and pushes them, and only the claimed parent's own
 `epic:` line is written in the lane, where its resolving commit carries it; a worktree split
 without `--push` is refused.
+
+## The application that held a lane (2026-11-01)
+
+An accelerator application, due in twelve days, was claimed as a lane on 2026-10-27 to draft
+its concept summary. Almost none of the issue was repository work: portal forms, a fee, a
+video, emails. For five days the board showed an ACTIVE LANE whose real state was "waiting on
+the operator's review", and the draft sat uncommitted in the worktree the whole time. The
+operator's rule, stated the day it was found: *a lane is one landing*. An issue that will not
+land in one go is split before anything is claimed, and only its pieces become lanes; an issue
+with no repository piece at all is not claimed, and its `due:` keeps it on the dated list.
+
+The fix exposed a second trap. `backlog_split.py` makes an UNCLAIMED issue the epic, but on a
+claimed one it takes the partial-landing path, which demotes the issue to a child under a newly
+minted epic. That is right mid-lane, and wrong when the claim itself was the mistake: the
+application's ID, which other issues cite as the application, would have come to mean its
+first draft. The only route was to release the claim by hand (status, two lane lines, a marker
+spelled from memory), then split, then claim the draft as the new child. Step 1.3 now asks the
+question before the claim, and `lanes_claim.py --release` is the release (LANES-81), which
+`session-closeout` uses for the reservations a session never reached as well.

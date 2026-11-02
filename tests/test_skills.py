@@ -463,3 +463,26 @@ def test_check_holds_the_lane_to_the_acceptance_criteria_table_where_configured(
     assert "| `[backlog.acceptance_criteria]` | none |" in readme
     tmpl = (ROOT / "templates/config.toml").read_text(encoding="utf-8")
     assert "# [backlog.acceptance_criteria]" in tmpl and "LANES-61" in tmpl
+
+
+def test_a_lane_asks_whether_it_lands_in_one_go_and_releases_its_own_claim_by_script():
+    """LANES-81: an application issue (forms, a fee, a video, one drafted document) held an
+    ACTIVE LANE for five days, and undoing it took a hand release before the split, because
+    `backlog_split.py` demotes a claimed issue to a child."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    step1 = text.split("### 1. Sync main + claim the item", 1)[1].split("### 1r.", 1)[0]
+    ask, claim = step1.split("**Then claim it**", 1)
+    assert "**Ask before claiming: will this land in one go?** A lane is one landing." in ask
+    assert "**It has no repository piece at all** → claim nothing." in ask
+    assert "the issue is demoted to a child" in ask
+    assert 'lanes.sh" lanes_claim.py --release <ID> --reason "<why>"' in ask
+    assert 'lanes_claim.py <ID> --name "<lane name>"' in claim          # the question comes first
+    assert "`lanes_claim.py --release <ID> --reason \"<where it" in text   # 9.1's parked lane
+    closeout = (ROOT / "skills/session-closeout/SKILL.md").read_text(encoding="utf-8")
+    assert 'lanes.sh" lanes_claim.py --release <IDs> --reason "claimed, not reached"' in closeout
+    assert "--add <released files>" not in closeout                       # no hand-edited release
+    assert "(`worktree-increment` step 1.3, LANES-81)" in _startup()
+    inc = (ROOT / "skills/worktree-increment/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The application that held a lane (2026-11-01)" in inc
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert '`--release <ID> … [--reason "<why>"]`' in readme and "(LANES-81)" in readme

@@ -8,6 +8,7 @@ Usage (in the MAIN clone, on the main branch, on the operator's directive):
   python3 lanes_claim.py INFRA-122 --next-in INFRA-112  # put an issue at the FRONT of a lane (LANES-49)
   python3 lanes_claim.py CORE-64 --name "Export to PDF" --dry-run
   python3 lanes_claim.py --resume CORE-64              # the same operator, a second machine (LANES-7)
+  python3 lanes_claim.py --release UI-40 INFRA-31 --reason "claimed, not reached"   # your own claim (LANES-81)
 
 `session-startup` step 8b and `worktree-increment` step 1 as one all-or-nothing
 operation (LANES-9). Written by hand, the claim slipped twice in one lane: a named
@@ -61,8 +62,23 @@ which allows exactly this rewrite of another machine's marker. It is the owner m
 own lane, so INFRA-47's "never write to another session's claim" is not in play -- which is
 also why another person's lane is refused outright.
 
-Exit status: 0 claimed and pushed; 1 refused, nothing written or committed; 2 committed
-but not pushed (the reason is printed; the commit is on local main).
+`--release <ID> …` (LANES-81) undoes this machine's own claim: the reservations a session
+never reached (`session-closeout`), or a claim that was itself the mistake -- an issue too
+big for one landing, released so `backlog_split.py` makes it the epic instead of demoting
+it to a child. Every named ID must be `in-progress` under a marker this machine wrote, or
+nothing is written. Each goes back to the status its marker recorded as prior (`open`
+when none), loses its `lane:` and `lane_name:` lines, and its marker is overwritten with
+one line saying it was released, from which state and why (`--reason`). A reservation
+queued behind a released issue is re-queued behind what that issue was queued behind,
+so the lane's chain stays whole. A worktree and branch named by a released ACTIVE marker
+are left exactly as they are and named in the output: the release touches only the
+backlog. One commit by explicit path, pushed under the OK-free guard (a released claim is
+a backlog-only push and needs no OK). Done by hand, the release was three edits per issue
+in two skills' words, and a marker edited by hand drifts from what the doctor reads --
+the reason the claim itself became a script (LANES-9).
+
+Exit status: 0 claimed (or released) and pushed; 1 refused, nothing written or committed;
+2 committed but not pushed (the reason is printed; the commit is on local main).
 """
 import argparse, datetime, re, socket, subprocess, sys
 from pathlib import Path
@@ -76,6 +92,7 @@ ACTIVE_LINE_RE = re.compile(r"^⏳ IN-PROGRESS \((?P<stamp>\d{4}-\d{2}-\d{2}(?: 
                             r"(?P<info>[^)]*)\) — \*\*ACTIVE LANE[^*]*\*\*(?P<tail>.*)$", re.M)
 
 QUEUED_RE = re.compile(r"([Qq]ueued behind\s+)(?:\[\[)?[A-Z][A-Z0-9]*-\d+(?:\]\])?")
+PRIOR_RE = re.compile(r"Prior status: `([a-z-]+)`")
 
 NOT_CLAIMED, NOT_PUSHED = 1, 2
 PENDING, RESERVED = "WORKTREE PENDING", "RESERVED, NOT STARTED"
@@ -181,6 +198,34 @@ def with_lane(text, lane, name=None):
     at = next((i for i, l in enumerate(fm) if l.startswith("status:")), len(fm) - 1)
     fm[at + 1:at + 1] = _lane_lines(lane, name)
     return nl.join(fm) + sep + body
+
+
+def without_claim(text, status, line):
+    """`text` released: `status:` restored, `lane:` and `lane_name:` gone, the marker replaced by `line`."""
+    nl = "\r\n" if "\r\n" in text else "\n"
+    head, sep, body = text.partition(f"{nl}---{nl}")
+    if not sep or not head.startswith("---"):
+        raise Refused("no frontmatter block")
+    fm = [f"status: {status}" if l.startswith("status:") else l
+          for l in head.split(nl) if not l.startswith(("lane:", "lane_name:"))]
+    old = next((l for l in body.split(nl) if l.startswith("⏳ IN-PROGRESS")), None)
+    if old is None:
+        raise Refused("no claim marker")
+    return nl.join(fm) + sep + body.replace(old, line, 1)
+
+
+def released_line(stamp, who, mk, lane, reason):
+    """The one line that takes a released marker's place. It never quotes a marker: the
+    word `--check` reads as a claim must not survive the release."""
+    where = ", ".join(f"{k} {mk[k]}" for k in ("worktree", "branch") if mk.get(k))
+    state = {"active": "the lane's active issue" + (f" ({where})" if where else ""),
+             "pending": "waiting on its worktree",
+             "reserved": "reserved, not started"}.get(mk.get("state"), "claimed")
+    line = f"↩ CLAIM RELEASED ({stamp}, {who}) — was {state}" + (f" in lane {lane}" if lane else "")
+    line += "; nothing of it landed."
+    if reason:
+        line += f" {reason}" + ("" if reason[-1] in ".!?" else ".")
+    return line
 
 
 def requeued(text, behind):
@@ -454,6 +499,134 @@ def resume(root, issue_id, path=None, now=None):
     return 0, f"resumed {issue_id} on {me['id']}: worktree {target}, branch {branch} ({msg})"
 
 
+def _release_rewrites(claim, issues, ids, reason):
+    """{rel path: new text} releasing `ids` and re-queueing what waited behind them, plus
+    the lines to print. Raises Refused before anything is written."""
+    import backlog_index as bidx
+    root, me = claim.root, claim.cfg["machine"]
+    problems, plan = [], {}
+    for iid in ids:
+        rel, problem = claim.origin_path(iid)
+        if problem:
+            problems.append(problem)
+            continue
+        claim.paths[iid] = rel
+        text = (root / rel).read_text(encoding="utf-8")
+        meta = frontmatter(text) or {}
+        line = next((l for l in text.splitlines() if l.startswith("⏳ IN-PROGRESS")), None)
+        author = push_guard.marker_author(line) if line else None
+        if meta.get("status") != "in-progress":
+            problems.append(f"{iid}: not claimed (status `{meta.get('status')}`)")
+        elif not author:
+            problems.append(f"{iid}: claimed with no readable marker — fix it by hand (`--check` names it)")
+        elif not push_guard.is_mine(author, me):
+            problems.append(f"{iid}: claimed by {author[1] or author[0]}, not this machine — only the "
+                            "session that owns a claim, or the operator naming it, releases it")
+        elif git("status", "--porcelain", "--", rel, cwd=root)[1]:
+            problems.append(f"{iid}: {rel} has uncommitted changes")
+        else:
+            plan[iid] = (rel, text, line, meta)
+    if problems:
+        raise Refused("; ".join(problems))
+
+    who, texts, lines, behind_of = identity(claim.cfg), {}, [], {}
+    for iid, (rel, text, line, meta) in plan.items():
+        mk = bidx.parse_marker(text) or {}
+        behind_of[iid] = mk.get("behind")
+        prior = PRIOR_RE.search(line)
+        status = prior.group(1) if prior and prior.group(1) in ("open", "blocked", "paused") else "open"
+        lane = meta.get("lane") if meta.get("lane") not in (None, "", "null", "~") else None
+        try:
+            texts[rel] = without_claim(text, status, released_line(claim.stamp, who, mk, lane, reason))
+        except Refused as e:
+            raise Refused(f"{iid}: {e}")
+        lines.append(f"released {iid}: {mk.get('state') or 'claimed'} → {status}")
+        if mk.get("state") == "active" and (mk.get("worktree") or mk.get("branch")):
+            where = " and ".join(f"{k} {mk[k]}" for k in ("worktree", "branch") if mk.get(k))
+            lines.append(f"  {where} untouched — commit or park what is there before removing either")
+
+    def ahead(b):
+        """What a released issue was queued behind, past any other released one."""
+        seen = set()
+        while b in plan and b not in seen:
+            seen.add(b)
+            b = behind_of.get(b)
+        return b
+
+    for it in issues:
+        mk = it.get("_marker") or {}
+        if it.get("status") != "in-progress" or it.get("id") in plan or mk.get("behind") not in plan:
+            continue
+        rel = Path(it["_path"]).as_posix()
+        text = (root / rel).read_text(encoding="utf-8")
+        line = next((l for l in text.splitlines() if l.startswith("⏳ IN-PROGRESS")), "")
+        author = push_guard.marker_author(line)
+        new = ahead(mk["behind"])
+        if not (author and push_guard.is_mine(author, me)):
+            lines.append(f"  {it['id']} (another machine's claim) stays queued behind {mk['behind']}")
+        elif new:
+            claim.paths[it["id"]] = rel
+            claim.watched.append(it["id"])
+            texts[rel] = requeued(text, new)
+            lines.append(f"re-queued {it['id']} behind {new}")
+        else:
+            lines.append(f"  {it['id']} heads its lane now (queued behind {mk['behind']}, released)")
+    return texts, lines
+
+
+def release(root, ids, reason=None, now=None, dry_run=False):
+    """Release this machine's own claims on `ids` (LANES-81). Returns (exit code, [lines])."""
+    import backlog_index as bidx
+    reason = " ".join((reason or "").split())
+    saved = None
+    try:
+        if "IN-PROGRESS" in reason:
+            raise Refused("--reason may not quote a claim marker — `--check` would read it as a claim")
+        claim = Claim(root, list(ids), now=now)
+        claim.position()
+        claim.sync()
+        values = bidx.settings(root)
+        saved = {k: getattr(bidx, k, None) for k in values}
+        bidx.apply(values)
+        issues, _ = bidx.load_issues()
+        texts, lines = _release_rewrites(claim, issues, ids, reason)
+    except Refused as e:
+        return NOT_CLAIMED, [f"NOT RELEASED — {e}. Nothing was written."]
+    finally:
+        if saved is not None:
+            bidx.apply(saved)
+    subject = f"docs(backlog): release {', '.join(ids)} — {reason.rstrip('.') or 'claim released, nothing landed'}"
+    if dry_run:
+        verbs = {"released ": "would release ", "re-queued ": "would re-queue "}
+        out = [next((v + l[len(k):] for k, v in verbs.items() if l.startswith(k)), l) for l in lines]
+        for rel, text in texts.items():
+            new = next((l for l in text.splitlines() if l.startswith(("↩ CLAIM RELEASED", "⏳ IN-PROGRESS"))), "")
+            out.append(f"would write {rel}\n  {new}")
+        return 0, out + [f"would commit: {subject}"]
+    originals = {rel: (root / rel).read_bytes() for rel in texts}
+    for rel, text in texts.items():
+        with open(root / rel, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+
+    def restore():
+        for rel, data in originals.items():
+            (root / rel).write_bytes(data)
+
+    ok, out = claim.check()
+    if not ok:
+        restore()
+        return NOT_CLAIMED, [f"NOT RELEASED — backlog --check failed; the files were restored.\n{out}"]
+    err = push_guard.commit_paths(root, list(texts), subject)
+    if err:
+        restore()
+        git("reset", "-q", "--", *texts, cwd=root)
+        return NOT_CLAIMED, [f"NOT RELEASED — git commit failed: {err}. The files were restored."]
+    code, msg = push_guard.push(root, claim.cfg, push_guard.OK_FREE)
+    if code:
+        return NOT_PUSHED, lines + [f"committed, not pushed: {subject} — {msg}"]
+    return 0, lines + [f"committed: {subject}  ({msg})"]
+
+
 def main(argv=None):
     use_utf8_console()
     ap = argparse.ArgumentParser(description="lanes: claim a lane of backlog issues in one pushed commit")
@@ -472,9 +645,17 @@ def main(argv=None):
     ap.add_argument("--next-in", default=None, metavar="LANE",
                     help="put the IDs at the FRONT of a claimed lane, next to work (LANES-49): a lane key "
                          "or any member's ID; an ID this machine claimed alone in another lane moves in")
+    ap.add_argument("--release", action="store_true",
+                    help="release this machine's own claims on the IDs: prior status back, lane lines and "
+                         "marker gone, one backlog-only push (LANES-81)")
+    ap.add_argument("--reason", default=None,
+                    help="with --release: why, written into each released issue's Current status")
     args = ap.parse_args(argv)
+    if args.reason is not None and not args.release:
+        ap.error("--reason goes with --release")
     if args.resume:
-        if args.ids or args.behind or args.dry_run or args.next_in or args.name is not None:
+        if (args.ids or args.behind or args.dry_run or args.next_in or args.name is not None
+                or args.release):
             ap.error("--resume takes one ID and no other claim options")
         root = Path(git("rev-parse", "--show-toplevel", cwd=Path.cwd())[1] or Path.cwd())
         code, msg = resume(root, args.resume.strip().upper(), path=args.path)
@@ -483,6 +664,18 @@ def main(argv=None):
     if not args.ids:
         ap.error("name at least one ID (or --resume ID)")
     ids = list(dict.fromkeys(i.strip().upper() for i in args.ids))
+    if args.release:
+        if args.name is not None or args.files or args.behind or args.next_in or args.path:
+            ap.error("--release takes IDs, --reason and --dry-run only")
+        root = Path(git("rev-parse", "--show-toplevel", cwd=Path.cwd())[1] or Path.cwd())
+        try:
+            code, lines = release(root, ids, reason=args.reason, dry_run=args.dry_run)
+        finally:
+            if not args.dry_run:
+                push_guard.refresh_view(root)
+        for line in lines:
+            print(line, file=sys.stdout if code == 0 else sys.stderr)
+        return code
     if args.name is not None and (args.behind or args.next_in):
         ap.error("--name names a new lane; --behind and --next-in join one that already has its name")
     if args.next_in:

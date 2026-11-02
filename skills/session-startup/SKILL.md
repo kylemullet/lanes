@@ -658,10 +658,13 @@ after the brief, and it happens *before* the first worktree exists:
    ID is already `in-progress`, stop and say so — it may be another session's lane. 🚫 Do
    not release, re-date or edit that claim to clear the way, however stale it looks.
    **An issue bigger than one landing is split now, before its lane starts** — phases or
-   parts in its text, independent deliverables, more than one session's work. Say so, and
+   parts in its text, independent deliverables, more than one session's work, steps outside
+   the repository (forms, a fee, emails), a `due:` well beyond one increment. Say so, and
    on the operator's yes run `backlog_split.py <ID> "<child>" … --reported-by=claude --push`
    (`/lanes:split`): the issue becomes the epic, the children are minted under it, and the
-   lane claims the children in its place. An epic is never claimed.
+   lane claims the children in its place. An epic is never claimed. An issue with no
+   repository piece at all is not claimed either: open, with its `due:`, it stays off the
+   lanes board (`worktree-increment` step 1.3, LANES-81).
 2. **Claim every ID now, up front, in one call** — from the main checkout, on the main
    branch:
 

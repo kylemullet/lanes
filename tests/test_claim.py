@@ -436,3 +436,113 @@ def test_with_lane_and_requeued_each_change_one_line():
     out = lcl.requeued(laned, "CORE-4")
     assert "queued behind CORE-4." in out and "CORE-9" not in out
     assert sum(a != b for a, b in zip(laned.split("\n"), out.split("\n"))) == 1
+
+
+# --- --release: this machine's own claim, undone in one push (LANES-81) -------------------
+
+def _clone_text(clone, issue_id):
+    return (clone / f"docs/backlog/CORE/{issue_id}-thing.md").read_text(encoding="utf-8")
+
+
+def _activate(clone, issue_id, worktree, branch):
+    """Flip this machine's PENDING marker to ACTIVE the way worktree-increment step 2 does."""
+    import re
+    p = clone / f"docs/backlog/CORE/{issue_id}-thing.md"
+    text = re.sub(r"\) — \*\*WORKTREE PENDING\.\*\* Claim pushed; worktree not yet created\.",
+                  f", worktree {worktree}, branch {branch}) — **ACTIVE LANE.**", p.read_text(encoding="utf-8"))
+    p.write_text(text, encoding="utf-8")
+    git("commit", "-q", "-am", f"docs(backlog): {issue_id} claim → ACTIVE LANE", cwd=clone)
+    git("push", "-q", "origin", "main", cwd=clone)
+
+
+def test_release_returns_a_reservation_to_its_prior_status_and_keeps_the_chain(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2", "CORE-3"]) == 0
+    capsys.readouterr()
+    assert lcl.main(["--release", "CORE-2", "--reason", "claimed, not reached"]) == 0
+    out = capsys.readouterr().out
+    assert "released CORE-2: reserved → blocked" in out and "re-queued CORE-3 behind CORE-1" in out
+    assert _origin_log(origin, tmp_path) == "docs(backlog): release CORE-2 — claimed, not reached"
+    text = _origin_text(origin, tmp_path, "CORE-2")
+    assert "\nstatus: blocked\n" in text                                  # its Prior status, not `open`
+    assert "\nlane:" not in text and "\nlane_name:" not in text
+    assert "IN-PROGRESS" not in text                                      # --check reads that word as a claim
+    assert "## Current status\n\n↩ CLAIM RELEASED (2026-10-07 09:05, Tester's session on " in text
+    assert ") — was reserved, not started in lane CORE-1@2026-10-07; nothing of it landed. claimed, not reached." in text
+    assert "\n\nOpen.\n" in text                                          # the text under the marker is kept
+    third = _origin_text(origin, tmp_path, "CORE-3")
+    assert "queued behind CORE-1." in _marker(third) and "\nlane: CORE-1@2026-10-07\n" in third
+    assert git("status", "--porcelain", cwd=clone) == ""
+
+
+def test_release_of_an_active_claim_leaves_its_worktree_and_branch_and_names_them(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-3"]) == 0
+    _activate(clone, "CORE-1", "proj-core-1", "core-1-work")
+    capsys.readouterr()
+    assert lcl.main(["--release", "CORE-1", "--reason", "too big for one landing; split it"]) == 0
+    out = capsys.readouterr().out
+    assert "released CORE-1: active → open" in out
+    assert "worktree proj-core-1 and branch core-1-work untouched" in out
+    assert "CORE-3 heads its lane now" in out
+    text = _origin_text(origin, tmp_path, "CORE-1")
+    assert "\nstatus: open\n" in text and "IN-PROGRESS" not in text
+    assert ("was the lane's active issue (worktree proj-core-1, branch core-1-work) in lane "
+            "CORE-1@2026-10-07; nothing of it landed. too big for one landing; split it.") in text
+    assert "\nstatus: in-progress\n" in _origin_text(origin, tmp_path, "CORE-3")   # the rest of the lane stays
+
+
+def test_release_of_a_whole_lane_restores_every_issue(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2", "CORE-3"]) == 0
+    assert lcl.main(["--release", "CORE-1", "CORE-2", "CORE-3"]) == 0
+    assert _origin_log(origin, tmp_path) == ("docs(backlog): release CORE-1, CORE-2, CORE-3 — "
+                                             "claim released, nothing landed")
+    for issue_id, status in (("CORE-1", "open"), ("CORE-2", "blocked"), ("CORE-3", "open")):
+        text = _origin_text(origin, tmp_path, issue_id)
+        assert f"\nstatus: {status}\n" in text and "IN-PROGRESS" not in text and "\nlane" not in text
+    assert "re-queued" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("argv,why", [
+    (["--release", "CORE-5"], "claimed by other, not this machine"),     # another session's claim
+    (["--release", "CORE-4"], "CORE-4: not claimed (status `open`)"),
+    (["--release", "CORE-6"], "CORE-6: not claimed (status `closed`)"),
+    (["--release", "CORE-1", "CORE-4"], "CORE-4: not claimed"),          # all or nothing
+    (["--release", "CORE-1", "--reason", "see ⏳ IN-PROGRESS"], "may not quote a claim marker"),
+])
+def test_release_refuses_and_writes_nothing(setup, tmp_path, capsys, argv, why):
+    origin, clone, _ = setup
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == 0
+    before = {i: _clone_text(clone, i) for i in ("CORE-1", "CORE-4", "CORE-5")}
+    head = _origin_log(origin, tmp_path)
+    assert lcl.main(argv) == lcl.NOT_CLAIMED
+    err = capsys.readouterr().err
+    assert "NOT RELEASED" in err and why in err and "Nothing was written." in err
+    assert {i: _clone_text(clone, i) for i in before} == before
+    assert _origin_log(origin, tmp_path) == head and git("status", "--porcelain", cwd=clone) == ""
+
+
+def test_release_dry_run_prints_the_lines_and_writes_nothing(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2"]) == 0
+    head = _origin_log(origin, tmp_path)
+    capsys.readouterr()
+    assert lcl.main(["--release", "CORE-2", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "would release CORE-2: reserved → blocked" in out
+    assert "↩ CLAIM RELEASED (2026-10-07 09:05" in out and "would commit: docs(backlog): release CORE-2" in out
+    assert _origin_log(origin, tmp_path) == head and git("status", "--porcelain", cwd=clone) == ""
+
+
+@pytest.mark.parametrize("argv", [
+    ["--release", "CORE-1", "--name", "x"],
+    ["--release", "CORE-1", "--behind", "CORE-5"],
+    ["--release", "CORE-1", "--next-in", "CORE-5"],
+    ["--release", "CORE-1", "--files", "x"],
+    ["CORE-1", "--name", "x", "--reason", "why"],          # --reason only means something with --release
+    ["--release"],
+])
+def test_release_takes_ids_reason_and_dry_run_only(setup, argv):
+    with pytest.raises(SystemExit):
+        lcl.main(argv)
