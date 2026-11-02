@@ -23,9 +23,12 @@ closes; this is the alternative.
 
    An open, blocked or paused issue becomes the epic and the children go under it; an
    epic only gains children. A claimed issue is the partial-landing case: run it from the
-   lane's worktree WITHOUT `--push`, and the files ride in the lane's commit
-   (`worktree-increment` step 9.1). A verified or closed issue, or another session's claim,
-   is refused: quote the `NOT SPLIT` line and stop.
+   lane's worktree WITH `--push` too (LANES-76) — the children and the epic are minted into
+   the main clone and pushed, so their IDs are on origin at once, and the claimed issue's
+   own `epic:` line is written to the lane's copy to ride in its resolving commit
+   (`worktree-increment` step 9.1). A split in a worktree without `--push` is refused;
+   `--in-lane` is the deliberate exception. A verified or closed issue, or another
+   session's claim, is refused: quote the `NOT SPLIT` line and stop.
 
 3. Fill in each child's Context: read the parent's Context and write into each child the
    part it carries, in the parent's terms. Leave Current status and Resolution as written,

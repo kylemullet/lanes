@@ -196,3 +196,10 @@ minted with `--push`, which from a worktree mints into the main clone and pushes
 under the OK-free guard, and the lane cites the ID. The script refuses a worktree mint without
 `--push`, `--in-lane` is the deliberate exception, and `--check` names both files of a
 duplicated ID.
+
+The split path was left with the same hole for four days (LANES-76): step 9.1 said to run
+`backlog_split.py` in the worktree without `--push` so the children rode in the lane's commit,
+which is exactly the window above, once per child. Now `--push` from a lane mints the children
+and the wrapping epic into the main clone and pushes them, and only the claimed parent's own
+`epic:` line is written in the lane, where its resolving commit carries it; a worktree split
+without `--push` is refused.

@@ -151,7 +151,7 @@ sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --report     # aged
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --serve      # view_mode = "serve": the HTML view on backlog.view_port, re-parsed per request
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_index.py --backfill [--dry-run] [--commit | --push]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py CORE "a title" --type=bug --reported-by=<short> [--context "<why>"] [--push | --in-lane]
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py CORE-12 "a piece" "another" --reported-by=<short> [--dry-run | --push]
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py CORE-12 "a piece" "another" --reported-by=<short> [--dry-run | --push | --in-lane]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py --ok-free [--push] [--add <paths> -m "<subject>"]
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_pull.py [--ff-only] [--dry-run]           # sync the main branch; reconciles a mirror-delivered tree
 ```
@@ -163,7 +163,11 @@ with one number that the suite found forty minutes later. From a worktree, `back
 mints into the main clone and pushes that one file under the OK-free guard, so the ID is on origin the
 moment it exists and the lane cites it; `--context` writes the Context section at mint time so the one
 push carries a complete issue. A worktree mint without `--push` is refused; `--in-lane` is the
-deliberate exception, and `--check` names both files of a duplicated ID.
+deliberate exception, and `--check` names both files of a duplicated ID. **The split has the same
+shape** (LANES-76): from a lane, `backlog_split.py --push` mints the children — and the epic wrapped
+over a claimed parent — into the main clone and pushes them, while the claimed parent's own `epic:`
+line is written to the lane's copy and rides in the lane's resolving commit; a worktree split without
+`--push` is refused, `--in-lane` excepted.
 
 Every text file the scripts write into the target repo — a minted stub, a claim marker, the backfill
 close, the views — is LF on every platform, through `lanes_config.write_lf` (LANES-45: on Windows,

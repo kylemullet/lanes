@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.71 — a lane's split mints its children on the main branch, with `--push` (2026-11-01)
+
+- **`backlog_split.py` run in a lane worktree minted children whose IDs another lane could land
+  first** (LANES-76). LANES-63 closed that window for `backlog_new.py` and left the split alone to
+  keep the lane to one script: `worktree-increment` step 9.1 still said to split in the worktree
+  without `--push` so the children rode in the lane's commit, and until the lane landed their
+  numbers were free in every other checkout — the UI-114 collision, once per child.
+- **`--push` from a worktree mints the children into the main clone** — and the epic wrapped over a
+  claimed parent — and pushes them under the OK-free guard, so their IDs are on origin the moment
+  they exist. The claimed parent's own edit, its `epic:` line, is written to the LANE's copy
+  (`split(parent_root=…)`), where the lane's resolving commit carries it; the main clone's copy of
+  the claim is untouched, as the push guard requires. An unclaimed issue split from a lane has no
+  copy the lane owns, so its conversion happens in the main clone with the children.
+- **A worktree split without `--push` is refused** (exit 1, nothing written), naming `--push` and
+  the exception: `--in-lane` splits in the worktree anyway and says on stderr that the numbers are
+  reserved on no ref. Step 9.1, `/lanes:split`, the README and the incidents file say the same.
+
+## 0.4.69 — every file the scripts write into a target repo is LF on every platform (2026-11-01)
+
+- **On Windows the plugin wrote CRLF** (LANES-45). `Path.write_text()` and `open(..., "w")`
+
 ## 0.4.70 — a message that names an issue is the lane's trigger, never the startup's (2026-11-01)
 
 - **A named and approved lane was routed through the startup sequence and asked for twice**

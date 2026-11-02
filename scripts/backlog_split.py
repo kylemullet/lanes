@@ -5,6 +5,7 @@ Part of the `lanes` plugin. Stdlib-only; runs on any machine with no virtualenv.
 Usage:
   python3 backlog_split.py CORE-12 "parse the header" "write the table" --reported-by=me
   python3 backlog_split.py CORE-12 "…" "…" --reported-by=me --push      # main clone: commit + push, no OK
+  python3 backlog_split.py CORE-12 "…" --reported-by=claude --push     # from a lane: children minted on main, parent's edit in the lane
   python3 backlog_split.py CORE-12 "…" --reported-by=claude --dry-run    # print the plan, write nothing
 
 An issue bigger than one landing is split BEFORE its lane starts. Worked as one issue in
@@ -34,9 +35,17 @@ the issue and removes what was minted. Each child inherits the issue's project, 
 and assignee; its Context is a stub naming the parent, for the session to fill in.
 
 `--push` commits every file by explicit path and pushes it under the OK-free guard
-(`push_guard.py --ok-free`): a backlog-only push needs no OK. Only from the main clone on
-the main branch, refused BEFORE anything is written otherwise. A lane that splits its own
-issue runs without it, and the files ride in the lane's commit.
+(`push_guard.py --ok-free`): a backlog-only push needs no OK. From the main clone on the
+main branch, or from a lane worktree (LANES-76): there it mints the children — and the epic
+wrapped over a claimed parent — into the MAIN CLONE and pushes from it, so their IDs are on
+origin the moment they exist, while the claimed parent's own edit (its `epic:` line) is
+written to the lane's copy and rides in the lane's resolving commit. The main clone off the
+main branch is refused before anything is written.
+
+A split in a lane worktree WITHOUT `--push` is refused (exit 1, nothing written): the
+children would reach origin only when the lane lands, and until then their numbers are free
+in every other checkout — the LANES-63 collision, on the split path. `--in-lane` is the
+deliberate exception (no origin, children that must ride in this commit) and says so.
 """
 import argparse, datetime, sys
 from pathlib import Path
@@ -150,8 +159,16 @@ def mode_of(issue_id, meta, text):
     raise Refused(f"{issue_id}: status `{status}` cannot be split")
 
 
-def split(issue_id, titles, reported_by, type_="story", today=None, dry_run=False, fetch=True):
-    """Split `issue_id`. Returns (mode, epic ID, [child IDs], [rel paths written])."""
+def split(issue_id, titles, reported_by, type_="story", today=None, dry_run=False, fetch=True,
+          parent_root=None):
+    """Split `issue_id`. Returns (mode, epic ID, [child IDs], [rel paths written], [rel paths
+    written in the lane]).
+
+    `parent_root` (LANES-76): a lane worktree. Set when the children are minted into the main
+    clone (`bidx.ROOT`) from a lane, so their IDs are on origin the moment they exist, while a
+    claimed parent's edit — its `epic:` line, the remainder case — is written to the LANE's copy
+    and rides in the lane's resolving commit. The last element names that file; it is empty
+    everywhere else."""
     today = today or datetime.date.today().isoformat()
     if type_ == "epic":
         raise Refused("children are stories, bugs, chores… — not epics; split a child later if it needs one")
@@ -159,6 +176,13 @@ def split(issue_id, titles, reported_by, type_="story", today=None, dry_run=Fals
         raise Refused("name at least one child title")
     path, text, meta = find(issue_id)
     mode = mode_of(issue_id, meta, text)
+    lane_path = None
+    if parent_root is not None and mode == "remainder":
+        # The parent is this lane's claim: its copy in the lane may already carry the lane's
+        # edits, and the main clone's copy must stay as the claim left it (the push guard
+        # would refuse a rewrite of a marker anyway). Read and write the lane's copy.
+        lane_path = Path(parent_root) / path.relative_to(bidx.ROOT)
+        path, text = lane_path, lane_path.read_text(encoding="utf-8")
     project = meta.get("project") or issue_id.rsplit("-", 1)[0]
     title = bidx.issue_title(bidx.parse_frontmatter(text)[1], issue_id)
     common = dict(priority=meta.get("priority") or "normal", assignee=meta.get("assignee"),
@@ -174,7 +198,7 @@ def split(issue_id, titles, reported_by, type_="story", today=None, dry_run=Fals
         n = bn.next_number(project, bidx.BACKLOG, fetch=fetch)
         ids = [f"{project}-{n + i}" for i in range(len(titles) + (1 if wrap else 0))]
         new_epic = ids.pop(0) if wrap else None
-        return mode, new_epic or epic, ids, []
+        return mode, new_epic or epic, ids, [], []
 
     written, created, original = [], [], text
     try:
@@ -208,10 +232,12 @@ def split(issue_id, titles, reported_by, type_="story", today=None, dry_run=Fals
         for p in created:
             p.unlink(missing_ok=True)
         raise
+    lane_written = []
     if mode in ("convert",) or wrap:
-        written.append(path)
+        (lane_written if lane_path is not None else written).append(path)
     written.extend(created)
-    return mode, epic, ids, [p.relative_to(bidx.ROOT).as_posix() for p in written]
+    return (mode, epic, ids, [p.relative_to(bidx.ROOT).as_posix() for p in written],
+            [p.relative_to(parent_root).as_posix() for p in lane_written])
 
 
 def main(argv=None):
@@ -233,12 +259,37 @@ def main(argv=None):
                     help="number from the refs already fetched; skip `git fetch origin` (offline)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and the IDs; write nothing")
     ap.add_argument("--push", action="store_true",
-                    help="commit every file and push it under the OK-free guard (main clone, main branch only)")
+                    help="commit every file and push it under the OK-free guard; from a lane worktree, "
+                         "mint the children into the main clone and push from there (LANES-76)")
+    ap.add_argument("--in-lane", dest="in_lane", action="store_true",
+                    help="split in this lane worktree anyway, without reserving the children's IDs on "
+                         "origin (they ride in the lane's commit; another lane can land the same numbers first)")
     args = ap.parse_args(argv)
-    if args.push and not args.dry_run:
+    where = push_guard.position(bidx.ROOT, bidx.MAIN_BRANCH)
+    lane_root = None
+    if args.push and where and where.startswith(push_guard.IN_WORKTREE):
+        # A lane reserves its children's numbers by minting them on the main branch (LANES-76,
+        # the LANES-63 shape): from a worktree, --push mints into the main clone this worktree
+        # shares its refs with. A claimed parent's own edit stays in the lane (split()).
+        lane_root = bidx.ROOT
+        bidx.configure(Path(bidx.main_clone()).resolve())
         where = push_guard.position(bidx.ROOT, bidx.MAIN_BRANCH)
+        print(f"--push from a lane: minting the children into the main clone {bidx.ROOT}; a claimed "
+              "parent's edit stays in the lane (LANES-76)", file=sys.stderr)
+    if args.push and not args.dry_run:
         if where:
-            ap.error(f"--push: {where} — split without --push; the files ride in the lane's commit")
+            ap.error(f"--push: {where} — the children's IDs are reserved on the main branch, so the "
+                     f"main clone must be on `{bidx.MAIN_BRANCH}`")
+    elif where and where.startswith(push_guard.IN_WORKTREE) and not (args.in_lane or args.dry_run):
+        print(f"refused: {where}. Children minted here reach origin only when the lane lands, so until "
+              "then their numbers are free in every other checkout (LANES-76). Add --push: it mints "
+              "them into the main clone and pushes under the OK-free guard, and a claimed parent's "
+              "edit stays here to ride in the lane's commit. --in-lane splits here anyway.",
+              file=sys.stderr)
+        return 1
+    elif where and where.startswith(push_guard.IN_WORKTREE) and not args.dry_run:
+        print("in-lane split: these IDs are on no ref until the lane lands, and another lane can take "
+              "them first (LANES-76)", file=sys.stderr)
     if args.reported_by == bn.ME:
         if not (bidx.SOLO or bidx.MACHINE.get("known")):
             ap.error(f"--reported-by={bn.ME}: this machine ({bidx.MACHINE['id']}) has no operator row "
@@ -246,8 +297,9 @@ def main(argv=None):
         args.reported_by = bidx.MACHINE["short"]
     issue_id = args.id.strip().upper()
     try:
-        mode, epic, ids, rels = split(issue_id, args.titles, args.reported_by, type_=args.type_,
-                                      dry_run=args.dry_run, fetch=args.fetch)
+        mode, epic, ids, rels, lane_rels = split(issue_id, args.titles, args.reported_by, type_=args.type_,
+                                                 dry_run=args.dry_run, fetch=args.fetch,
+                                                 parent_root=lane_root)
     except (Refused, ValueError) as e:
         print(f"NOT SPLIT — {e}. Nothing was written.", file=sys.stderr)
         return 1
@@ -263,6 +315,8 @@ def main(argv=None):
     bidx.refresh_main_view()
     for rel in rels:
         print(f"wrote {rel}")
+    for rel in lane_rels:
+        print(f"wrote {rel} in the lane {lane_root} — it rides in the lane's resolving commit")
     if not args.push:
         return 0
     subject = (f"docs(backlog): split {issue_id} into {', '.join(ids)}" if mode != "remainder"

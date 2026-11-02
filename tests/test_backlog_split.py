@@ -47,7 +47,7 @@ def check_is_green():
 
 def test_an_open_issue_becomes_the_epic_of_its_children(backlog):
     put(backlog, "CORE-1")
-    mode, epic, ids, rels = bs.split("CORE-1", ["parse it", "write it"], "tester", today="2026-10-14")
+    mode, epic, ids, rels, _ = bs.split("CORE-1", ["parse it", "write it"], "tester", today="2026-10-14")
     assert (mode, epic, ids) == ("convert", "CORE-1", ["CORE-2", "CORE-3"])
     assert rels[0] == "docs/backlog/CORE/CORE-1-thing.md" and len(rels) == 3
     parent, body = meta(backlog, "CORE-1")
@@ -65,7 +65,7 @@ def test_an_open_issue_becomes_the_epic_of_its_children(backlog):
 def test_an_epic_gets_children_and_is_left_alone(backlog):
     p = put(backlog, "CORE-1", type_="epic")
     before = p.read_bytes()
-    mode, epic, ids, rels = bs.split("CORE-1", ["one more"], "claude", today="2026-10-14")
+    mode, epic, ids, rels, _ = bs.split("CORE-1", ["one more"], "claude", today="2026-10-14")
     assert (mode, epic, ids) == ("children", "CORE-1", ["CORE-2"]) and rels == ["docs/backlog/CORE/CORE-2-one-more.md"]
     assert p.read_bytes() == before
     check_is_green()
@@ -77,7 +77,7 @@ def test_a_claimed_issue_files_its_remainder_under_a_new_epic_over_it(backlog):
     p = put(backlog, "CORE-1", status="in-progress", extra="lane: CORE-1@2026-10-14\n",
             current=MINE + "\n\nWorking.")
     before = p.read_text(encoding="utf-8")
-    mode, epic, ids, rels = bs.split("CORE-1", ["the rest", "the tail"], "tester", today="2026-10-14")
+    mode, epic, ids, rels, _ = bs.split("CORE-1", ["the rest", "the tail"], "tester", today="2026-10-14")
     assert (mode, epic, ids) == ("remainder", "CORE-2", ["CORE-3", "CORE-4"])
     wrapper, wbody = meta(backlog, "CORE-2")
     assert wrapper["type"] == "epic" and wrapper["status"] == "open" and wrapper.get("epic") is None
@@ -94,7 +94,7 @@ def test_a_claimed_issue_under_an_epic_files_its_remainder_there(backlog):
     p = put(backlog, "CORE-1", status="in-progress", extra="lane: CORE-1@2026-10-14\nepic: CORE-9\n",
             current=MINE)
     before = p.read_bytes()
-    mode, epic, ids, rels = bs.split("CORE-1", ["the rest"], "tester", today="2026-10-14")
+    mode, epic, ids, rels, _ = bs.split("CORE-1", ["the rest"], "tester", today="2026-10-14")
     assert (mode, epic, ids) == ("remainder", "CORE-9", ["CORE-10"])
     assert p.read_bytes() == before and len(rels) == 1
     check_is_green()
@@ -191,3 +191,98 @@ def test_a_child_carries_the_acceptance_criteria_stub(backlog):
         "## Context", "## Acceptance criteria", "## Current status", "## Resolution"]
     assert bn.ACCEPTANCE_STUB in cbody
     check_is_green()
+
+
+# --- a lane's split mints its children on the main branch, with --push (LANES-76) ----------
+
+def _lane(tmp_path, monkeypatch, parent_status="in-progress", parent_current=MINE):
+    """A bare origin, a main clone with one issue (claimed by this machine by default) pushed to
+    origin, and a lane worktree off main. Solo mode, this machine is Tester."""
+    origin = tmp_path / "origin.git"
+    git("init", "-q", "--bare", "-b", "main", str(origin), cwd=tmp_path)
+    clone = tmp_path / "proj"
+    git("clone", "-q", str(origin), str(clone), cwd=tmp_path)
+    git("config", "user.email", "t@example.com", cwd=clone)
+    git("config", "user.name", "Tester", cwd=clone)
+    (clone / ".claude" / "lanes").mkdir(parents=True)
+    (clone / ".claude" / "lanes" / "config.toml").write_text('[backlog]\nprojects = ["CORE"]\n', encoding="utf-8")
+    put(clone, "CORE-1", status=parent_status, current=parent_current)
+    git("add", "-A", cwd=clone)
+    git("commit", "-q", "-m", "seed", cwd=clone)
+    git("push", "-q", "origin", "main", cwd=clone)
+    wt = tmp_path / "proj-lane"
+    git("worktree", "add", "-q", str(wt), "-b", "lane-work", cwd=clone)
+    monkeypatch.setattr(lc, "git_user_name", lambda cwd=None: "Tester")
+    monkeypatch.setattr(bidx, "regenerate", lambda: None)
+    monkeypatch.setattr(bidx, "refresh_main_view", lambda: None)
+    return origin, clone, wt
+
+
+def test_a_split_in_a_lane_worktree_without_push_is_refused_and_names_the_fix(tmp_path, monkeypatch, capsys):
+    """LANES-76: children minted in a worktree are on no ref until the lane lands, so another
+    lane can take their numbers first — the LANES-63 exposure on the split path."""
+    origin, clone, wt = _lane(tmp_path, monkeypatch)
+    before = (wt / "docs/backlog/CORE/CORE-1-thing.md").read_bytes()
+    assert bs.main(["--root", str(wt), "CORE-1", "the rest", "--reported-by", "claude", "--no-fetch"]) == 1
+    out, err = capsys.readouterr()
+    assert "wrote" not in out and "mint" not in out
+    assert "refused: this is a lane worktree" in err and "LANES-76" in err
+    assert "Add --push" in err and "--in-lane splits here anyway" in err
+    assert (wt / "docs/backlog/CORE/CORE-1-thing.md").read_bytes() == before
+    assert len(list((wt / "docs/backlog/CORE").iterdir())) == 1
+    assert len(list((clone / "docs/backlog/CORE").iterdir())) == 1
+
+
+def test_in_lane_splits_in_the_worktree_and_says_the_numbers_are_unreserved(tmp_path, monkeypatch, capsys):
+    origin, clone, wt = _lane(tmp_path, monkeypatch)
+    assert bs.main(["--root", str(wt), "CORE-1", "the rest", "--reported-by", "claude", "--no-fetch",
+                    "--in-lane"]) == 0
+    out, err = capsys.readouterr()
+    assert "in-lane split" in err and "LANES-76" in err
+    assert "wrote docs/backlog/CORE/CORE-2-epic-thing.md" in out and "wrote docs/backlog/CORE/CORE-3-the-rest.md" in out
+    assert {p.name for p in (wt / "docs/backlog/CORE").iterdir()} == {"CORE-1-thing.md", "CORE-2-epic-thing.md", "CORE-3-the-rest.md"}
+    assert len(list((clone / "docs/backlog/CORE").iterdir())) == 1          # the main clone saw nothing
+
+
+def test_push_from_a_lane_mints_the_children_into_the_main_clone_and_the_parents_edit_stays_in_the_lane(tmp_path, monkeypatch, capsys):
+    """LANES-76: the epic and the child are minted in the main clone and pushed, so their IDs are
+    on origin at once; the claimed parent's `epic:` line is written to the LANE's copy, which the
+    lane's resolving commit carries. The main clone's copy of the claim is untouched."""
+    origin, clone, wt = _lane(tmp_path, monkeypatch)
+    parent_main = clone / "docs/backlog/CORE/CORE-1-thing.md"
+    parent_lane = wt / "docs/backlog/CORE/CORE-1-thing.md"
+    main_before = parent_main.read_bytes()
+    assert bs.main(["--root", str(wt), "CORE-1", "the rest", "--reported-by", "claude", "--push"]) == 0
+    out, err = capsys.readouterr()
+    assert "minting the children into the main clone" in err and "LANES-76" in err
+    assert "file the remainder of CORE-1 under CORE-2" in out
+    assert "wrote docs/backlog/CORE/CORE-2-epic-thing.md" in out and "wrote docs/backlog/CORE/CORE-3-the-rest.md" in out
+    assert f"wrote docs/backlog/CORE/CORE-1-thing.md in the lane {wt}" in out and "committed and" in out
+    # the main clone: children minted and pushed, the claim byte-for-byte as it was
+    assert parent_main.read_bytes() == main_before
+    assert {p.name for p in (clone / "docs/backlog/CORE").iterdir()} == {"CORE-1-thing.md", "CORE-2-epic-thing.md", "CORE-3-the-rest.md"}
+    log = git("--git-dir", str(origin), "log", "-1", "--format=%s", "main", cwd=tmp_path)
+    assert log == "docs(backlog): file the remainder of CORE-1 as CORE-3"
+    files = git("--git-dir", str(origin), "ls-tree", "-r", "--name-only", "main", cwd=tmp_path).splitlines()
+    assert {"docs/backlog/CORE/CORE-2-epic-thing.md", "docs/backlog/CORE/CORE-3-the-rest.md"} <= set(files)
+    assert "docs/backlog/CORE/CORE-1-thing.md" in files
+    assert git("--git-dir", str(origin), "show", "main:docs/backlog/CORE/CORE-1-thing.md", cwd=tmp_path).encode() + b"\n" == main_before
+    # the lane: the parent carries `epic: CORE-2`, uncommitted, and no child file
+    meta, _ = bidx.parse_frontmatter(parent_lane.read_text(encoding="utf-8"))
+    assert meta["epic"] == "CORE-2" and meta["status"] == "in-progress"
+    assert {p.name for p in (wt / "docs/backlog/CORE").iterdir()} == {"CORE-1-thing.md"}
+    assert git("status", "--porcelain", cwd=wt).strip() == "M docs/backlog/CORE/CORE-1-thing.md"
+
+
+def test_push_from_a_lane_converts_an_unclaimed_issue_in_the_main_clone(tmp_path, monkeypatch, capsys):
+    """An open issue that is not this lane's claim has no copy the lane owns: the whole split,
+    parent conversion included, happens in the main clone and is pushed."""
+    origin, clone, wt = _lane(tmp_path, monkeypatch, parent_status="open", parent_current="Open.")
+    assert bs.main(["--root", str(wt), "CORE-1", "one", "two", "--reported-by", "claude", "--push"]) == 0
+    out, _ = capsys.readouterr()
+    assert "convert CORE-1 to an epic" in out and "in the lane" not in out
+    meta, _ = bidx.parse_frontmatter((clone / "docs/backlog/CORE/CORE-1-thing.md").read_text(encoding="utf-8"))
+    assert meta["type"] == "epic"
+    assert git("status", "--porcelain", cwd=wt).strip() == ""
+    log = git("--git-dir", str(origin), "log", "-1", "--format=%s", "main", cwd=tmp_path)
+    assert log == "docs(backlog): split CORE-1 into CORE-2, CORE-3"

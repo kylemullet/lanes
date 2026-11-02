@@ -475,12 +475,20 @@ step fails the push gate.
    file the remainder in the same commit:
 
    ```bash
-   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py <ID> "<piece>" ["<piece>" …] --reported-by=claude
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py <ID> "<piece>" ["<piece>" …] --reported-by=claude --push
    ```
 
    Each piece is minted under the issue's epic, or, when it has none, under a new epic
    minted over it: the issue gets `epic:` and closes as that epic's first child, its claim
-   untouched. Write each piece's Context. After the landing, when the lane still has
+   untouched. **`--push` reserves the pieces' numbers** (LANES-76, the step-8 rule for the
+   split): run from the worktree, it mints the pieces — and the epic — into the main clone
+   and pushes them under the OK-free guard, so their IDs are on origin the moment they
+   exist; the issue's own `epic:` line is written to the LANE's copy and rides in this
+   resolving commit. Pieces minted in the worktree would reach origin only when the lane
+   lands, and until then their numbers are free in every other checkout — the LANES-63
+   collision. The script refuses a split in a worktree without `--push`; `--in-lane` is the
+   deliberate exception. Write each piece's Context (`push_guard.py --ok-free --push --add
+   <piece paths>`, from the main clone). After the landing, when the lane still has
    reserved issues, `lanes_claim.py <pieces> --next-in <ID>` puts the ones worked next ahead
    of them; otherwise they are claimed like any other issue. Only a lane that lands NOTHING
    (parked, abandoned) goes back to the queue: the status it should carry, Current status

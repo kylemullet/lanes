@@ -420,3 +420,20 @@ def test_a_message_that_names_an_issue_is_the_lanes_trigger_and_never_the_startu
     assert "any session-opening signal" not in readme
     assert "never a message that names an issue and approves it (LANES-78)" in readme
     assert "with or without a startup before it" in readme
+
+
+def test_a_lanes_split_mints_its_children_on_the_main_branch_with_push():
+    """LANES-76: step 9.1 said to split in the worktree without --push, which reopened the
+    LANES-63 window once per child."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    step9 = text.split("### 9. Commit + push the branch", 1)[1].split("### 10.", 1)[0]
+    assert 'backlog_split.py <ID> "<piece>" ["<piece>" …] --reported-by=claude --push' in step9
+    assert "**`--push` reserves the pieces' numbers** (LANES-76" in step9
+    assert "refuses a split in a worktree without `--push`" in step9 and "`--in-lane`" in step9
+    split_cmd = (ROOT / "commands/split.md").read_text(encoding="utf-8")
+    assert "WITH `--push` too (LANES-76)" in split_cmd and "WITHOUT `--push`" not in split_cmd
+    inc = (ROOT / "skills/worktree-increment/references/incidents.md").read_text(encoding="utf-8")
+    assert "The split path was left with the same hole" in inc and "LANES-76" in inc
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "**The split has the same\nshape** (LANES-76)" in readme
+    assert "--reported-by=<short> [--dry-run | --push | --in-lane]" in readme
