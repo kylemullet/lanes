@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.73 — the In progress cards pack into their columns, no gap under a short one (2026-11-01)
+
+- **The lane cards sat in grid rows, so a short card beside a tall one left a block of empty
+  space under it** (LANES-79; Kyle's screenshot: BD-74's one-issue card beside a five-issue lane,
+  and the next lane starting below the tall one). Kyle ruled the column pack over a single column:
+  one column wastes a wide screen and pushes the open queue further down with every lane.
+- **A few lines of the view's script deal the cards, in reading order, into as many columns as the
+  grid has, each into the column that ends highest, ties to the leftmost**, and deal them again
+  when a resize changes the grid's width. The column count is read from the grid itself
+  (`repeat(auto-fill,minmax(440px,1fr))`), so the pack follows it: one column under 720px, where
+  the cards are left as the grid lays them out. CSS alone could not: `masonry` rows are not
+  reliably shipped, and `columns` fills each column top to bottom, which breaks the reading order.
+- The page as written is unchanged: without scripts it is today's grid, in the same order.
+
 ## 0.4.72 — `--check` requires a filled acceptance-criteria table on issues opened from a set date (2026-11-01)
 
 - **The LANES-60 table was a sentence in step 9.1** (LANES-61; Kyle, verifying LANES-60: *"No

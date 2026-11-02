@@ -1724,6 +1724,7 @@ h2{font-size:13px;font-weight:650;margin:0 0 10px;display:flex;align-items:basel
 h2 small{color:var(--mut);font-weight:450;font-size:12px}
 .lanes{margin-bottom:22px}
 .lane-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:12px;align-items:start}
+.lane-col{display:flex;flex-direction:column;gap:12px;min-width:0}
 .lane{background:var(--surface);border:1px solid var(--line);border-radius:12px;
       box-shadow:var(--shadow);overflow:hidden}
 .lane>header{padding:10px 14px 9px;border-bottom:1px solid var(--line);font-size:12px;
@@ -1949,6 +1950,29 @@ function ago(){
   });
 }
 
+// The grid lays the lane cards out in rows, so a short card beside a tall one
+// leaves a gap under it (LANES-79). Deal them, in reading order, into as many
+// columns as the grid has, each into the column that ends highest, ties to the
+// leftmost. One column, or no script at all, is the grid as written.
+const laneGrid = document.querySelector('.lane-grid');
+const laneCards = laneGrid ? Array.from(laneGrid.children) : [];
+let laneWidth = -1;
+function packLanes(){
+  if (!laneGrid || laneGrid.clientWidth === laneWidth) return;
+  laneWidth = laneGrid.clientWidth;
+  laneCards.forEach(c => laneGrid.appendChild(c));
+  laneGrid.querySelectorAll('.lane-col').forEach(c => c.remove());
+  const n = getComputedStyle(laneGrid).gridTemplateColumns.split(' ').length;
+  if (n < 2) return;
+  const cols = Array.from({length: n}, () => {
+    const c = document.createElement('div');
+    c.className = 'lane-col';
+    return laneGrid.appendChild(c);
+  });
+  laneCards.forEach(card =>
+    cols.reduce((low, c) => c.offsetHeight < low.offsetHeight ? c : low).appendChild(card));
+}
+
 const facets = document.getElementById('facets'), toggle = document.getElementById('ftoggle');
 function showFacets(open){
   facets.hidden = !open;
@@ -1985,7 +2009,9 @@ if (store.get('lanes.backlog.due') === 'all')
   document.querySelectorAll('table.foldable').forEach(t => t.classList.remove('folded'));
 applyFilter();
 ago();
+packLanes();
 setInterval(ago, 60000);
+window.addEventListener('resize', () => requestAnimationFrame(packLanes));
 """
 
 

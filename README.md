@@ -260,7 +260,9 @@ calendar order with its countdown (`in 15d`, `today`, `3d OVERDUE`); an overdue 
 there, never a failed check. The HTML view shows the first 5 and every overdue one, the rest behind
 a "Show N more" button (LANES-56) — then **In progress**, one group per
 lane, labelled by its issues alone: '/' joins issues of one project (`LANES-20/21/9`) and ', '
-separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`). The worktree and branch names stay in the ⏳
+separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`). The HTML view packs the
+lane cards into as many columns as fit, each next card into the column that ends highest, so a short card
+leaves no gap under it (LANES-79); without scripts it is the plain grid, in the same order. The worktree and branch names stay in the ⏳
 marker, where the doctor reads them. Its landed issues are shown beside the live ones until the
 last one lands and the lane disappears. `lanes_claim.py` writes the `lane:` field, which stays on an
 issue after it lands; a claim made before it existed is grouped from its ⏳ marker under the same key. `--report` then

@@ -466,6 +466,24 @@ def test_render_html_shows_lanes_on_top_and_each_claim_once():
     assert "no longer claimed" not in page
 
 
+def test_lane_cards_are_written_in_reading_order_and_packed_by_the_script():
+    # LANES-79: the page as written is the no-script fallback -- every card a direct child of
+    # the grid, in lane order; the columns exist only once the script has dealt the cards.
+    issues = [_claimed("LANES-20", ACTIVE_MK), _claimed("UI-1", PENDING_MK),
+              _claimed("BD-3", _reserved("UI-9"))]
+    page = bidx.render_html(issues)
+    start = page.index('<div class="lane-grid">')
+    grid = page[start:page.index("</section>", start)]
+    names = [bidx.lane_label(ln)["name"] for ln in bidx.lanes_in_flight(issues)]
+    assert len(names) == 3 and grid.count('<article class="lane"') == 3
+    at = [grid.index(f'<span class="ln">{n}') for n in names]
+    assert at == sorted(at)
+    assert grid.startswith('<div class="lane-grid"><article class="lane"')
+    assert 'class="lane-col"' not in page
+    assert ".lane-col{" in page and "function packLanes(){" in page
+    assert "packLanes();" in page and "addEventListener('resize'" in page
+
+
 def test_a_reservation_whose_lead_landed_says_so():
     page = bidx.render_html([_claimed("LANES-9", _reserved("LANES-21")),
                              _issue("LANES-21", status="verified")])
