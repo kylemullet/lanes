@@ -467,7 +467,10 @@ step fails the push gate.
    goes too. **Both halves, again.** The `lane:` line STAYS on an issue that landed
    (`verified`): it records which lane resolved it and keeps the lane whole in the views
    until its last issue lands. Every Acceptance criteria row carries its Test ID, or a blank
-   one whose Owner checked it in step 7.
+   one whose Owner checked it in step 7 — and where `[backlog.acceptance_criteria]` is set,
+   `--check` holds the lane to it (LANES-61): a verified issue opened on or after its `since`
+   fails with no table, the stub, a row with no test case, or a row naming neither a Test ID
+   nor an Owner, and the landing's close will not close it.
 
    **A lane that lands part of its issue still closes it; what is left becomes new issues,
    never a next phase written back into this one** (`incidents.md` → "The story that never

@@ -1825,3 +1825,89 @@ def test_check_names_both_files_of_a_duplicated_id(tmp_path, monkeypatch):
     dup = [p for p in problems if "DUPLICATE id UI-1" in p]
     assert len(dup) == 1 and "UI-1-a-clock.md" in dup[0] and "UI-1-a-theme.md" in dup[0], problems
     assert any("DUPLICATE" in p for p in bidx.check_problems(issues, problems))
+
+
+# --- the acceptance-criteria rule (LANES-61) ------------------------------------------------
+
+AC_RULE = {"projects": ("X",), "types": ("story", "bug"), "since": "2026-10-26"}
+AC_HEAD = """## Acceptance criteria
+
+| AC | Test case description | Owner | Test ID |
+| :-- | :-- | :-- | :-- |
+"""
+AC_STUB = AC_HEAD + "| AC1 | | | |\n"
+AC_FILLED = AC_HEAD + "| AC1 | it parses | kyle | `tests/test_x.py::test_parses` |\n| AC2 | it looks right | kyle | |\n"
+AC_OWNERLESS = AC_HEAD + "| AC1 | it parses | kyle | `tests/test_x.py::test_parses` |\n| AC2 | it looks right | | |\n"
+AC_BLANK_CASE = AC_HEAD + "| AC1 | it parses | kyle | `t::p` |\n| AC2 | | kyle | |\n"
+
+
+def _with_table(table):
+    return RESOLVED_BODY.replace("## Current status", table + "\n## Current status", 1)
+
+
+def test_acceptance_rows_read_the_data_rows_only():
+    rows = bidx.acceptance_rows(bidx.acceptance_section(_with_table(AC_FILLED)))
+    assert rows == [("AC1", "it parses", "kyle", "`tests/test_x.py::test_parses`"), ("AC2", "it looks right", "kyle", "")]
+    assert bidx.acceptance_section(RESOLVED_BODY) is None
+    assert bidx.acceptance_rows("| AC | d | o | t |\n| :-- | :-- | :-- | :-- |\n") == []
+
+
+def test_the_acceptance_rule_binds_verified_issues_opened_from_since_in_its_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "ACCEPTANCE_CRITERIA", AC_RULE)
+    no_table = _write_issue(tmp_path, "none.md", _fm(id="X-1", opened="2026-10-26"), RESOLVED_BODY)
+    stub = _write_issue(tmp_path, "stub.md", _fm(id="X-2", opened="2026-10-27"), _with_table(AC_STUB))
+    filled = _write_issue(tmp_path, "ok.md", _fm(id="X-3", opened="2026-10-27"), _with_table(AC_FILLED))
+    ownerless = _write_issue(tmp_path, "owner.md", _fm(id="X-4", opened="2026-10-27"), _with_table(AC_OWNERLESS))
+    blank = _write_issue(tmp_path, "blank.md", _fm(id="X-5", opened="2026-10-27"), _with_table(AC_BLANK_CASE))
+    older = _write_issue(tmp_path, "old.md", _fm(id="X-6", opened="2026-10-25"), RESOLVED_BODY)
+    chore = _write_issue(tmp_path, "chore.md", _fm(id="X-7", type="chore", opened="2026-10-27"), RESOLVED_BODY)
+    other = _write_issue(tmp_path, "other.md", _fm(id="P-1", project="P", opened="2026-10-27"), RESOLVED_BODY)
+    superseded = _write_issue(tmp_path, "sup.md", _fm(id="X-8", resolution="superseded", opened="2026-10-27"), RESOLVED_BODY)
+    live = _write_issue(tmp_path, "open.md", _fm(id="X-9", status="open", resolution=None, opened="2026-10-27"), RESOLVED_BODY)
+    closed = _write_issue(tmp_path, "closed.md", _fm(id="X-10", status="closed", closed="2026-10-28",
+                                                     opened="2026-10-27"), RESOLVED_BODY)
+    issues = [no_table, stub, filled, ownerless, blank, older, chore, other, superseded, live, closed]
+    out = bidx.missing_acceptance_criteria(issues, today="2026-10-28")
+    assert [o.split(":")[0] for o in out] == ["none.md", "stub.md", "owner.md", "blank.md"]
+    assert "has no Acceptance criteria table" in out[0] and "X · story, bug on issues opened from 2026-10-26" in out[0]
+    assert "is still the stub" in out[1]
+    assert "AC2 of its Acceptance criteria names neither a Test ID nor an Owner" in out[2]
+    assert "AC2 of its Acceptance criteria has no test case" in out[3]
+    # not yet in force: nothing is bound
+    assert bidx.missing_acceptance_criteria(issues, today="2026-10-25") == []
+
+
+def test_no_acceptance_rule_configured_reads_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    assert bidx.ACCEPTANCE_CRITERIA is None
+    it = {"_path": Path("missing.md"), "status": "verified", "type": "story", "project": "X", "opened": "2026-10-27"}
+    assert bidx.missing_acceptance_criteria([it]) == [], "no rule: no file is even read"
+
+
+def test_settings_carry_the_acceptance_rule(tmp_path):
+    raw = {"backlog": {"projects": ["X", "P"], "acceptance_criteria": {"projects": ["X"], "since": "2026-10-26"}}}
+    assert bidx.settings(tmp_path, raw)["ACCEPTANCE_CRITERIA"] == {"projects": ("X",), "types": None, "since": "2026-10-26"}
+    assert bidx.settings(tmp_path, {"backlog": {"projects": ["X"]}})["ACCEPTANCE_CRITERIA"] is None
+
+
+def test_check_problems_include_the_acceptance_rule(tmp_path, monkeypatch):
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "ACCEPTANCE_CRITERIA", AC_RULE)
+    stub = _write_issue(tmp_path, "stub.md", _fm(id="X-2", opened="2026-10-27"), _with_table(AC_STUB))
+    assert any("still the stub" in p for p in bidx.check_problems([stub], []))
+
+
+def test_backfill_skips_an_issue_with_an_unfilled_table_and_closes_one_with_a_filled_one(tmp_path, monkeypatch):
+    """LANES-61, the LANES-48 reason: a closed issue is never checked again, so the table is
+    proven at the close or the issue stays verified."""
+    monkeypatch.setattr(bidx, "ROOT", tmp_path)
+    monkeypatch.setattr(bidx, "ACCEPTANCE_CRITERIA", AC_RULE)
+    stub = _write_issue(tmp_path, "stub.md", _fm(id="X-1", opened="2026-10-27"),
+                        DOCUMENTED_BODY.replace("## Current status", AC_STUB + "\n## Current status", 1))
+    filled = _write_issue(tmp_path, "ok.md", _fm(id="X-2", opened="2026-10-27"),
+                          DOCUMENTED_BODY.replace("## Current status", AC_FILLED + "\n## Current status", 1))
+    closed, skipped = bidx.backfill_verified([stub, filled], subjects=SUBJECTS, today="2026-10-28")
+    assert [i["id"] for i, _ in closed] == ["X-2"]
+    assert [(i["id"], "still the stub" in why) for i, why in skipped] == [("X-1", True)]
+    assert bidx.parse_frontmatter((tmp_path / "stub.md").read_text(encoding="utf-8"))[0]["status"] == "verified"

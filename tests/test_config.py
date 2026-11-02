@@ -296,3 +296,32 @@ def test_an_unknown_name_asks_whose_machine_it_is_and_never_offers_a_retired_row
         assert "Ask which operator this is (kyle or leif) or whether it is someone new, and nothing else" in advice
         assert 'short = "<short>", certifies = false, may_edit_code = false' in advice
         assert "mike" not in advice and "kyle-win" not in advice
+
+
+# --- [backlog.acceptance_criteria] (LANES-61) ----------------------------------
+
+def _ac(rule, **backlog):
+    return {"backlog": {"projects": ["CORE", "UI"], **backlog, "acceptance_criteria": rule}}
+
+
+def test_acceptance_criteria_valid_rule_resolves_and_scope_defaults_to_everything():
+    raw = _ac({"projects": ["UI"], "types": ["story", "bug"], "since": "2026-10-26"})
+    assert lc.validate(raw) == []
+    assert lc.resolve(raw, user_name="t", platform="linux")["acceptance_criteria"] == {
+        "projects": ("UI",), "types": ("story", "bug"), "since": "2026-10-26"}
+    bare = lc.resolve(_ac({"since": "2026-10-26"}), user_name="t", platform="linux")["acceptance_criteria"]
+    assert bare == {"projects": None, "types": None, "since": "2026-10-26"}
+    assert lc.resolve({}, user_name="t", platform="linux")["acceptance_criteria"] is None
+
+
+def test_acceptance_criteria_needs_a_since_date_and_known_scope():
+    assert any("is missing `since`" in m for m in _errors(_ac({"projects": ["UI"]})))
+    assert any("must be YYYY-MM-DD" in m for m in _errors(_ac({"since": "Oct 26"})))
+    assert any("must be a dict" in m for m in _errors(_ac("2026-10-26")))
+    assert lc.resolve(_ac({"since": "Oct 26"}), user_name="t", platform="linux")["acceptance_criteria"] is None
+    errs = _errors(_ac({"projects": ["PIPE"], "types": ["feature"], "since": "2026-10-26"}))
+    assert any("'PIPE', not in `backlog.projects`" in m for m in errs)
+    assert any("'feature', not in `backlog.types`" in m for m in errs)
+    assert any("is empty — omit it" in m for m in _errors(_ac({"types": [], "since": "2026-10-26"})))
+    assert any("unknown key `backlog.acceptance_criteria.label`" in m
+               for m in _warnings(_ac({"since": "2026-10-26", "label": "AC"})))

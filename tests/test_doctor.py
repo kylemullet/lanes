@@ -430,6 +430,11 @@ def test_required_lines_line_names_the_built_in_and_each_configured_rule():
     c = ld.check_required_lines(lc.resolve(raw, user_name="t", platform="linux"), "2026-10-14")
     assert c.detail == ("Docs: (built in); Toggle: (UI, PIPE · story, epic · from 2026-10-20, not yet in force); "
                         "Risk: (every issue · from 2026-10-01)")
+    raw["backlog"]["acceptance_criteria"] = {"types": ["story"], "since": "2026-10-26"}
+    c = ld.check_required_lines(lc.resolve(raw, user_name="t", platform="linux"), "2026-10-14")
+    assert c.detail.endswith("; Acceptance criteria table: (story · opened from 2026-10-26, not yet in force)")
+    c = ld.check_required_lines(lc.resolve(raw, user_name="t", platform="linux"), "2026-11-01")
+    assert c.detail.endswith("; Acceptance criteria table: (story · opened from 2026-10-26)")
 
 
 def test_the_doctor_runs_the_required_lines_check(repo):

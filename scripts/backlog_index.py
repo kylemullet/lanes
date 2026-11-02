@@ -121,6 +121,7 @@ def settings(root=None, raw=None):
         "RESOLUTION_CUTOVER": cfg["resolution_required_from"],   # None = always required
         "DOCS_LANE_PREFIXES": tuple(cfg["docs_lane_prefixes"]),
         "REQUIRED_LINES": tuple(cfg["required_lines"]),
+        "ACCEPTANCE_CRITERIA": cfg["acceptance_criteria"],      # None = no rule (LANES-61)
         "CLAIM_MARKER_EXEMPT": set(cfg["claim_marker_exempt"]),
         "VIEW_PORT": cfg["view_port"],
         "VIEW_MODE": cfg["view_mode"],
@@ -1091,6 +1092,92 @@ def required_line_problems(it, body, today=None, rules=None):
     return out
 
 
+def acceptance_section(body):
+    """Text of the `## Acceptance criteria` section (up to the next H2), or None if absent."""
+    m = re.search(r"^## +Acceptance criteria[ \t]*$", body, flags=re.M)
+    if not m:
+        return None
+    rest = body[m.end():]
+    nxt = re.search(r"^## ", rest, flags=re.M)
+    return rest[:nxt.start()] if nxt else rest
+
+
+def acceptance_rows(section):
+    """The table's data rows as (ac, description, owner, test_id) tuples, cells stripped --
+    the header row and the `| :-- |` rule left out, a row short of four cells padded."""
+    rows = []
+    for line in section.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if not cells or cells[0] == "AC" or re.fullmatch(r":?-+:?", cells[0] or "-"):
+            continue
+        cells += [""] * (4 - len(cells))
+        rows.append(tuple(cells[:4]))
+    return rows
+
+
+def _acceptance_rule_applies(rule, it, today):
+    """Does the rule bind issue `it`? A verified issue of its projects and types, resolved
+    `done` (or not yet named), opened on or after `since`, while the rule is in force. Only
+    `verified`: a closed issue passed this gate when it landed, and an epic, which never
+    passes through `verified`, is outside it."""
+    if rule["projects"] is not None and it.get("project") not in rule["projects"]:
+        return False
+    if rule["types"] is not None and it.get("type") not in rule["types"]:
+        return False
+    if it.get("status") != "verified" or it.get("resolution") not in (None, "done"):
+        return False
+    opened = it.get("opened")
+    return isinstance(opened, str) and opened >= rule["since"] and today >= rule["since"]
+
+
+def acceptance_problems(it, body, today=None, rule=None):
+    """One string per way the Acceptance criteria table of a bound issue `it` falls short
+    (LANES-61) -- no table, the stub, a row with no test case, a row with neither a Test ID
+    nor an Owner. No path prefix: --check adds it, the backfill's skip line names the issue."""
+    rule = ACCEPTANCE_CRITERIA if rule is None else rule
+    if not rule:
+        return []
+    today = today or datetime.date.today().isoformat()
+    if not _acceptance_rule_applies(rule, it, today):
+        return []
+    scope = " · ".join(filter(None, (", ".join(rule["projects"] or ()), ", ".join(rule["types"] or ()))))
+    tail = (f" — required{' for ' + scope if scope else ''} on issues opened from {rule['since']} "
+            "(backlog.acceptance_criteria); one test case per row, a Test ID on each automated row, an "
+            "Owner on each manual one")
+    sec = acceptance_section(body)
+    rows = acceptance_rows(sec) if sec is not None else []
+    if sec is None or not rows:
+        return [f"{it.get('status')} and has no Acceptance criteria table{tail}"]
+    if all(not re.search(r"\w", desc) for _, desc, _, _ in rows):
+        return [f"{it.get('status')} and its Acceptance criteria table is still the stub{tail}"]
+    out = []
+    for ac, desc, owner, test_id in rows:
+        name = ac or "a row"
+        if not re.search(r"\w", desc):
+            out.append(f"{it.get('status')} and {name} of its Acceptance criteria has no test case{tail}")
+        elif not re.search(r"\w", test_id) and not re.search(r"\w", owner):
+            out.append(f"{it.get('status')} and {name} of its Acceptance criteria names neither a Test ID "
+                       f"nor an Owner{tail}")
+    return out
+
+
+def missing_acceptance_criteria(issues, today=None):
+    """`--check`: every verified issue the acceptance-criteria rule binds whose table is
+    missing or unfilled (LANES-61)."""
+    if not ACCEPTANCE_CRITERIA:
+        return []
+    out = []
+    for it in issues:
+        if it.get("status") != "verified":
+            continue
+        body = (ROOT / it["_path"]).read_text(encoding="utf-8")
+        out.extend(f"{it['_path']}: {p}" for p in acceptance_problems(it, body, today=today))
+    return out
+
+
 def missing_required_lines(issues, today=None):
     """`--check`: every issue that owes a configured Resolution line and lacks it."""
     if not REQUIRED_LINES:
@@ -1108,7 +1195,7 @@ def check_problems(issues, problems):
     """Everything --check and the test suite assert, as one list of strings."""
     return (list(problems) + orphaned_claims(issues) + unreadable_markers(issues)
             + orphaned_commit_citations(issues) + unresolvable_verified(issues) + undocumented_verified(issues)
-            + missing_required_lines(issues)
+            + missing_required_lines(issues) + missing_acceptance_criteria(issues)
             + dangling_epics(issues) + epic_claim_problems(issues) + resolution_problems(issues)
             + lane_problems(issues))
 
@@ -1213,6 +1300,12 @@ def backfill_verified(issues, subjects=None, today=None, dry_run=False):
         # A configured required line (LANES-48): the issue closes `done` dated on or after the
         # verify, so closing it here would hand --check a closed issue that fails forever.
         owed = required_line_problems(it, body, today=today)
+        if owed:
+            skipped.append((it, owed[0]))
+            continue
+        # The acceptance-criteria rule (LANES-61), for the same reason: a closed issue is
+        # never checked again, so the table is proven here or the issue stays verified.
+        owed = acceptance_problems(it, body, today=today)
         if owed:
             skipped.append((it, owed[0]))
             continue
@@ -2521,7 +2614,9 @@ def main(argv=None):
                          "status or commit, "
                          "a due: that is not a calendar date, "
                          "a verified issue that is unresolvable or missing its Docs: line, "
-                         "or an issue missing a line backlog.required_lines requires")
+                         "an issue missing a line backlog.required_lines requires, "
+                         "or a verified issue whose Acceptance criteria table backlog.acceptance_criteria "
+                         "requires is missing or unfilled")
     ap.add_argument("--report", action="store_true", help="print aged operator view, don't write")
     ap.add_argument("--who", default=None,
                     help="an operator short name, or both (default: this machine's operator)")

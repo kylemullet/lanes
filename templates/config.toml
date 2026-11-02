@@ -33,6 +33,15 @@ view_port = 8099                              # the served backlog view (view_mo
 # types = ["story", "epic"]
 # since = "2026-01-01"
 
+# Enforce the Acceptance criteria table every minted issue carries (LANES-60): a verified issue
+# in scope opened on or after `since` lands only with a filled table — one test case per row, a
+# Test ID on each automated row, an Owner on each manual one (LANES-61). `since` is read against
+# the issue's `opened` date: set it to the first day every minted issue carried the table.
+# [backlog.acceptance_criteria]
+# since = "2026-01-01"
+# projects = ["CORE"]                         # omit to mean every one
+# types = ["story", "bug"]
+
 [git]
 main_branch = "main"
 land_requires_ok = true                       # the operator-OK gate is on LANDING, never on a branch push

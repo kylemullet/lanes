@@ -17,7 +17,8 @@ Checks, in order:
   backlog    the backlog directory exists; `--check` runs when the tracker ships with the plugin
   views      the generated INDEX.md / index.html are gitignored (a tracked copy conflicts at every rebase)
   required lines  the Resolution lines `--check` requires: `Docs:` (built in) and each
-                  `[[backlog.required_lines]]` rule, its scope and whether it is in force (LANES-48)
+                  `[[backlog.required_lines]]` rule, its scope and whether it is in force (LANES-48);
+                  and the `[backlog.acceptance_criteria]` rule, when set (LANES-61)
   claims    every `in-progress` issue classified: live / setting up / reserved / STALE CANDIDATE
   settings   the tracked `.claude/settings.json` is unmodified against HEAD (`marketplace remove` empties it)
   settings lanes  it declares lanes' marketplace and enables lanes — in HEAD and in the working tree
@@ -242,6 +243,12 @@ def check_required_lines(cfg: dict, today: Optional[str] = None) -> Check:
         parts.append(f"{rule['label']}: ({scope or 'every issue'} · {when})")
     if len(parts) == 1:
         parts.append("none configured")
+    ac = cfg.get("acceptance_criteria")
+    if ac:
+        scope = " · ".join(filter(None, (", ".join(ac["projects"] or ()), ", ".join(ac["types"] or ()))))
+        when = (f"opened from {ac['since']}" if today >= ac["since"]
+                else f"opened from {ac['since']}, not yet in force")
+        parts.append(f"Acceptance criteria table: ({scope or 'every issue'} · {when})")
     return Check(OK, "required lines", "; ".join(parts))
 
 

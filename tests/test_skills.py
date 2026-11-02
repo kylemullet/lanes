@@ -437,3 +437,14 @@ def test_a_lanes_split_mints_its_children_on_the_main_branch_with_push():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "**The split has the same\nshape** (LANES-76)" in readme
     assert "--reported-by=<short> [--dry-run | --push | --in-lane]" in readme
+
+
+def test_check_holds_the_lane_to_the_acceptance_criteria_table_where_configured():
+    """LANES-61: the LANES-60 rule was a sentence in step 9.1 with nothing behind it."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    step9 = text.split("### 9. Commit + push the branch", 1)[1].split("### 10.", 1)[0]
+    assert "where `[backlog.acceptance_criteria]` is set" in step9 and "LANES-61" in step9
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "| `[backlog.acceptance_criteria]` | none |" in readme
+    tmpl = (ROOT / "templates/config.toml").read_text(encoding="utf-8")
+    assert "# [backlog.acceptance_criteria]" in tmpl and "LANES-61" in tmpl

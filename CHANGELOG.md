@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.72 — `--check` requires a filled acceptance-criteria table on issues opened from a set date (2026-11-01)
+
+- **The LANES-60 table was a sentence in step 9.1** (LANES-61; Kyle, verifying LANES-60: *"No
+  enforcement - ok?"*). Every minted issue carries an Acceptance criteria table and the lane
+  lands only when each row carries its Test ID or was checked by hand by its Owner — and nothing
+  checked it. A cost enforced only by discipline is not enforced.
+- **`[backlog.acceptance_criteria]`**, one table: a required `since`, optional `projects` /
+  `types`. A `verified` issue in scope, resolved `done` (or not yet named), **opened** on or after
+  `since`, fails `--check` when its table is missing, still the stub, has a row with no test
+  case, or a row naming neither a Test ID nor an Owner; a blank Test ID with an Owner is a manual
+  case and passes. The backfill will not close such an issue, for the LANES-48 reason: a closed
+  issue is never checked again, so the table is proven at the close or the issue stays verified.
+  Only `verified` is bound — a closed issue passed the gate when it landed, and an epic never
+  passes through `verified`. `since` is read against `opened` because the table exists only on
+  issues minted from LANES-60 on; a consumer sets it to the first day every mint carried it.
+- The doctor's `required lines` line names the rule and whether it is in force; the README's
+  config table, the init template and step 9.1 say the same. The open question — whether
+  `--check` should confirm a named Test ID exists in the tree — is left open: a Test ID is a
+  pytest node id today, but nothing says it must be.
+
 ## 0.4.71 — a lane's split mints its children on the main branch, with `--push` (2026-11-01)
 
 - **`backlog_split.py` run in a lane worktree minted children whose IDs another lane could land

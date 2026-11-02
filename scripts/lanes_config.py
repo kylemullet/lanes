@@ -55,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "claim_marker_exempt": [],
         "resolution_required_from": None,    # None -> always required
         "required_lines": [],                # [[backlog.required_lines]] (LANES-48)
+        "acceptance_criteria": None,         # [backlog.acceptance_criteria] (LANES-61)
         "view_port": 8099,
         "view_mode": "file",                 # "file" | "serve" (LANES-11)
     },
@@ -87,7 +88,7 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "dir": (str, False), "projects": (list, False), "types": (list, False),
         "priorities": (list, False), "docs_lane_prefixes": (list, False),
         "claim_marker_exempt": (list, False), "resolution_required_from": (str, False),
-        "required_lines": (list, False),
+        "required_lines": (list, False), "acceptance_criteria": (dict, False),
         "view_port": (int, False), "view_mode": (str, False),
     },
     "git": {"main_branch": (str, False), "land_requires_ok": (bool, False), "main_direct_paths": (list, False),
@@ -104,6 +105,7 @@ _OPERATOR_FIELDS = {
 _REQUIRED_LINE_FIELDS = {
     "label": (str, True), "projects": (list, False), "types": (list, False), "since": (str, True),
 }
+_ACCEPTANCE_FIELDS = {"since": (str, True), "projects": (list, False), "types": (list, False)}
 # Lists of TABLES, validated field by field rather than as lists of strings.
 _TABLE_LISTS = {("backlog", "required_lines")}
 _TOP_LEVEL_SCALARS = {"plugin_version": (str, False)}
@@ -279,6 +281,7 @@ def validate(raw: dict) -> list:
     if isinstance(mode, str) and mode not in VIEW_MODES:
         err(f"`backlog.view_mode` must be one of {', '.join(VIEW_MODES)}, got {mode!r}")
     _validate_required_lines(backlog, err, warn)
+    _validate_acceptance_criteria(backlog, err, warn)
     if "statuses" in backlog:
         err("`backlog.statuses` is not configurable: in-progress / verified / closed are read by name in the gate")
     if "resolutions" in backlog:
@@ -404,6 +407,60 @@ def _validate_required_lines(backlog: dict, err, warn) -> None:
                 err(f"`{where}.{key}` names {', '.join(repr(v) for v in unknown)}, not in `backlog.{key}`")
 
 
+def _validate_acceptance_criteria(backlog: dict, err, warn) -> None:
+    """`[backlog.acceptance_criteria]`: the one rule that a verified issue carries a filled
+    Acceptance criteria table (LANES-61). `since` is required and is read against the issue's
+    `opened` date: the table exists on issues minted from LANES-60 on, so a rule without a
+    cut-over would fail every older issue the day it turned on. `projects` and `types` narrow
+    it; omitted means every one, and an empty list is an error rather than a rule that
+    silently applies to nothing."""
+    rule = backlog.get("acceptance_criteria")
+    if not isinstance(rule, dict):
+        return
+    where = "backlog.acceptance_criteria"
+    projects = backlog.get("projects") if isinstance(backlog.get("projects"), list) else DEFAULTS["backlog"]["projects"]
+    types = backlog.get("types") if isinstance(backlog.get("types"), list) else DEFAULTS["backlog"]["types"]
+    for key in rule:
+        if key not in _ACCEPTANCE_FIELDS:
+            warn(f"unknown key `{where}.{key}` (ignored)")
+    for key, (typ, required) in _ACCEPTANCE_FIELDS.items():
+        if key not in rule:
+            if required:
+                err(f"`{where}` is missing `{key}`")
+        elif not isinstance(rule[key], typ):
+            err(f"`{where}.{key}` must be a {typ.__name__}")
+    since = rule.get("since")
+    if isinstance(since, str) and not _DATE_RE.match(since):
+        err(f"`{where}.since` must be YYYY-MM-DD, got {since!r}")
+    for key, allowed in (("projects", projects), ("types", types)):
+        vals = rule.get(key)
+        if not isinstance(vals, list):
+            continue
+        if not vals:
+            err(f"`{where}.{key}` is empty — omit it to mean every one")
+        unknown = [v for v in vals if v not in allowed]
+        if unknown:
+            err(f"`{where}.{key}` names {', '.join(repr(v) for v in unknown)}, not in `backlog.{key}`")
+
+
+def acceptance_criteria(backlog: dict):
+    """The well-formed `[backlog.acceptance_criteria]` rule, normalized, or None when there is
+    none. A malformed one is `validate()`'s finding; it is left out here, never guessed at.
+
+    `projects` / `types` (a tuple, or None for every one), `since`."""
+    rule = backlog.get("acceptance_criteria")
+    if not isinstance(rule, dict):
+        return None
+    since = rule.get("since")
+    if not (isinstance(since, str) and _DATE_RE.match(since)):
+        return None
+    scope = {}
+    for key in ("projects", "types"):
+        vals = rule.get(key)
+        scope[key] = tuple(vals) if isinstance(vals, list) and vals else None
+    return {"projects": scope["projects"], "types": scope["types"], "since": since}
+
+
 def required_lines(backlog: dict) -> list:
     """The well-formed `[[backlog.required_lines]]` rules, normalized. A malformed one is
     `validate()`'s finding (the doctor fails on it); it is left out here, never guessed at.
@@ -511,6 +568,7 @@ def resolve(raw: dict, user_name: Optional[str] = None, platform: Optional[str] 
         "claim_marker_exempt": list(merged["backlog"]["claim_marker_exempt"]),
         "resolution_required_from": merged["backlog"]["resolution_required_from"],
         "required_lines": required_lines(merged["backlog"]),
+        "acceptance_criteria": acceptance_criteria(merged["backlog"]),
         "view_port": merged["backlog"]["view_port"],
         "view_mode": merged["backlog"]["view_mode"],
         "main_branch": merged["git"]["main_branch"],
