@@ -486,3 +486,22 @@ def test_a_lane_asks_whether_it_lands_in_one_go_and_releases_its_own_claim_by_sc
     assert "## The application that held a lane (2026-11-01)" in inc
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert '`--release <ID> … [--reason "<why>"]`' in readme and "(LANES-81)" in readme
+
+
+def test_a_lane_edits_only_its_own_entry_in_the_shared_preview_launch_file():
+    """LANES-72: every lane on a machine shares the main clone's `.claude/launch.json`; one lane
+    rewrote it with only its own entry, and the tool answered an unknown name with another lane's
+    configuration instead of refusing."""
+    text = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    step6 = text.split("### 6. Stage the operator verification", 1)[1].split("### 7.", 1)[0]
+    assert "**A harness preview tool shares one launch file across every lane** (LANES-72)" in step6
+    for rule in ("**Edit only this lane's own entry**", "**Pin its port** (`\"autoPort\": false`)",
+                 "**Compare what comes back with what you asked for.**", "**Remove the entry at clean-up**"):
+        assert rule in step6, rule
+    assert '(`"reused": false`) you stop at once' in step6 and '(`"reused": true`) is' in step6
+    step10 = text.split("### 10. Clean up", 1)[1]
+    assert "entry from a shared preview launch file (step 6.3) and no other" in step10
+    tmpl = (ROOT / "templates/lane-setup.md").read_text(encoding="utf-8")
+    assert "`worktree-increment` step 6.3, LANES-72" in tmpl
+    inc = (ROOT / "skills/worktree-increment/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The preview that served another lane (2026-10-27, 2026-10-29)" in inc

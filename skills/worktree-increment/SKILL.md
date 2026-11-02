@@ -419,6 +419,27 @@ When the operator says they are ready:
 3. Resolve this lane's port with `worktrees.port_command`; kill whatever owns **that**
    port, never a shared default — a bare kill takes out another lane's server while its
    operator is looking at it. Start the server from the worktree root.
+
+   **A harness preview tool shares one launch file across every lane** (LANES-72). A tool
+   that starts servers from a config file reads it from the directory the session STARTED
+   in — the desktop app's `preview_start` reads `.claude/launch.json` — and a lanes session
+   starts in the main clone, so every concurrent lane on the machine shares that one file,
+   usually gitignored (`incidents.md` → "The preview that served another lane"):
+
+   - **Edit only this lane's own entry**, named for the lane, and leave every other entry
+     as you found it. A file rewritten with one entry leaves the next lane's start nothing
+     but yours to run, against your tree.
+   - **Pin its port** (`"autoPort": false`), so a clash with another lane fails instead of
+     moving to a port no handoff names.
+   - **Compare what comes back with what you asked for.** Given a name the file lacks, the
+     tool can answer with another configuration instead of refusing. If the result's
+     `name` or `port` is not yours, it is another lane's tree: a copy the tool started for
+     you (`"reused": false`) you stop at once; one already running (`"reused": true`) is
+     another lane's server, never yours to stop. Re-add your entry and look before
+     retrying.
+   - **Remove the entry at clean-up** (step 10.1), before the worktree goes.
+
+   A project that keeps a helper for its entry names it in `lane-setup.md`.
 4. Confirm the served bundle == disk before handing over. Against a shared port that
    check compares THIS lane's disk to whatever server answers, and passes wrongly.
 5. Hand the operator the step-5 debrief's verification steps, refreshed for whatever the
@@ -664,7 +685,8 @@ step fails the push gate.
 ### 10. Clean up
 
 1. Stop the local server **on this lane's port**; confirm the port is free. Do not sweep
-   a shared port or the band — another lane may be mid-verification.
+   a shared port or the band — another lane may be mid-verification. Remove this lane's
+   entry from a shared preview launch file (step 6.3) and no other.
 2. Remove the worktree and delete the branch. `lanes_land.py` (9.7) already did both
    unless you passed `--keep` or it exited `2`; otherwise do it by hand, in a SEPARATE
    tool call from the landing, and only after verifying nothing is lost:

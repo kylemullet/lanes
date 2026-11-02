@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.76 — a lane edits only its own entry in the preview's shared launch file (2026-11-02)
+
+- **The desktop app's preview reads `.claude/launch.json` from the directory the session started
+  in** — for every lanes session, the main clone — so every concurrent lane on a machine shares
+  that one file, and step 6.3 never said so (LANES-72, found by readlines' INFRA-142 lane,
+  2026-10-29). In readlines one lane rewrote the file with only its own entry and the next lane's
+  `preview_start` started a copy of the first lane's server; and asked for a name the file lacked,
+  the tool answered with another lane's configuration, `"reused": true`, instead of refusing.
+- **`worktree-increment` step 6.3 carries the rules**: edit only the lane's own entry and leave
+  the rest; pin its port (`"autoPort": false`) so a clash fails instead of moving; compare the
+  result's `name` and `port` with the request, stop a copy the tool started (`"reused": false`) and
+  never a server already running (`"reused": true`); remove the entry at clean-up, which step 10.1
+  now says. A project's helper for it goes in `lane-setup.md`, and the template `/lanes:init`
+  writes says so. The README's `worktrees.port_command` row points at the step.
+- No helper ships in the plugin: the launch file is the harness's, and readlines' own
+  (`lane_port.py --launch`) shows its shape depends on the project's launcher.
+
 ## 0.4.75 — ask "will this land in one go?" before claiming, and release your own claim by script (2026-11-01)
 
 - **A lane is one landing** (LANES-81; Kyle, 2026-11-01: *"if it's going to be in progress for a

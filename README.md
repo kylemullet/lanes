@@ -316,7 +316,7 @@ annotated reference; the short version:
 | `tests.command` | `pytest -q` | |
 | `tests.required_before_land` | `true` | |
 | `tests.rebase_rerun_command` | — | prints the test args for the re-run after a rebase that needed a hand-resolved logic conflict (a clean rebase re-runs nothing); absent = full suite |
-| `worktrees.port_command` | — | prints this lane's localhost port |
+| `worktrees.port_command` | — | prints this lane's localhost port; a harness preview tool's launch file (`.claude/launch.json`) is read from the main clone and shared by every lane, so a lane edits only its own entry, pinned to this port (`worktree-increment` step 6.3, LANES-72) |
 | `[[operators]]` | `[]` (solo) | one row per `(git user.name, platform)` — a machine, not a person: `id`, `short`, `certifies`, `may_edit_code`. `id` and the pair are unique; one person on two machines is two rows sharing a `short`. `retired = true` (+ optional `retired_on`) keeps a departed operator's row as history: it grants nothing, never matches a machine, is not offered by `backlog_new.py`, and is valid on closed issues only (and as `reported_by` anywhere) |
 | `lanes.code`, `lanes.code_owner` | — | which paths only the owning operator edits; meaningless in solo mode |
 

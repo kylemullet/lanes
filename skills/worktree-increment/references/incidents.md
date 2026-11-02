@@ -222,3 +222,16 @@ first draft. The only route was to release the claim by hand (status, two lane l
 spelled from memory), then split, then claim the draft as the new child. Step 1.3 now asks the
 question before the claim, and `lanes_claim.py --release` is the release (LANES-81), which
 `session-closeout` uses for the reservations a session never reached as well.
+
+## The preview that served another lane (2026-10-27, 2026-10-29)
+
+The desktop app's preview tools start servers from `.claude/launch.json`, read from the
+directory the session started in. For every lane that is the main clone, so concurrent lanes on
+one machine shared one gitignored file, and step 6.3 said nothing about it. On 2026-10-27 a lane
+rewrote the file with only its own entry; the next lane's `preview_start` started the only
+configuration left, a copy of the first lane's server, against the first lane's tree. Two days
+later the consumer's fix (INFRA-142) found the sharper half: asked for a name the file did not
+hold (`no-such-lane-app`), the tool did not refuse. It answered with another lane's
+configuration, `"reused": true`, so a lane that never compared the result with its request would
+have verified against someone else's work. The consumer fixed its own half with a helper that
+edits only the lane's entry and pins its port; step 6.3 now carries the generic rules (LANES-72).
