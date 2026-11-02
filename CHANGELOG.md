@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.74 — a lane carries a name, required at claim and shown after its IDs (2026-11-01)
+
+- **A lane was identified by its issue IDs alone** (LANES-80; Kyle's screenshot: the card read
+  `INFRA-145/129, LANES-76/61`, which says which issues are in it but not what it is about).
+  Kyle ruled the name required at claim, over an optional one with an epic's title as the
+  fallback: the claiming session writes it from the directive, so the operator pays nothing,
+  and an optional name would leave most lanes unnamed.
+- **`lanes_claim.py --name "<a few words>"`** names a new lane. Without it a new lane is
+  refused and nothing is written; a blank name, or one starting with a quote or a bracket, is
+  refused the same way. The name is written as `lane_name:` beside `lane:` on every issue of
+  the lane and stays on an issue after it lands, as `lane:` does. `--behind` and `--next-in`
+  join a lane that has its name and copy it to the issues they add (a moved issue takes the
+  lane's name in place of its own); `--name` with either, or with `--resume`, is a usage error.
+  `--resume` rewrites only the marker, so the name moves with the lane.
+- **Every view reads `<IDs> — <name>`**: the HTML card header, `INDEX.md` and `--report`. The
+  lead's name wins when members disagree. A lane claimed before the field existed shows its
+  IDs alone, and nothing fails on it.
+- **`--check` fails a `lane_name:` with no `lane:`** — a released claim deletes both, and
+  `worktree-increment` and `session-closeout` now say so.
+- `session-startup` 8b, `worktree-increment` 1.3 and `/lanes:claim` pass the name, proposed
+  from the directive and said in the message that runs the claim; `tests/test_skills.py` pins it.
+  The Brief's lane segment is unchanged: it already names the issue being worked.
+
 ## 0.4.73 — the In progress cards pack into their columns, no gap under a short one (2026-11-01)
 
 - **The lane cards sat in grid rows, so a short card beside a tall one left a block of empty

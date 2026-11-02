@@ -84,7 +84,7 @@ routes around the issue exactly as it would for an active lane; nothing has to b
 inferred.
 
 A reserved issue the session never reaches is **released at shutdown**, not left claimed:
-set it back to the status it should carry and clear the marker and the `lane:` line. An `in-progress` issue
+set it back to the status it should carry and clear the marker and the `lane:` and `lane_name:` lines. An `in-progress` issue
 with no live worktree and no session behind it poisons every future conflict scan.
 
 Concretely, handed "CORE-64, UI-40, INFRA-31": claim all three now (CORE-64 PENDING, the
@@ -98,7 +98,7 @@ must be worked before the reserved ones (a rename the next issue builds on, a do
 current one exposed, the children a split mints) goes in at the front:
 `lanes_claim.py <ID> --next-in <any member's ID>` claims it RESERVED as the next to work
 and re-queues the old next behind it. One that can wait goes at the end with `--behind
-<the last ID>`. A bare `lanes_claim.py <ID>` opens a new lane and splits the work across
+<the last ID>`. A plain `lanes_claim.py <ID> --name …` opens a new lane and splits the work across
 two cards in the view. If a session already did that, the same `--next-in` moves the stray
 issue into the right lane, keeping its state (one being worked moves only into a lane
 where nothing else is); never fix a `lane:` line by hand.
@@ -191,13 +191,16 @@ Work happens in the MAIN checkout before the worktree exists:
    CHECKOUT, on the main branch — with the same script startup uses:
 
    ```bash
-   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py <ID> --files "<expected files>"
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py <ID> --name "<lane name>" --files "<expected files>"
    ```
 
-   It writes BOTH halves, which are read by different things — one without the other is
-   the bug: **frontmatter** `status: in-progress` plus `lane: <lead-ID>@<date>`, the lane's
-   recorded identity, the same on every issue of the lane (what the views and `--report`
-   render and group by, and which stays on the issue after it lands)
+   **`--name` is required for a new lane** (LANES-80): a few words on what it is about,
+   drawn from the directive, said in the message that runs the claim so the operator can
+   correct it. It writes BOTH halves, which are read by different things — one without the
+   other is the bug: **frontmatter** `status: in-progress` plus `lane: <lead-ID>@<date>`,
+   the lane's recorded identity, and `lane_name:`, the same on every issue of the lane
+   (what the views and `--report` render and group by — `<IDs> — <name>` — and which stays
+   on the issue after it lands)
    and the **body** `WORKTREE PENDING` marker with the expected files at the top of
    **Current status** (what another session reads once its frontmatter scan points it at
    the file). It notes a prior `paused` / `blocked` status in the marker, so an abandoned
@@ -495,8 +498,8 @@ step fails the push gate.
    reserved issues, `lanes_claim.py <pieces> --next-in <ID>` puts the ones worked next ahead
    of them; otherwise they are claimed like any other issue. Only a lane that lands NOTHING
    (parked, abandoned) goes back to the queue: the status it should carry, Current status
-   saying where it stopped, and no `lane:` line — `--check` fails one on an open, blocked
-   or paused issue.
+   saying where it stopped, and no `lane:` or `lane_name:` line — `--check` fails one on an
+   open, blocked or paused issue.
 
    **A project may require more Resolution lines than `Docs:`** (`[[backlog.required_lines]]`,
    which `/lanes:doctor` lists — a `Toggle:` line on every story, say). A verified issue in

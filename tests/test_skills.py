@@ -127,6 +127,21 @@ def test_claims_run_through_the_claim_script():
             assert ld.KIND_TEMPLATE_RE.fullmatch(m.group(0)) and ld.KIND_RE.match(m.group(0)), f"{name}: {m.group(0)}"
 
 
+def test_every_new_lane_claim_names_the_lane():
+    """LANES-80: the claim script refuses a new lane without --name, so every place that
+    starts one must pass it -- and the release that strips `lane:` strips the name too."""
+    new_lane = re.compile(r'scripts/lanes\.sh" lanes_claim\.py <ID>[^\n]*')    # the runnable lines
+    for name in ("session-startup", "worktree-increment"):
+        text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        calls = [c for c in new_lane.findall(text) if "--next-in" not in c and "--behind" not in c]
+        assert calls and all('--name "<lane name>"' in c for c in calls), (name, calls)
+    cmd = (ROOT / "commands" / "claim.md").read_text(encoding="utf-8")
+    assert '--name \\"lane name\\"' in cmd and 'add `--name "<a few words>"`' in cmd
+    for name in ("worktree-increment", "session-closeout"):
+        text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        assert "`lane:` and `lane_name:` lines" in text, name
+
+
 def test_plugin_validates_strict():
     """A missing executable is a FileNotFoundError from subprocess, never a
     "command not found" on stderr -- the first CI run died on exactly that."""

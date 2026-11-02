@@ -3,10 +3,10 @@
 Part of the `lanes` plugin. Stdlib-only; runs on any machine with no virtualenv.
 
 Usage (in the MAIN clone, on the main branch, on the operator's directive):
-  python3 lanes_claim.py CORE-64 UI-40 INFRA-31 --files "api/x.py, tests/test_x.py"
+  python3 lanes_claim.py CORE-64 UI-40 INFRA-31 --name "Export to PDF" --files "api/x.py, tests/test_x.py"
   python3 lanes_claim.py INFRA-92 --behind INFRA-90     # extend a lane already claimed
   python3 lanes_claim.py INFRA-122 --next-in INFRA-112  # put an issue at the FRONT of a lane (LANES-49)
-  python3 lanes_claim.py CORE-64 --dry-run
+  python3 lanes_claim.py CORE-64 --name "Export to PDF" --dry-run
   python3 lanes_claim.py --resume CORE-64              # the same operator, a second machine (LANES-7)
 
 `session-startup` step 8b and `worktree-increment` step 1 as one all-or-nothing
@@ -24,11 +24,18 @@ Hand-written markers also drift from the spelling the doctor reads.
   4. Write `status: in-progress` and the marker on every ID: the first `WORKTREE
      PENDING` with its expected files, each later one `RESERVED, NOT STARTED` queued
      behind the one before it. With `--behind <ID>`, every named ID is RESERVED,
-     chained behind that lane. Timestamps are local, with minutes.
+     chained behind that lane. Timestamps are local, with minutes. Every ID gets the
+     lane's `lane:` key and its `lane_name:`.
   5. `backlog_index.py --check`, one commit staged by explicit path, the main-direct
      guard over everything ahead of origin, push. A rejected push re-fetches, rebases
      and re-checks 2-3 rather than forcing; a concurrent claim of the same ID
      conflicts, and this claim is withdrawn.
+
+A new lane needs `--name "<a few words>"` (LANES-80): the IDs say which issues a lane holds,
+not what it is about, so every view shows `<IDs> — <name>`. The session that claims writes
+the name from the directive; a claim without one is refused. `--behind` and `--next-in`
+join a lane that already has its name and copy it to the issues they add, and `--resume`
+keeps it. A lane claimed before the field existed has none and shows its IDs alone.
 
 `--next-in <LANE>` (LANES-49) puts the named IDs at the front of a lane already claimed,
 as the next to work: `--behind` only appends, so an issue found mid-lane that had to go
@@ -131,19 +138,33 @@ def marker(kind, stamp, who, behind=None, files=None, prior=None):
     return f"⏳ IN-PROGRESS ({stamp}, {who}) — **{kind}.** {tail}"
 
 
-def with_claim(text, line, lane=None):
-    """`status: in-progress` (+ `lane:`) + the marker at the top of Current status."""
+def clean_name(raw):
+    """A lane name as the frontmatter will hold it: one line of plain words."""
+    name = " ".join((raw or "").split())
+    if not name:
+        raise Refused('a new lane needs a name — --name "<a few words on what the lane is about>" (LANES-80)')
+    if name[0] in "\"'[" or name in ("null", "~"):
+        raise Refused(f"--name {name!r}: a lane name is plain words, not starting with a quote or a bracket")
+    return name
+
+
+def _lane_lines(lane, name):
+    return [f"lane: {lane}"] + ([f"lane_name: {name}"] if name else [])
+
+
+def with_claim(text, line, lane=None, name=None):
+    """`status: in-progress` (+ `lane:` and `lane_name:`) + the marker at the top of Current status."""
     nl = "\r\n" if "\r\n" in text else "\n"
     head, sep, body = text.partition(f"{nl}---{nl}")
     if not sep or not head.startswith("---"):
         raise Refused("no frontmatter block")
     fm = []
     for l in head.split(nl):
-        if l.startswith("lane:"):
+        if l.startswith(("lane:", "lane_name:")):
             continue                      # rewritten below, never duplicated
         fm.append("status: in-progress" if l.startswith("status:") else l)
         if lane and l.startswith("status:"):
-            fm.append(f"lane: {lane}")    # LANES-10: the lane's recorded identity
+            fm += _lane_lines(lane, name)  # LANES-10: the lane's recorded identity; LANES-80: its name
     section = f"{nl}## Current status{nl}"
     if section not in body:
         raise Refused("no `## Current status` section")
@@ -152,13 +173,13 @@ def with_claim(text, line, lane=None):
     return nl.join(fm) + sep + pre + section + nl + line + nl + nl + post
 
 
-def with_lane(text, lane):
-    """`text` with its frontmatter `lane:` set to `lane`, right after `status:`."""
+def with_lane(text, lane, name=None):
+    """`text` with its frontmatter `lane:` (and `lane_name:`) set, right after `status:`."""
     nl = "\r\n" if "\r\n" in text else "\n"
     head, sep, body = text.partition(f"{nl}---{nl}")
-    fm = [l for l in head.split(nl) if not l.startswith("lane:")]
+    fm = [l for l in head.split(nl) if not l.startswith(("lane:", "lane_name:"))]
     at = next((i for i, l in enumerate(fm) if l.startswith("status:")), len(fm) - 1)
-    fm.insert(at + 1, f"lane: {lane}")
+    fm[at + 1:at + 1] = _lane_lines(lane, name)
     return nl.join(fm) + sep + body
 
 
@@ -174,11 +195,12 @@ def requeued(text, behind):
 
 
 class Claim:
-    def __init__(self, root, ids, behind=None, files=None, now=None):
+    def __init__(self, root, ids, behind=None, files=None, now=None, name=None):
         self.root = root
         self.ids = ids
         self.behind = behind
         self.files = files
+        self.name = name
         loaded = lc.load(root)
         if loaded.parse_error:
             raise Refused(f"lanes config does not parse: {loaded.parse_error}")
@@ -294,10 +316,19 @@ class Claim:
         m = re.search(r"⏳ IN-PROGRESS \((\d{4}-\d{2}-\d{2})", text)
         return f"{self.behind}@{m.group(1) if m else self.stamp[:10]}"
 
+    def lane_name(self):
+        """The new lane's `--name`, or with --behind the extended lane's own (none for a
+        lane claimed before the field existed)."""
+        if not self.behind:
+            return self.name
+        text = (self.root / self.paths[self.behind]).read_text(encoding="utf-8")
+        recorded = (frontmatter(text) or {}).get("lane_name")
+        return recorded if recorded not in (None, "", "null", "~") else None
+
     def rewrites(self):
         """{rel path: new text} for every ID, in lane order."""
         who, out, prev = identity(self.cfg), {}, self.behind
-        lane = self.lane()
+        lane, name = self.lane(), self.lane_name()
         for issue_id in self.ids:
             rel = self.paths[issue_id]
             text = (self.root / rel).read_text(encoding="utf-8")
@@ -305,7 +336,7 @@ class Claim:
             kind = RESERVED if prev else PENDING
             line = marker(kind, self.stamp, who, behind=prev, files=self.files, prior=prior)
             try:
-                out[rel] = with_claim(text, line, lane)
+                out[rel] = with_claim(text, line, lane, name)
             except Refused as e:
                 raise Refused(f"{issue_id}: {e}")
             prev = issue_id
@@ -427,6 +458,9 @@ def main(argv=None):
     use_utf8_console()
     ap = argparse.ArgumentParser(description="lanes: claim a lane of backlog issues in one pushed commit")
     ap.add_argument("ids", nargs="*", metavar="ID", help="the lane's issues, in working order")
+    ap.add_argument("--name", default=None,
+                    help="a new lane's name, a few words on what it is about -- required unless "
+                         "--behind or --next-in joins a lane that has one (LANES-80)")
     ap.add_argument("--files", default=None,
                     help="the first issue's expected files, as the marker should list them")
     ap.add_argument("--behind", default=None, metavar="ID",
@@ -440,7 +474,7 @@ def main(argv=None):
                          "or any member's ID; an ID this machine claimed alone in another lane moves in")
     args = ap.parse_args(argv)
     if args.resume:
-        if args.ids or args.behind or args.dry_run or args.next_in:
+        if args.ids or args.behind or args.dry_run or args.next_in or args.name is not None:
             ap.error("--resume takes one ID and no other claim options")
         root = Path(git("rev-parse", "--show-toplevel", cwd=Path.cwd())[1] or Path.cwd())
         code, msg = resume(root, args.resume.strip().upper(), path=args.path)
@@ -449,6 +483,8 @@ def main(argv=None):
     if not args.ids:
         ap.error("name at least one ID (or --resume ID)")
     ids = list(dict.fromkeys(i.strip().upper() for i in args.ids))
+    if args.name is not None and (args.behind or args.next_in):
+        ap.error("--name names a new lane; --behind and --next-in join one that already has its name")
     if args.next_in:
         if args.behind or args.files:
             ap.error("--next-in takes IDs and --dry-run only: the IDs are RESERVED, and --behind appends instead")
@@ -463,8 +499,9 @@ def main(argv=None):
         return code
     behind = args.behind.strip().upper() if args.behind else None
     try:
+        name = None if behind else clean_name(args.name)
         root = Path(git("rev-parse", "--show-toplevel", cwd=Path.cwd())[1] or Path.cwd())
-        claim = Claim(root, ids, behind=behind, files=args.files)
+        claim = Claim(root, ids, behind=behind, files=args.files, name=name)
         if behind in ids:
             raise Refused(f"--behind {behind} is also named as an ID")
         claim.position()
@@ -478,6 +515,7 @@ def main(argv=None):
         for rel, text in texts.items():
             line = next(l for l in text.splitlines() if l.startswith("⏳ IN-PROGRESS"))
             print(f"would claim {rel}\n  {line}")
+        print(f"would name lane {claim.lane()}: {claim.lane_name() or '(no name)'}")
         print(f"would commit: {claim.subject()}")
         return 0
     try:
@@ -585,18 +623,19 @@ def _next_in_rewrites(claim, bidx, issues, ids, target):
         prev = (first.get("_marker") or {}).get("behind") or (head or lane["lead"])["id"]
     else:
         prev = live[-1]["id"]
-    who, texts = identity(claim.cfg), {}
+    who, texts, name = identity(claim.cfg), {}, lane.get("title")
     for iid in ids:
         rel = claim.paths[iid]
         text = (root / rel).read_text(encoding="utf-8")
         try:
             if iid not in moved:
                 prior = (frontmatter(text) or {}).get("status")
-                text = with_claim(text, marker(RESERVED, claim.stamp, who, behind=prev, prior=prior), lane["key"])
+                text = with_claim(text, marker(RESERVED, claim.stamp, who, behind=prev, prior=prior),
+                                  lane["key"], name)
             else:
                 if moved[iid] == "reserved":
                     text = requeued(text, prev)
-                text = with_lane(text, lane["key"])
+                text = with_lane(text, lane["key"], name)
         except Refused as e:
             raise Refused(f"{iid}: {e}")
         texts[rel] = text
@@ -656,6 +695,7 @@ def _write_commit_push(root, claim, texts, ids, behind):
     for issue_id in ids:
         kind = RESERVED if (behind or issue_id != ids[0]) else PENDING
         print(f"claimed {issue_id}: {kind}")
+    print(f"lane {claim.lane()}: {claim.lane_name() or '(no name)'}")
     print(f"committed: {claim.subject()}  ({msg})", file=sys.stdout if pushed else sys.stderr)
     return 0 if pushed else NOT_PUSHED
 

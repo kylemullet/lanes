@@ -617,6 +617,36 @@ def test_index_md_and_report_group_claims_by_lane_and_list_each_once(capsys):
     assert out.count("reserved    LANES-21") == 1 and "     LANES-21 " not in out.split("BACKLOG (kyle)")[1]
 
 
+def test_a_named_lane_reads_ids_then_name_in_every_view_landed_members_included(capsys):
+    """LANES-80: the IDs say which issues; the name says what the lane is about."""
+    lane = "LANES-20@2026-10-07"
+    issues = [_issue("LANES-20", status="verified", lane=lane, lane_name="Lane cards & names"),
+              _claimed("LANES-21", ACTIVE_MK, lane=lane, lane_name="Lane cards & names"),
+              _issue("UI-1")]
+    (ln,) = bidx.lanes_in_flight(issues)
+    lb = bidx.lane_label(ln)
+    assert lb["title"] == "Lane cards & names" and lb["heading"] == "LANES-20/21 — Lane cards & names"
+    assert "**LANES-20/21 — Lane cards & names** · kyle-mac@Air" in bidx.render_index(issues)
+    assert ('<span class="ln">LANES-20/21<span class="lt">— Lane cards &amp; names</span></span>'
+            in bidx.render_html(issues))
+    for i in issues:
+        i["_age"] = None
+    bidx.render_report(issues, "kyle")
+    assert "LANES-20/21 — Lane cards & names · kyle-mac@Air" in capsys.readouterr().out
+    # the lead's name wins, so one stray value on a member cannot rename the lane
+    issues[1]["lane_name"] = "something else"
+    assert bidx.lane_label(bidx.lanes_in_flight(issues)[0])["title"] == "Lane cards & names"
+
+
+def test_a_lane_name_goes_with_its_lane():
+    """A released claim deletes `lane_name:` with `lane:`; a lane from before the name passes."""
+    out = bidx.lane_problems([_issue("UI-3", status="open", lane_name="Stray")])
+    assert len(out) == 1 and "`lane_name: Stray` with no `lane:`" in out[0]
+    assert bidx.lane_problems([_claimed("LANES-20", ACTIVE_MK, lane="LANES-20@2026-10-07")]) == []
+    (ln,) = bidx.lanes_in_flight([_claimed("LANES-20", ACTIVE_MK, lane="LANES-20@2026-10-07")])
+    assert bidx.lane_label(ln)["heading"] == "LANES-20" and bidx.lane_label(ln)["title"] is None
+
+
 def test_a_lane_with_no_worktree_still_names_its_phase(capsys):
     """LANES-28 drops the worktree and branch names; the phase words stay, because they
     say something the slice name does not."""

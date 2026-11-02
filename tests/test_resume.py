@@ -40,7 +40,7 @@ ACTIVE = ("⏳ IN-PROGRESS (2026-10-08 07:00, {who}'s session on {mid}@{host}, w
 
 def _issue(marker):
     return ("---\nid: CORE-1\nproject: CORE\ntype: story\nstatus: in-progress\nlane: CORE-1@2026-10-08\n"
-            "priority: normal\nblocked_on: null\nassignee: kyle\nreported_by: kyle\nopened: 2026-10-01\n"
+            "lane_name: The two halves\npriority: normal\nblocked_on: null\nassignee: kyle\nreported_by: kyle\nopened: 2026-10-01\n"
             "closed: null\ncommit: null\nresolution: null\nlinks: []\n---\n\n# CORE-1 — thing\n\n"
             f"## Context\n\nx\n\n## Current status\n\n{marker}\n\n## Resolution\n\n(fill on close)\n")
 
@@ -91,6 +91,7 @@ def test_resume_rehomes_the_lane_and_publishes_the_marker(two_machines, monkeypa
     assert "Kyle's session on kyle-win@" in line and "(2026-10-08 09:00," in line
     assert "worktree proj-core-1, branch core-1-work) — **ACTIVE LANE.** Expected files: src/x.py." in line
     assert line.endswith("Resumed from kyle-mac@mac-host (claimed 2026-10-08 07:00).")
+    assert "\nlane: CORE-1@2026-10-08\nlane_name: The two halves\n" in text   # LANES-80: the name moves with it
     assert git("log", "-1", "--format=%s", "main", cwd=origin) == \
         "docs(backlog): CORE-1 resumed on kyle-win (worktree proj-core-1, branch core-1-work)"
 

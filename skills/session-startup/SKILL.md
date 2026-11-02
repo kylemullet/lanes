@@ -666,8 +666,14 @@ after the brief, and it happens *before* the first worktree exists:
    branch:
 
    ```bash
-   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py <ID> [<ID> …] --files "<first ID's expected files>"
+   sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py <ID> [<ID> …] --name "<lane name>" --files "<first ID's expected files>"
    ```
+
+   **A new lane needs `--name`** (LANES-80): a few words on what the lane is about, drawn
+   from the directive (or, when it gave none, the issues' titles), shown after the IDs in
+   every view — `INFRA-145/129, LANES-76/61 — Node 26 and the split path`. Name it in the
+   message that runs the claim; the operator can correct it. The script refuses a new lane
+   without one, and writes nothing.
 
    It is steps 2–4 of the old hand procedure as one all-or-nothing operation (LANES-9). It
    fetches and fast-forwards; refuses unless **every** ID has a file on

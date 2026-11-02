@@ -72,7 +72,7 @@ def _marker(text):
 
 def test_claims_the_whole_slice_in_one_pushed_commit(setup, tmp_path, capsys):
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2", "CORE-3", "--files", "api/x.py"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2", "CORE-3", "--files", "api/x.py"]) == 0
     assert _origin_log(origin, tmp_path) == "docs(backlog): claim CORE-1 (WORKTREE PENDING), reserve CORE-2, CORE-3"
     first, second, third = (_origin_text(origin, tmp_path, i) for i in ("CORE-1", "CORE-2", "CORE-3"))
     for text in (first, second, third):
@@ -97,7 +97,7 @@ def test_an_id_with_no_file_on_main_refuses_the_whole_slice_and_names_where_it_i
     git("push", "-q", "origin", "canary/x", cwd=seed)
     git("fetch", "-q", "origin", cwd=clone)
     before = _origin_log(origin, tmp_path)
-    assert lcl.main(["CORE-1", "CORE-9"]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-9"]) == lcl.NOT_CLAIMED
     err = capsys.readouterr().err
     assert "CORE-9: no file on origin/main" in err and "origin/canary/x" in err
     assert _origin_log(origin, tmp_path) == before
@@ -108,7 +108,7 @@ def test_an_id_with_no_file_on_main_refuses_the_whole_slice_and_names_where_it_i
 def test_a_claimed_or_closed_id_refuses_the_whole_slice(setup, tmp_path, capsys, taken, why):
     origin, clone, _ = setup
     before = (clone / "docs/backlog/CORE/CORE-5-thing.md").read_bytes()
-    assert lcl.main(["CORE-1", taken]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1", taken]) == lcl.NOT_CLAIMED
     assert why in capsys.readouterr().err
     assert (clone / "docs/backlog/CORE/CORE-5-thing.md").read_bytes() == before   # never touched
     assert git("status", "--porcelain", cwd=clone) == ""
@@ -141,7 +141,7 @@ def test_a_rejected_push_rebases_and_lands(setup, tmp_path, monkeypatch):
         git("push", "-q", "origin", "main", cwd=seed)
 
     monkeypatch.setattr(lcl.Claim, "sync", sync_then_race)
-    assert lcl.main(["CORE-1"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == 0
     assert _origin_log(origin, tmp_path, 2).splitlines() == [
         "docs(backlog): claim CORE-1 (WORKTREE PENDING)", "docs: another session"]
 
@@ -159,7 +159,7 @@ def test_a_concurrent_claim_of_the_same_id_withdraws_this_one(setup, tmp_path, m
         git("push", "-q", "origin", "main", cwd=seed)
 
     monkeypatch.setattr(lcl.Claim, "sync", sync_then_rival)
-    assert lcl.main(["CORE-1"]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == lcl.NOT_CLAIMED
     assert "withdrawn" in capsys.readouterr().err
     assert _origin_log(origin, tmp_path) == "docs(backlog): rival claims CORE-1"
     assert git("rev-parse", "HEAD", cwd=clone) == git("rev-parse", "origin/main", cwd=clone)
@@ -171,11 +171,11 @@ def test_refused_in_a_lane_worktree_and_off_main(setup, tmp_path, monkeypatch, c
     wt = tmp_path / "proj-lane"
     git("worktree", "add", "-q", str(wt), "-b", "lane", cwd=clone)
     monkeypatch.chdir(wt)
-    assert lcl.main(["CORE-1"]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == lcl.NOT_CLAIMED
     assert "lane worktree" in capsys.readouterr().err
     monkeypatch.chdir(clone)
     git("checkout", "-q", "-b", "side", cwd=clone)
-    assert lcl.main(["CORE-1"]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == lcl.NOT_CLAIMED
     assert "not `main`" in capsys.readouterr().err
 
 
@@ -189,7 +189,7 @@ def test_a_diverged_main_clone_is_refused(setup, tmp_path, capsys):
     git("add", "other.md", cwd=seed)
     git("commit", "-q", "-m", "other", cwd=seed)
     git("push", "-q", "origin", "main", cwd=seed)
-    assert lcl.main(["CORE-1"]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == lcl.NOT_CLAIMED
     assert "diverged" in capsys.readouterr().err
 
 
@@ -199,14 +199,14 @@ def test_non_main_direct_work_on_local_main_keeps_the_claim_local(setup, tmp_pat
     git("add", "app.py", cwd=clone)
     git("commit", "-q", "-m", "code on main", cwd=clone)
     before = _origin_log(origin, tmp_path)
-    assert lcl.main(["CORE-1"]) == lcl.NOT_PUSHED
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == lcl.NOT_PUSHED
     assert _origin_log(origin, tmp_path) == before
     assert "app.py" in capsys.readouterr().err
 
 
 def test_dry_run_writes_nothing(setup, tmp_path, capsys):
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-3", "--dry-run"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-3", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "WORKTREE PENDING" in out and "queued behind CORE-1" in out
     assert git("status", "--porcelain", cwd=clone) == ""
@@ -221,7 +221,7 @@ def _fm(text, key):
 
 def test_every_issue_of_a_slice_records_the_same_lane(setup, tmp_path):
     origin, _, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2", "CORE-3"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2", "CORE-3"]) == 0
     lanes = {_fm(_origin_text(origin, tmp_path, i), "lane") for i in ("CORE-1", "CORE-2", "CORE-3")}
     assert lanes == {"CORE-1@2026-10-07"}
     text = _origin_text(origin, tmp_path, "CORE-1")
@@ -237,7 +237,7 @@ def test_behind_a_pre_field_claim_derives_the_key_the_view_derives(setup, tmp_pa
 
 def test_behind_a_recorded_lane_copies_its_value(setup, tmp_path, monkeypatch):
     origin, _, _ = setup
-    assert lcl.main(["CORE-1"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1"]) == 0
     monkeypatch.setattr(lcl, "_now", lambda: NOW + datetime.timedelta(days=1))
     assert lcl.main(["CORE-3", "--behind", "CORE-1"]) == 0
     assert _fm(_origin_text(origin, tmp_path, "CORE-3"), "lane") == "CORE-1@2026-10-07"
@@ -249,6 +249,62 @@ def test_with_claim_replaces_a_stale_lane_line_instead_of_adding_one():
     assert out.count("\nlane:") == 1 and "lane: CORE-1@2026-10-07" in out
 
 
+# --- the lane's name (LANES-80) ---------------------------------------------------
+
+def test_a_new_lane_without_a_name_is_refused_and_writes_nothing(setup, tmp_path, capsys):
+    origin, clone, _ = setup
+    for argv, why in ((["CORE-1", "CORE-2"], "a new lane needs a name"),
+                      (["--name", "   ", "CORE-1"], "a new lane needs a name"),
+                      (["--name", "[draft]", "CORE-1"], "a lane name is plain words"),
+                      (["--name", "", "CORE-1", "--dry-run"], "a new lane needs a name")):
+        assert lcl.main(argv) == lcl.NOT_CLAIMED, argv
+        err = capsys.readouterr().err
+        assert why in err and "Nothing was written." in err, argv
+    assert git("status", "--porcelain", cwd=clone) == ""
+    assert _origin_log(origin, tmp_path) == "docs(backlog): seed"
+
+
+def test_the_name_is_written_beside_the_lane_on_every_issue(setup, tmp_path, capsys):
+    origin, _, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2", "--name", "  Export   to PDF "]) == 0
+    assert "lane CORE-1@2026-10-07: Export to PDF" in capsys.readouterr().out
+    for i in ("CORE-1", "CORE-2"):
+        text = _origin_text(origin, tmp_path, i)
+        assert "\nlane: CORE-1@2026-10-07\nlane_name: Export to PDF\n" in text, i
+        assert text.count("\nlane_name:") == 1, i
+
+
+def test_behind_and_next_in_join_under_the_lanes_name(setup, tmp_path):
+    origin, _, _ = setup
+    assert lcl.main(["CORE-1", "CORE-2", "--name", "Export to PDF"]) == 0
+    assert lcl.main(["CORE-3", "--behind", "CORE-2"]) == 0
+    assert lcl.main(["CORE-4", "--next-in", "CORE-1"]) == 0
+    for i in ("CORE-3", "CORE-4"):
+        assert _fm(_origin_text(origin, tmp_path, i), "lane_name") == "Export to PDF", i
+
+
+def test_a_lane_from_before_the_name_gains_none(setup, tmp_path):
+    origin, _, _ = setup
+    assert lcl.main(["CORE-3", "--behind", "CORE-5"]) == 0    # CORE-5 predates both fields
+    assert "lane_name:" not in _origin_text(origin, tmp_path, "CORE-3")
+
+
+@pytest.mark.parametrize("argv", [["CORE-3", "--behind", "CORE-5", "--name", "x"],
+                                  ["CORE-3", "--next-in", "CORE-5", "--name", "x"],
+                                  ["--resume", "CORE-5", "--name", "x"]])
+def test_name_only_names_a_new_lane(setup, argv):
+    with pytest.raises(SystemExit):
+        lcl.main(argv)
+
+
+def test_with_lane_replaces_the_name_with_the_key():
+    text = _issue("CORE-1").replace("status: open\n", "status: open\nlane: OLD-1@2026-01-01\nlane_name: Old\n")
+    out = lcl.with_lane(text, "CORE-2@2026-10-07", "New")
+    assert "status: open\nlane: CORE-2@2026-10-07\nlane_name: New\n" in out
+    assert out.count("\nlane_name:") == 1
+    assert "lane_name:" not in lcl.with_lane(text, "CORE-2@2026-10-07")
+
+
 def test_an_epic_is_never_claimed(setup, tmp_path, capsys):
     """LANES-31: claim the children; the epic reads in progress through them."""
     origin, clone, _ = setup
@@ -257,7 +313,7 @@ def test_an_epic_is_never_claimed(setup, tmp_path, capsys):
     git("add", str(p.relative_to(clone)), cwd=clone)
     git("commit", "-q", "-m", "docs(backlog): an epic", cwd=clone)
     git("push", "-q", "origin", "main", cwd=clone)
-    assert lcl.main(["CORE-1", "CORE-7"]) == lcl.NOT_CLAIMED
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-7"]) == lcl.NOT_CLAIMED
     assert "CORE-7: is an epic" in capsys.readouterr().err
     assert "status: open" in (clone / "docs/backlog/CORE/CORE-1-thing.md").read_text(encoding="utf-8")
 
@@ -289,7 +345,7 @@ def _land(clone, issue_id):
 
 def test_next_in_puts_an_issue_ahead_of_the_reserved_ones(setup, tmp_path, monkeypatch, capsys):
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2", "CORE-3"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2", "CORE-3"]) == 0
     assert lcl.main(["CORE-4", "--next-in", "CORE-1"]) == 0
     assert _origin_log(origin, tmp_path) == "docs(backlog): CORE-4 next in lane CORE-1@2026-10-07"
     new = _origin_text(origin, tmp_path, "CORE-4")
@@ -303,7 +359,7 @@ def test_next_in_puts_an_issue_ahead_of_the_reserved_ones(setup, tmp_path, monke
 
 def test_next_in_after_the_lead_landed_takes_the_lane_key(setup, tmp_path, monkeypatch):
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2", "CORE-3"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2", "CORE-3"]) == 0
     _land(clone, "CORE-1")
     assert lcl.main(["CORE-4", "--next-in", "CORE-1@2026-10-07"]) == 0
     assert "queued behind CORE-1." in _marker(_origin_text(origin, tmp_path, "CORE-4"))
@@ -316,13 +372,15 @@ def test_next_in_moves_a_lane_opened_by_mistake(setup, tmp_path, monkeypatch):
     bare and opened a lane of its own. --next-in moves it in, PENDING kept, ahead of the
     reservation, and its stray lane is gone from the view."""
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2"]) == 0
+    assert lcl.main(["--name", "Export to PDF", "CORE-1", "CORE-2"]) == 0
     _land(clone, "CORE-1")
-    assert lcl.main(["CORE-3"]) == 0
+    assert lcl.main(["--name", "a stray lane", "CORE-3"]) == 0
     assert _fm(_origin_text(origin, tmp_path, "CORE-3"), "lane") == "CORE-3@2026-10-07"
     assert lcl.main(["CORE-3", "--next-in", "CORE-2"]) == 0
     moved = _origin_text(origin, tmp_path, "CORE-3")
     assert _fm(moved, "lane") == "CORE-1@2026-10-07" and moved.count("\nlane:") == 1
+    # LANES-80: it takes the lane's name -- from the landed lead -- in place of its own
+    assert _fm(moved, "lane_name") == "Export to PDF" and moved.count("\nlane_name:") == 1
     assert "WORKTREE PENDING" in _marker(moved)
     assert "queued behind CORE-3." in _marker(_origin_text(origin, tmp_path, "CORE-2"))
     assert _origin_log(origin, tmp_path) == "docs(backlog): CORE-3 next in lane CORE-1@2026-10-07 (moved: CORE-3)"
@@ -333,8 +391,8 @@ def test_next_in_moves_a_lane_opened_by_mistake(setup, tmp_path, monkeypatch):
 
 def test_next_in_refusals_write_nothing(setup, tmp_path, capsys):
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2"]) == 0
-    assert lcl.main(["CORE-3", "CORE-4"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-3", "CORE-4"]) == 0
     before = _origin_log(origin, tmp_path)
     cases = [
         (["CORE-4", "--next-in", "CORE-5"], "claimed by other"),            # another session's lane
@@ -354,7 +412,7 @@ def test_next_in_refusals_write_nothing(setup, tmp_path, capsys):
 
 def test_next_in_dry_run_writes_nothing(setup, tmp_path, capsys):
     origin, clone, _ = setup
-    assert lcl.main(["CORE-1", "CORE-2"]) == 0
+    assert lcl.main(["--name", "a lane", "CORE-1", "CORE-2"]) == 0
     before = _origin_log(origin, tmp_path)
     assert lcl.main(["CORE-4", "--next-in", "CORE-1", "--dry-run"]) == 0
     out = capsys.readouterr().out

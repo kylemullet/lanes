@@ -209,9 +209,11 @@ One for the start of a lane, run in the main clone on the operator's directive (
 `/lanes:claim`):
 
 ```bash
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py CORE-64 UI-40 --files "api/x.py, tests/test_x.py"
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" lanes_claim.py CORE-64 UI-40 --name "Export to PDF" --files "api/x.py, tests/test_x.py"
 ```
 
+A new lane needs `--name`, a few words on what it is about, which every view shows after its IDs
+(LANES-80); the claiming session writes it from the directive, and a claim without one is refused.
 Every ID or none: each must have a file on the main branch and be unclaimed. The first gets
 `WORKTREE PENDING`, the rest `RESERVED, NOT STARTED` behind it, in one commit that is checked
 and pushed (`--behind <ID>` extends a lane at its end, `--next-in <ID>` at its front as the next
@@ -254,17 +256,19 @@ requires (or carrying it empty, or `none` with no reason), a `verified` issue wh
 table `[backlog.acceptance_criteria]` requires is missing, still the stub, or has a row with no test case or
 with neither a Test ID nor an Owner (LANES-61), a dangling `epic:` parent, an epic with `status: in-progress`, a
 `resolution:` that disagrees with the status, and a lane problem: a `lane:` on an open, blocked
-or paused issue (a release deletes it), a value that is not `<ID>@<YYYY-MM-DD>`, or two
+or paused issue (a release deletes it), a `lane_name:` with no `lane:`, a value that is not `<ID>@<YYYY-MM-DD>`, or two
 ACTIVE/PENDING issues in one lane. The views and `--report` open with **Due** — every dated live or verified issue in
 calendar order with its countdown (`in 15d`, `today`, `3d OVERDUE`); an overdue issue is a finding
 there, never a failed check. The HTML view shows the first 5 and every overdue one, the rest behind
 a "Show N more" button (LANES-56) — then **In progress**, one group per
-lane, labelled by its issues alone: '/' joins issues of one project (`LANES-20/21/9`) and ', '
-separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`). The HTML view packs the
+lane, labelled by its issues and its name: '/' joins issues of one project (`LANES-20/21/9`) and ', '
+separates projects, grouped in order of first appearance (`DOC-100/103, PROD-19`), and the lane's
+`lane_name:` follows a dash (`DOC-100/103, PROD-19 — Pricing page`, LANES-80; a lane claimed before the
+field existed shows its issues alone). The HTML view packs the
 lane cards into as many columns as fit, each next card into the column that ends highest, so a short card
 leaves no gap under it (LANES-79); without scripts it is the plain grid, in the same order. The worktree and branch names stay in the ⏳
 marker, where the doctor reads them. Its landed issues are shown beside the live ones until the
-last one lands and the lane disappears. `lanes_claim.py` writes the `lane:` field, which stays on an
+last one lands and the lane disappears. `lanes_claim.py` writes the `lane:` and `lane_name:` fields, which stay on an
 issue after it lands; a claim made before it existed is grouped from its ⏳ marker under the same key. `--report` then
 ranks the projects in a **Projects** block: those with an issue opened, claimed or closed in the last three days
 first, then the most open. The startup sequence offers its top three in the project question (LANES-64). `--backfill` closes verified issues by the exact

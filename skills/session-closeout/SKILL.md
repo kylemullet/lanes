@@ -164,7 +164,7 @@ current understanding. At every shutdown, either operator:
   issues with no worktree and nobody behind them, and those poison every future conflict
   scan. For each lane issue still marked `RESERVED, NOT STARTED`: set `status` back to
   what it should now carry (`open`, or `blocked` / `paused` if that was its prior state),
-  delete its `lane:` line, and overwrite the ⏳ marker to say it was claimed and not reached. An issue that WAS
+  delete its `lane:` and `lane_name:` lines, and overwrite the ⏳ marker to say it was claimed and not reached. An issue that WAS
   worked and is parked mid-flight keeps its claim — that is a live lane.
 
   🚫 **Release only THIS session's own claims.** Shutdown is where a claim is released

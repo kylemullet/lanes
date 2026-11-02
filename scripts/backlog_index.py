@@ -313,9 +313,11 @@ def lanes_in_flight(issues):
     so the operator sees the whole lane -- what is done and what is left -- until
     the last issue lands and the lane disappears (Kyle, 2026-10-07).
 
-    Returns a list of {"key", "members": [issue, ...], "lead", "head", "claimed"},
+    Returns a list of {"key", "members": [issue, ...], "lead", "head", "title", "claimed"},
     oldest claim first. `key` is the recorded `lane:` value, or the marker-derived
-    one for a claim that predates the field. Members run landed-first (by close
+    one for a claim that predates the field. `title` is the lane's `lane_name:` (the
+    lead's first, so it is the same on every member), or None for a lane claimed
+    before the field existed (LANES-80). Members run landed-first (by close
     date), then the live ones in queued-behind order. `lead` is the lane's first
     issue (the key's ID when present), `head` the ACTIVE/PENDING one (else the
     first live one). A RESERVED issue whose lead is no longer claimed and carries
@@ -376,7 +378,8 @@ def lanes_in_flight(issues):
             members = [lead] + [m for m in members if m is not lead]
         heads = [m for m in live if (m.get("_marker") or {}).get("state") in ("active", "pending")]
         stamps = [s for s in ((m.get("_marker") or {}).get("claimed") for m in live) if s]
-        out.append({"key": k, "members": members, "lead": lead,
+        named = [str(m["lane_name"]) for m in members if m.get("lane_name")]
+        out.append({"key": k, "members": members, "lead": lead, "title": named[0] if named else None,
                     "head": heads[0] if heads else live[0],
                     "claimed": min(stamps) if stamps else None})
     out.sort(key=lambda ln: (ln["claimed"] or "9999", _sort_id_str(ln["lead"]["id"])))
@@ -393,12 +396,15 @@ def lane_problems(issues):
     PENDING issue -- zero is legal between two issues of a lane. An in-progress
     issue WITHOUT the field is not a problem either: claims made before it existed
     are grouped from their markers, and only the session that owns a claim may write
-    to it (INFRA-47).
+    to it (INFRA-47). A `lane_name:` (LANES-80) belongs to a `lane:` and goes with it.
     """
     out, heads = [], {}
     for it in issues:
         lane = it.get("lane")
         if lane in (None, ""):
+            if it.get("lane_name"):
+                out.append(f"{it['_path']}: `lane_name: {it['lane_name']}` with no `lane:` — a released "
+                           "claim deletes both")
             continue
         if it.get("status") not in ("in-progress", "verified", "closed"):
             out.append(f"{it['_path']}: `lane: {lane}` on a `{it.get('status')}` issue — a released "
@@ -421,7 +427,8 @@ def lane_name(ln):
     projects, which are grouped in order of first appearance (LANES-29), so
     `DOC-100, PROD-19, DOC-103` reads `DOC-100/103, PROD-19` whatever the queue
     order. The lead comes from the recorded key, so the name stays the same after
-    the lead lands and only its reservations remain."""
+    the lead lands and only its reservations remain. What the lane is ABOUT is its
+    `lane_name:` field, the label's `title` (LANES-80)."""
     lead = ln["key"].split("@", 1)[0] if "@" in ln["key"] else ln["lead"]["id"]
     groups = {}
     for i in [lead] + [m["id"] for m in ln["members"] if m["id"] != lead]:
@@ -433,7 +440,9 @@ def lane_name(ln):
 def lane_label(ln):
     """How every view describes a lane: its name, and a phase only when no issue is
     being worked. Worktree and branch names stay in the marker for the doctor; on the
-    operator's row they are noise the lane's name already covers (LANES-28)."""
+    operator's row they are noise the lane's name already covers (LANES-28). `heading`
+    is the name and, when the lane has one, its title after a dash: `LANES-79/80 — Lane
+    cards` (LANES-80); a lane claimed before the title existed reads as its name alone."""
     head = ln["head"].get("_marker") or {}
     if head.get("worktree"):
         phase = None
@@ -441,9 +450,10 @@ def lane_label(ln):
         phase = "worktree pending"
     else:
         phase = "between issues" if len(ln["members"]) > 1 else "not started"
-    return {"name": lane_name(ln), "phase": phase,
-            "machine": head.get("machine") or head.get("who"), "claimed": ln["claimed"],
-            "key": ln["key"]}
+    name, title = lane_name(ln), ln.get("title")
+    return {"name": name, "title": title, "heading": f"{name} — {title}" if title else name,
+            "phase": phase, "machine": head.get("machine") or head.get("who"),
+            "claimed": ln["claimed"], "key": ln["key"]}
 
 
 def lane_epics(ln):
@@ -1435,7 +1445,7 @@ def _md_lanes(lanes):
     out = ["", f"## In progress — {n} claimed · {len(lanes)} lane{'s' if len(lanes) != 1 else ''}"]
     for ln in lanes:
         lb = lane_label(ln)
-        bits = [f"**{lb['name']}**"] + ([f"`{lb['phase']}`"] if lb["phase"] else [])
+        bits = [f"**{lb['heading']}**"] + ([f"`{lb['phase']}`"] if lb["phase"] else [])
         bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
         bits += [f"epic {e}" for e in lane_epics(ln)]
         bits.append(f"lane `{lb['key']}`")
@@ -2199,7 +2209,7 @@ def _html_lanes(lanes):
     cards = []
     for ln in lanes:
         lb = lane_label(ln)
-        name = lb["name"]
+        name = _esc(lb["name"]) + (f'<span class="lt">— {_esc(lb["title"])}</span>' if lb["title"] else "")
         phase = f' <code>{_esc(lb["phase"])}</code>' if lb["phase"] else ""
         who = " · ".join(_esc(x) for x in [lb["machine"]] + [f"epic {e}" for e in lane_epics(ln)] if x)
         when = (f'claimed <time data-ts="{_esc(ln["claimed"])}">{_esc(ln["claimed"])}</time>'
@@ -2216,7 +2226,7 @@ def _html_lanes(lanes):
                 f'<a class="id" href="{_esc(_href(m))}">{_esc(m["id"])}</a>'
                 f'<span class="t">{_esc(m["_title"])}{pri}{after}</span></li>')
         cards.append(
-            f'<article class="lane" title="lane {_esc(ln["key"])}"><header><span class="ln">{_esc(name)}{phase}</span>'
+            f'<article class="lane" title="lane {_esc(ln["key"])}"><header><span class="ln">{name}{phase}</span>'
             f'<span>{who + " · " if who else ""}{when}</span></header>'
             f'<ol>{"".join(items)}</ol></article>')
     n = sum(1 for ln in lanes for m in ln["members"] if m.get("status") == "in-progress")
@@ -2367,7 +2377,7 @@ def render_report(issues, who):
               f" (claims are walls: route around every issue here)\n{'='*100}")
         for ln in lanes:
             lb = lane_label(ln)
-            bits = [lb["name"]] + ([lb["phase"]] if lb["phase"] else [])
+            bits = [lb["heading"]] + ([lb["phase"]] if lb["phase"] else [])
             bits += [x for x in (lb["machine"], f"claimed {lb['claimed']}" if lb["claimed"] else None) if x]
             bits += [f"epic {e}" for e in lane_epics(ln)]
             print("  " + " · ".join(bits + [f"lane {lb['key']}"]))
