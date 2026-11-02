@@ -227,7 +227,7 @@ def save_state(path: Path | None, state: dict) -> None:
     if path is None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    bidx.lc.write_lf(path, json.dumps(state, indent=1, sort_keys=True) + "\n")
 
 
 def snapshot(issues: list, status: list[str], *, branches=(), tip: str = "",

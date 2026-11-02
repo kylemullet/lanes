@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.69 — every file the scripts write into a target repo is LF on every platform (2026-11-01)
+
+- **On Windows the plugin wrote CRLF** (LANES-45). `Path.write_text()` and `open(..., "w")`
+  translate `\n` to `os.linesep` unless `newline` is passed, and six write sites left it to
+  the platform: the minted stub (`backlog_new.py`), the backfill close
+  (`backlog_index.py --backfill`, the INFRA-108 close that made git print `CRLF will be
+  replaced by LF`), the two generated views, the saved Brief, and one of the split's epic
+  rewrites — which a grep for the pattern missed and the new scan found, because the call
+  spanned two lines. The claim markers, the rest of the split and the init templates already
+  passed `newline`. With `.gitattributes` `text=auto`
+  the blob was clean and the working copy merely differed from the index until git next
+  touched it — on a docs tree that is also a file-sync mirror, a phantom diff on every other
+  machine (the LANES-38 shape). In a target repo without the attribute the committed bytes
+  would be CRLF.
+- **`lanes_config.write_lf(path, text)`** is the one text writer: `open(..., newline="\n")`.
+  The six sites go through it. **`tests/test_line_endings.py` is the guard**: it parses every
+  script and refuses a `.write_text(...)` or text-mode `open(...)` that neither passes
+  `newline=` nor is the helper itself — static, because a macOS or Linux run can never
+  observe the translation it prevents. The Windows bytes are the Zephyr's to confirm at its
+  next pull.
+
 ## 0.4.68 — a finding logged mid-lane is minted on the main branch, with `--push` (2026-11-01)
 
 - **An issue minted in a lane worktree could take an ID another lane landed first** (LANES-63).

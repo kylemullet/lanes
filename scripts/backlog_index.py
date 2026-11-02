@@ -1220,7 +1220,7 @@ def backfill_verified(issues, subjects=None, today=None, dry_run=False):
         if not it.get("closed"):
             updates["closed"] = commit_date(full) or today
         if not dry_run:
-            path.write_text(_rewrite_frontmatter(body, updates), encoding="utf-8")
+            lc.write_lf(path, _rewrite_frontmatter(body, updates))        # LF on Windows too (LANES-45)
         closed.append((it, short))
     return closed, skipped
 
@@ -2321,8 +2321,8 @@ def regenerate():
     """
     issues, problems = load_issues()
     INDEX.parent.mkdir(parents=True, exist_ok=True)
-    INDEX.write_text(render_index(issues), encoding="utf-8")
-    HTML_VIEW.write_text(render_html(issues, problems, position=clone_position()), encoding="utf-8")
+    lc.write_lf(INDEX, render_index(issues))
+    lc.write_lf(HTML_VIEW, render_html(issues, problems, position=clone_position()))
     return issues, problems
 
 

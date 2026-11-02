@@ -165,6 +165,11 @@ moment it exists and the lane cites it; `--context` writes the Context section a
 push carries a complete issue. A worktree mint without `--push` is refused; `--in-lane` is the
 deliberate exception, and `--check` names both files of a duplicated ID.
 
+Every text file the scripts write into the target repo — a minted stub, a claim marker, the backfill
+close, the views — is LF on every platform, through `lanes_config.write_lf` (LANES-45: on Windows,
+`write_text` without `newline=` wrote CRLF and git warned on the close commit); `tests/test_line_endings.py`
+refuses a bare text write.
+
 `lanes_pull.py` is the pull every skill runs on the main branch (LANES-38). A directory that is both
 git-tracked and mirrored by a file-sync client receives a landing's bytes before the next pull, so the
 other machines see modified and untracked files identical to origin and `git pull --rebase` refuses on

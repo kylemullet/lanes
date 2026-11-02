@@ -171,6 +171,22 @@ def slug(text: str) -> str:
     return s or "operator"
 
 
+def write_lf(path, text: str, encoding: str = "utf-8") -> None:
+    """Write `text` with LF line endings on every platform (LANES-45).
+
+    `Path.write_text()` and `open(..., "w")` translate "\\n" to `os.linesep` unless `newline`
+    is passed, so on Windows every file the plugin wrote into the target repo -- a minted
+    stub, a claim marker, the backfill close -- came out CRLF: git warned on the close commit,
+    the working copy differed from the index until git next touched it, and on a docs tree
+    that is also a file-sync mirror the CRLF bytes reached every other machine as a phantom
+    diff. With `.gitattributes` `text=auto` the blob is clean and the damage is cosmetic; in
+    a target repo without it the committed bytes are CRLF. Every text write a script makes
+    goes through here or passes `newline=` itself; `tests/test_line_endings.py` scans for
+    the ones that do neither."""
+    with open(path, "w", encoding=encoding, newline="\n") as fh:
+        fh.write(text)
+
+
 # ------------------------------------------------------------------ loading
 def read_toml(path: Path) -> tuple[dict, Optional[str]]:
     try:

@@ -201,8 +201,8 @@ def split(issue_id, titles, reported_by, type_="story", today=None, dry_run=Fals
             path.write_text(with_status_line(path.read_text(encoding="utf-8"), line),
                             encoding="utf-8", newline="")
         if wrap:
-            epic_path.write_text(epic_path.read_text(encoding="utf-8").replace(
-                "its children carry", f"{names} carry", 1), encoding="utf-8")
+            bidx.lc.write_lf(epic_path, epic_path.read_text(encoding="utf-8").replace(
+                "its children carry", f"{names} carry", 1))          # LF on Windows too (LANES-45)
     except Exception:
         path.write_text(original, encoding="utf-8", newline="")
         for p in created:

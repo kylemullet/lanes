@@ -327,7 +327,7 @@ def create_issue(project, title, type_="story", priority="normal", assignee=None
     content = f"{format_frontmatter(meta)}\n\n# {iid} — {title}\n\n{text}"
     if not content.endswith("\n"):
         content += "\n"
-    path.write_text(content, encoding="utf-8")
+    bidx.lc.write_lf(path, content)                      # LF on Windows too (LANES-45)
     if regen_index:
         bidx.refresh_main_view()            # the main clone's bookmarked view (LANES-11)
     return path
