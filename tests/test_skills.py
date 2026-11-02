@@ -390,3 +390,33 @@ def test_a_finding_logged_mid_lane_is_minted_on_the_main_branch_with_push():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "**A finding logged mid-lane is minted on the main branch, with `--push`** (LANES-63)" in readme
     assert '[--context "<why>"] [--push | --in-lane]' in readme
+
+
+def test_a_message_that_names_an_issue_is_the_lanes_trigger_and_never_the_startups():
+    """LANES-78: a thread opened on one issue, talked it through, and the operator said "record
+    and start"; the next turn ran the startup sequence, pasted the Brief, ended on the `Next`
+    line and asked again whether to go on that issue. "Any session-opening signal" in the
+    startup's triggers and "go after a startup brief" in the lane's had made startup a
+    prerequisite of every lane. Both descriptions now say which opener is whose."""
+    from test_frontmatter_yaml import parse_frontmatter
+    start = _startup()
+    start_desc = parse_frontmatter(start)["description"]
+    assert "any session-opening signal" not in start_desc
+    assert "ASK FOR THE STARTUP" in start_desc and "WHAT TO WORK ON" in start_desc
+    assert "NOT a message that names a backlog issue and approves working it" in start_desc
+    assert "## When this runs — and when it does not" in start
+    section = start.split("## When this runs — and when it does not", 1)[1].split("\n## ", 1)[0]
+    assert "never a reason to run this skill" in section
+    assert "a directive given once and asked for twice" in section
+    assert "what it SAYS decides which skill answers it" in section
+    lane = (ROOT / "skills/worktree-increment/SKILL.md").read_text(encoding="utf-8")
+    lane_desc = parse_frontmatter(lane)["description"]
+    assert "with or without a startup sequence before it" in lane_desc
+    assert "never a reason to run session-startup first" in lane_desc
+    assert "**Never run the startup sequence to get there**" in lane
+    inc = (ROOT / "skills/session-startup/references/incidents.md").read_text(encoding="utf-8")
+    assert "## The lane that was asked for twice (2026-11-01)" in inc
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "any session-opening signal" not in readme
+    assert "never a message that names an issue and approves it (LANES-78)" in readme
+    assert "with or without a startup before it" in readme

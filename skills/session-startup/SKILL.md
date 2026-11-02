@@ -1,6 +1,6 @@
 ---
 name: session-startup
-description: "Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers include \"GA\", \"good morning\", \"what's in the queue\", \"startup\", \"let's get started\", \"catch me up\", or any session-opening signal. The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief and ends the turn on it, then — in the next turn — asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator — and which backlog project, in the same dialog (or reads either from the trigger or the reply, e.g. \"GA housekeeping\", \"GA ui\"), and offers 2–3 proposals for that mode and project — then STOPS and waits for the operator to name the work."
+description: "Use at the start of a working session on any machine of a repo that runs the lanes protocol. Triggers are an ASK FOR THE STARTUP — \"GA\", \"good morning\", \"startup\", \"catch me up\" — or a question about WHAT TO WORK ON — \"what's in the queue\", \"what should I pick up\", \"let's do something\". NOT a message that names a backlog issue and approves working it, however the thread opened: that is worktree-increment's trigger, which pulls and claims on its own, and the Brief and the mode menu are never put in front of an operator who has already said what to work on (LANES-78). The startup sequence: pulls the main branch, identifies the operator and machine from the lanes config, runs the project's preflight, closes verified issues on the certifying machine, builds the exclusion set of in-flight claims, renders the Brief and ends the turn on it, then — in the next turn — asks what kind of session the operator wants — Critical, Deep Dive, Housekeeping or Ops, one menu for every operator — and which backlog project, in the same dialog (or reads either from the trigger or the reply, e.g. \"GA housekeeping\", \"GA ui\"), and offers 2–3 proposals for that mode and project — then STOPS and waits for the operator to name the work."
 ---
 
 # Startup sequence
@@ -16,6 +16,25 @@ recommendation, never the start of work.
 Every rule below that reads as counterintuitive has a date and a failure behind it:
 [`references/incidents.md`](references/incidents.md). Read the incident before deciding
 you are the exception.
+
+## When this runs — and when it does not
+
+The startup sequence answers an operator who has not yet said what to work on. It runs on
+**an ask for the startup** ("GA", "good morning", "startup", "catch me up") or **a question
+about what to work on** ("what's in the queue", "what should I pick up", "let's do
+something"). The Brief and the mode menu are that answer, and they end a turn so the operator
+can make an informed choice (LANES-75).
+
+**It does not run on a message that names an issue and approves working it** — "do CORE-7",
+"let's pick up the theme issue", a thread that opened on one issue, talked it through, and
+closed on "record and start". That message is `worktree-increment`'s trigger, with or
+without a startup before it, and the lane's own step 1 pulls the main branch and claims the
+issue, so *"startup first so the clone is current"* is never a reason to run this skill. A
+session that runs it anyway hands the operator the Brief and the `**Next**` line — a mode,
+a project, an issue ID — and then asks whether to go on the issue they named in their first
+message: a directive given once and asked for twice (LANES-78, `incidents.md` → "The lane
+that was asked for twice"). A thread's first message is a session opening whatever it
+says; what it SAYS decides which skill answers it.
 
 ## Step zero: the config
 

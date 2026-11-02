@@ -3,6 +3,31 @@
 Every counterintuitive rule in `SKILL.md` was paid for. Operators are named by role; the
 mechanics are kept as they happened. Dates are the day the rule changed.
 
+## The lane that was asked for twice (2026-11-01)
+
+The operator opened a thread by naming the issue: a UI theme, "I'm in the mood to do" this
+one. The session and the operator talked it through for several turns — the theme's name, the
+idea behind it, how the epic should be framed — and the session's end-of-turn box asked whether
+to record the decisions and start the lane. The operator answered "Record and start". The next
+turn began "Starting the session properly: startup first so the clone is current", ran the whole
+startup sequence, pasted the Brief — the critical line, what had changed since the last Brief,
+the week's due dates, the three lanes in flight, the health fold, the live count — and ended its
+turn on the `**Next**` line: *name a mode, a project or an issue ID*. Its box asked, a second
+time, whether to go on the issue the operator had named in the thread's first message. Neither
+backlog write nor the claim had happened. The operator: "it asks again if I want to work the
+lane I just said I wanted to work. Doesn't make sense."
+
+Two readings had stacked. The startup skill's trigger list ended in "any session-opening
+signal", and a thread's first message is a session opening whatever it says; the lane skill's
+trigger list said "go" *after a startup brief*, as if the Brief were the lane's precondition.
+Together they made the startup sequence a prerequisite of every lane, and the Brief and the
+menu — startup's answer to an operator who has not yet said what to work on — landed on one
+who had. The rule, in the operator's words: the startup sequence runs when someone asks for it,
+or asks what they should work on. A message that names an issue and approves working it is the
+lane's trigger, and `worktree-increment` step 1 already pulls the main branch and claims the
+issue on its own, so a current clone is never a reason to run startup first. Both descriptions
+now say which opener is whose.
+
 ## The Brief hidden by the dialog (2026-10-30)
 
 Two days after "The Brief behind the question", the Brief was text in the reply, pasted as

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.70 — a message that names an issue is the lane's trigger, never the startup's (2026-11-01)
+
+- **A named and approved lane was routed through the startup sequence and asked for twice**
+  (LANES-78). A thread opened on an issue, talked it through, and the operator said "Record and
+  start"; the next turn ran the whole startup sequence, pasted the Brief, ended on the `**Next**`
+  line asking for a mode, a project or an issue ID, and its end-of-turn box asked again whether
+  to go on that issue. `session-startup`'s triggers ended in "any session-opening signal" — a
+  thread's first message is one whatever it says — and `worktree-increment`'s said "go" *after a
+  startup brief*, so together they made startup a prerequisite of every lane. The incident is
+  "The lane that was asked for twice".
+- **Which opener is whose, in both descriptions.** The startup sequence runs when the operator
+  asks for it ("GA", "startup", "good morning", "catch me up") or asks what to work on ("what's
+  in the queue", "what should I pick up", "let's do something"); the Brief and the mode menu are
+  its answer to someone who has not said what to work on. A message that names an issue and
+  approves working it — with or without a startup before it — is `worktree-increment`'s, and
+  step 1 there pulls the main branch and claims the issue itself, so a current clone is never a
+  reason to run startup first. `session-startup` carries the rule as its own section ("When this
+  runs — and when it does not"), the README's skills table says the same in its `When` column,
+  and `tests/test_skills.py` pins the words.
+
 ## 0.4.69 — every file the scripts write into a target repo is LF on every platform (2026-11-01)
 
 - **On Windows the plugin wrote CRLF** (LANES-45). `Path.write_text()` and `open(..., "w")`

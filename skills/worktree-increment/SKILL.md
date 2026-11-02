@@ -1,6 +1,6 @@
 ---
 name: worktree-increment
-description: "Use when the operator assigns ONE backlog issue (an ID like CORE-2 or INFRA-7) to be worked in an isolated git worktree — the standard flow for running one or more sessions, each targeting its own increment. ALSO the flow for a multi-issue lane — invoked once per issue, sequentially, never widened to cover several at once. Triggers include \"work CORE-<N> in a worktree\", \"do this issue in a worktree\", \"run the lane\", \"go\" after a startup brief, or any assignment naming backlog issues. Covers the full lifecycle: claim → worktree → build → self-verify → hold → operator verify → fix/log → commit → push → land (with OK) → clean up."
+description: "Use when the operator assigns ONE backlog issue (an ID like CORE-2 or INFRA-7) to be worked in an isolated git worktree — the standard flow for running one or more sessions, each targeting its own increment. ALSO the flow for a multi-issue lane — invoked once per issue, sequentially, never widened to cover several at once. Triggers include \"work CORE-<N> in a worktree\", \"do this issue in a worktree\", \"run the lane\", \"go\" or \"record and start\" on an issue the thread has already named, \"go\" after a startup brief, or any assignment naming backlog issues — with or without a startup sequence before it: step 1 pulls and claims on its own, so a directive is never a reason to run session-startup first (LANES-78). Covers the full lifecycle: claim → worktree → build → self-verify → hold → operator verify → fix/log → commit → push → land (with OK) → clean up."
 ---
 
 # Worktree increment
@@ -56,8 +56,12 @@ claim should still be valid, because I'm not going to open that same issue in an
 worktree."*
 
 So: **one claim commit covering every issue in the lane, committed AND pushed to
-`origin/<main_branch>` before the first worktree is created.** Normally `session-startup`
-step 8b has done this on the directive, and step 1 here only verifies it. Use the body
+`origin/<main_branch>` before the first worktree is created.** When the directive followed a
+Brief, `session-startup` step 8b has done this and step 1 here only verifies it. When the
+directive arrived without one — a thread that opened on the issue and approved it — step 1
+pulls and claims here. **Never run the startup sequence to get there**: its Brief and mode
+menu are an answer to an operator who has not yet said what to work on, and this operator has
+(LANES-78, `session-startup`'s incidents → "The lane that was asked for twice"). Use the body
 marker to distinguish states, since `status: in-progress` is doing collision duty for all
 of them:
 
