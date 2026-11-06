@@ -30,3 +30,33 @@ def test_manifest_declares_no_unused_user_config():
     for key in m.get("userConfig", {}):
         hits = [p for p in (ROOT / "scripts").glob("*.py") if key in p.read_text(encoding="utf-8")]
         assert hits, f"userConfig.{key} has no reader under scripts/"
+
+
+WRITE_TOOLS = r"\b(Edit|Write|MultiEdit|NotebookEdit)\b(\([^)]*\))?"
+
+
+def _allowed_tools(path):
+    m = re.search(r"^allowed-tools: (.*)$", path.read_text(encoding="utf-8"), re.M)
+    return m.group(1) if m else ""
+
+
+def test_no_command_or_skill_pre_approves_an_unscoped_write():
+    """A bare `Edit` in allowed-tools lets Claude change any file in the project without
+    asking for as long as the command runs. The directory flags it
+    (ALLOWED_TOOLS_UNSCOPED_WRITE, LANES-84): a write grant names the paths it covers."""
+    files = sorted((ROOT / "commands").glob("*.md")) + sorted((ROOT / "skills").glob("*/SKILL.md"))
+    for f in files:
+        for tool, scope in re.findall(WRITE_TOOLS, _allowed_tools(f)):
+            path = scope.strip("()").strip()
+            assert path not in ("", "*", "**", "/**", "./**", "//**", "~/**"), (
+                f"{f.relative_to(ROOT)}: {tool} is pre-approved with no path scope")
+
+
+def test_new_and_split_pre_approve_edits_to_the_default_backlog_only():
+    """/lanes:new and /lanes:split edit the issue files they just minted, nothing else.
+    The grant is the default `backlog.dir`; a project that moves it gets a normal prompt."""
+    import lanes_config as lc
+    want = f"Edit(./{lc.DEFAULTS['backlog']['dir']}/**)"
+    for name in ("new", "split"):
+        grants = re.findall(WRITE_TOOLS, _allowed_tools(ROOT / "commands" / f"{name}.md"))
+        assert ["".join(g) for g in grants] == [want], f"{name}.md: write grants {grants}"

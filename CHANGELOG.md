@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.77 — /lanes:new and /lanes:split pre-approve edits to the backlog only; the served-view tests move to their own file (2026-11-06)
+
+Two findings from the plugin directory's validation of 0.4.76, the first version it scanned
+from `main` (LANES-84; the submission's history is readlines' LANES-30).
+
+- **`/lanes:new` and `/lanes:split` listed a bare `Edit` in `allowed-tools`**, so while either
+  ran Claude could change any file in the project without asking (`ALLOWED_TOOLS_UNSCOPED_WRITE`).
+  Both commands edit only the issue files they just minted. The grant is now
+  `Edit(./docs/backlog/**)`, the `backlog.dir` default. A project that sets another `dir` gets an
+  ordinary permission prompt for the edit. `tests/test_listing.py` refuses a write tool
+  (`Edit`, `Write`, `MultiEdit`, `NotebookEdit`) with no path scope in any command or skill, and
+  pins the two commands to the default backlog folder.
+- **The `--serve` tests move from `tests/test_backlog_index.py` to `tests/test_backlog_serve.py`.**
+  The scanner read their page reads from the test's own `127.0.0.1` server, next to the git calls
+  the rest of that file makes, as a download-and-execute pattern (`RUNTIME_FETCH_EXEC`), and shows
+  that to reviewers and users as an install-time risk. Nothing was downloaded or run. The four
+  tests are unchanged and share the main file's settings fixture and issue writer.
+
 ## 0.4.76 — a lane edits only its own entry in the preview's shared launch file (2026-11-02)
 
 - **The desktop app's preview reads `.claude/launch.json` from the directory the session started

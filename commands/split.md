@@ -1,7 +1,7 @@
 ---
 description: Split an issue bigger than one landing into an epic and its children — one command, one backlog-only push
 argument-hint: "<ID> \"<child title>\" [\"<child title>\" …] [--type=…] — or describe the pieces"
-allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py:*), Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py:*), Read, Edit'
+allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_split.py:*), Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py:*), Read, Edit(./docs/backlog/**)'
 ---
 
 Split the named issue into an epic with one child per piece of work, so each piece can be

@@ -1,7 +1,7 @@
 ---
 description: Mint a backlog issue you are raising — next free ID, reported by you, Context written from what you said
 argument-hint: "<PROJECT> \"<title>\" [--type=…] [--priority=…] [--assignee=…] [--epic=ID] [--due=YYYY-MM-DD] — or just describe it"
-allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py:*), Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py:*), Read, Edit'
+allowed-tools: 'Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" backlog_new.py:*), Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/lanes.sh" push_guard.py:*), Read, Edit(./docs/backlog/**)'
 ---
 
 Create a backlog issue the user is raising, then fill it in.
