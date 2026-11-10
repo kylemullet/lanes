@@ -100,3 +100,35 @@ def test_no_text_file_names_a_shipped_image():
         named = sorted(n for n in images if n in text)
         assert not named, f"{f.relative_to(ROOT)} names {named}"
 
+
+# A read in the scripts -> the words the README's Privacy section must use for it.
+DOCUMENTED_READS = (
+    ("gethostname(", "hostname"),
+    ("platform.node(", "hostname"),
+    ("getuser(", "login name"),
+    ("getlogin(", "login name"),
+    ('"user.name"', "`git config user.name`"),
+    ("CLAUDE_PROJECT_DIR", "`CLAUDE_PROJECT_DIR`"),
+    ("CLAUDE_CONFIG_DIR", "`$CLAUDE_CONFIG_DIR/plugins`"),
+)
+
+
+def _privacy_section():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    start = text.index("\n## Privacy\n")
+    end = text.find("\n## ", start + 1)
+    return text[start:end if end != -1 else None]
+
+
+def test_the_privacy_section_names_every_identity_and_environment_read():
+    """The README's Privacy section is the directory listing's privacy policy. It named
+    `git config user.name` and the platform but not the hostname every claim marker records
+    (LANES-87, found answering the submission's data-handling step). A script that reads one
+    of these ships only with the policy saying so."""
+    policy = _privacy_section()
+    for f in sorted((ROOT / "scripts").glob("*.py")):
+        source = f.read_text(encoding="utf-8")
+        for call, words in DOCUMENTED_READS:
+            if call in source:
+                assert words in policy, f"{f.name} reads {call} but the Privacy section never says {words!r}"
+

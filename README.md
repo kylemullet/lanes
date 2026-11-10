@@ -461,15 +461,23 @@ turned a consumer's CI red for about 250 pushes before anyone noticed (LANES-33)
 
 lanes runs on your machine, inside the repository it is installed in. It has no service, no
 account and no telemetry, and it keeps nothing outside that repository. Below is everything it
-reads, every network call it makes, which of its pushes wait for you, and what it installs into git.
+reads, what it writes about you, every network call it makes, which of its pushes wait for you,
+and what it installs into git.
 
 **What it reads.** `git config user.name` and the platform, to pick your row in
-`.claude/lanes/config.toml`; the operator shorts you wrote into that config appear as `assignee`
-and `reported_by` in the issue files it creates. The edit hook reads `CLAUDE_PROJECT_DIR` to know
-which project it is guarding. Two commands read Claude Code's plugin registry
+`.claude/lanes/config.toml`, and the machine's hostname (its first label, from
+`socket.gethostname()`), which a claim records so a session can tell your machines apart. The
+edit hook reads `CLAUDE_PROJECT_DIR` to know which project it is guarding. Two commands read
+Claude Code's plugin registry
 (`~/.claude/plugins`, or `$CLAUDE_CONFIG_DIR/plugins`): `/lanes:doctor`, to compare the installed
 version with your pin, and `/lanes:init`, to find the marketplace lanes was installed from and copy
 that marketplace's source into `.claude/settings.json`. Neither sends what it reads anywhere.
+
+**What it writes about you.** Your operator short from that config, as `assignee` and
+`reported_by` in the issue files it creates, and in every claim marker your short, the machine's
+`id` from the config and its hostname (`Ada's session on ada-mac@adas-laptop`). Both are backlog
+files in your repository. They reach your `origin` only through the pushes listed below, the same
+way as the rest of the backlog.
 
 **Network calls.** Every one is a `git` command, run with your own git configuration and
 credentials. There are two destinations:

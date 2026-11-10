@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.80 — the Privacy section names the hostname a claim records, and what lanes writes about you (2026-11-10)
+
+- **The README's Privacy section is the directory listing's privacy policy, and it missed a read**
+  (LANES-87, found answering the submission's data-handling step). `lanes_claim.py` reads the
+  machine's hostname (`socket.gethostname()`, first label) and writes it into every claim marker
+  beside the operator short and the machine's `id` (`<Short>'s session on <id>@<host>`). The
+  skills commit and push those markers. "What it reads" now names the hostname, and a new
+  "What it writes about you" paragraph says what goes into issue files and claim markers and how
+  it reaches `origin`.
+- `test_the_privacy_section_names_every_identity_and_environment_read` pairs each identity or
+  environment read (hostname, login name, `git config user.name`, `CLAUDE_PROJECT_DIR`,
+  `CLAUDE_CONFIG_DIR`) with the words the Privacy section must use, and fails when a script makes
+  a read the section never mentions. It failed on the 0.4.79 README.
+
 ## 0.4.79 — no text file names the plugin's image (2026-11-10)
 
 - **0.4.78 added a policy hold of its own** (LANES-86). Its changelog entry and a
