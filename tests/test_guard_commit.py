@@ -178,6 +178,36 @@ def test_core_hookspath_is_left_alone(repo):
 
 
 @needs_git
+def test_an_absolute_core_hookspath_is_left_alone_and_named(repo, tmp_path):
+    shared = tmp_path / "shared-hooks"
+    git("config", "core.hooksPath", shared.as_posix(), cwd=repo)
+    code, line = gc.install(str(repo))
+    assert code == 1 and "core.hooksPath is set" in line and "shared-hooks" in line
+    assert not shared.exists()
+
+
+@needs_git
+def test_the_hooks_directory_is_found_without_reading_git_config(repo, monkeypatch):
+    """LANES-85: the directory read `git config --get core.hooksPath`, run through the
+    wrapper, as a credential-store read. rev-parse already applies core.hooksPath."""
+    seen, real = [], gc._git
+    monkeypatch.setattr(gc, "_git", lambda args, cwd, **kw: seen.append(list(args)) or real(args, cwd, **kw))
+    assert gc.hook_file(str(repo)) == (repo / ".git" / "hooks" / "pre-commit", None)
+    git("config", "core.hooksPath", ".githooks", cwd=repo)
+    assert gc.hook_file(str(repo))[1].startswith("core.hooksPath is set")
+    assert seen and not [a for a in seen if a[0] == "config"]
+
+
+@needs_git
+def test_core_hookspath_naming_the_own_hooks_directory_is_the_own_hooks_directory(repo):
+    """Pointing core.hooksPath at the repository's own hooks directory moves nothing, so
+    the hook goes where git runs it; the old config read refused this case."""
+    git("config", "core.hooksPath", ".git/hooks", cwd=repo)
+    hook, why = gc.hook_file(str(repo))
+    assert why is None and hook.parent.resolve() == (repo / ".git" / "hooks").resolve()
+
+
+@needs_git
 def test_commit_guard_false_turns_it_off_and_removes_the_shim(repo):
     gc.install(str(repo))
     cfg = repo / ".claude" / "lanes" / "config.toml"

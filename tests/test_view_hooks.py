@@ -86,6 +86,15 @@ def test_core_hookspath_is_left_alone(repo):
 
 
 @needs_git
+def test_the_view_hooks_are_placed_without_reading_git_config(repo, monkeypatch):
+    """LANES-85: the same rev-parse lookup as the commit guard, never `git config --get`."""
+    seen, real = [], vh.gc._git
+    monkeypatch.setattr(vh.gc, "_git", lambda args, cwd, **kw: seen.append(list(args)) or real(args, cwd, **kw))
+    assert vh.install(str(repo))[0] == 0
+    assert seen and not [a for a in seen if a[0] == "config"]
+
+
+@needs_git
 def test_serve_mode_turns_the_hooks_off_and_removes_only_the_blocks(repo):
     _hook(repo, "post-checkout").write_text(LFS, encoding="utf-8")
     vh.install(str(repo))

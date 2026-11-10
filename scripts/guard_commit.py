@@ -221,17 +221,42 @@ def shim_text(launcher: Path = LAUNCHER) -> str:
     )
 
 
+def _same_dir(a: Path, b: Path) -> bool:
+    return os.path.normcase(str(a.resolve())) == os.path.normcase(str(b.resolve()))
+
+
+def hooks_location(main_clone: str, name: str) -> tuple[Optional[Path], Optional[Path]]:
+    """Where git runs the `name` hook: (its path, None) in the repository's own hooks
+    directory; (None, the directory) when core.hooksPath has moved it; (None, None) when
+    git cannot say.
+
+    `git rev-parse --git-path hooks/<name>` already applies core.hooksPath, so this reads
+    no git configuration (LANES-85: the directory read a `git config --get` run through
+    the wrapper as a credential-store read, and the README says lanes reads only
+    `user.name`). A hook anywhere but `<git-common-dir>/hooks/` sits in a directory
+    core.hooksPath names, which belongs to another tool (husky, a shared hooks repo)."""
+    rel = _git(["rev-parse", "--git-path", f"hooks/{name}"], main_clone)
+    common = _git(["rev-parse", "--git-common-dir"], main_clone)
+    if not rel or not common:
+        return None, None
+    base = Path(main_clone)
+    hook = Path(rel) if Path(rel).is_absolute() else base / rel
+    own = (Path(common) if Path(common).is_absolute() else base / common) / "hooks"
+    if not _same_dir(hook.parent, own):
+        return None, hook.parent
+    return hook, None
+
+
 def hook_file(main_clone: str) -> tuple[Optional[Path], Optional[str]]:
     """(the pre-commit path, None) -- or (None, why it is not ours to write)."""
-    hooks_path = _git(["config", "--get", "core.hooksPath"], main_clone)
-    if hooks_path:
-        return None, (f"core.hooksPath is set ({hooks_path}); lanes writes no hook there -- add "
-                      f"`sh {LAUNCHER.as_posix()} guard_commit.py --hook` to that pre-commit by hand")
-    rel = _git(["rev-parse", "--git-path", "hooks/pre-commit"], main_clone)
-    if not rel:
+    hook, moved = hooks_location(main_clone, "pre-commit")
+    if moved is not None:
+        return None, (f"core.hooksPath is set ({moved.as_posix()}); lanes writes no hook there -- "
+                      f"add `sh {LAUNCHER.as_posix()} guard_commit.py --hook` to that pre-commit "
+                      "by hand")
+    if hook is None:
         return None, "cannot resolve the hooks directory"
-    p = Path(rel)
-    return (p if p.is_absolute() else Path(main_clone) / p), None
+    return hook, None
 
 
 def status(main_clone: str, launcher: Path = LAUNCHER) -> tuple[str, str]:

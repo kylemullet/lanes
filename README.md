@@ -73,7 +73,9 @@ a commit made from a terminal, is judged when it is committed. `session-startup`
 `guard_commit.py --install` every session. That writes a small shim into the repository's hooks
 directory, which every worktree shares, so there is no per-clone setup step and a plugin update
 re-points it. It never overwrites a `pre-commit` hook it did not write and writes nothing when
-`core.hooksPath` is set; `/lanes:doctor` reports both, with the line to add by hand. A shim whose
+`core.hooksPath` moves the hooks out of the repository's own hooks directory (it asks
+`git rev-parse` where git runs the hook and reads no git configuration);
+`/lanes:doctor` reports both, with the line to add by hand. A shim whose
 launcher path has vanished allows the commit and says so, so a stale path cannot block a
 repository. `git commit --no-verify` bypasses it once; `git.commit_guard = false` turns it off.
 `guard_commit.py --explain` judges the current staged set.
@@ -507,7 +509,7 @@ None of the four makes a network call.
 
 - **`pre-commit`**, the commit guard (`guard_commit.py`). It refuses a commit made in the wrong
   checkout. It never overwrites a `pre-commit` hook it did not write, and it writes nothing when
-  `core.hooksPath` is set. `git.commit_guard = false` turns it off and removes the shim at the next
+  `core.hooksPath` moves the hooks elsewhere. `git.commit_guard = false` turns it off and removes the shim at the next
   install; `git commit --no-verify` skips it once.
 - **`post-merge`, `post-rewrite` and `post-checkout`**, the view refresh (`view_hooks.py`). After a
   pull, rebase or branch switch it regenerates the gitignored backlog view. Its lines are appended

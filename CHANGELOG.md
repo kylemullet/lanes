@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.78 — the hooks directory comes from `git rev-parse`, never a `git config` read; the SVG assets go (2026-11-10)
+
+Two findings from the plugin directory's validation of 0.4.77 (LANES-85; the submission's
+history is readlines' LANES-30). That scan cleared both 0.4.77 fixes.
+
+- **The credential hold named its read half: `scripts/guard_commit.py`.** `hook_file()` there
+  and in `view_hooks.py` ran `git config --get core.hooksPath` through the run-time git wrapper,
+  which the directory read as the installer's credential-store command
+  (`MCP_FORWARDS_CREDENTIAL_ENV`). It was the plugin's only `git config --get`, and the README's
+  Privacy section never listed it. `git rev-parse --git-path hooks/<name>` already applies
+  `core.hooksPath`, so `guard_commit.hooks_location()` asks rev-parse where git runs the hook and
+  compares that with `<git-common-dir>/hooks`. A hook anywhere else is in a directory
+  `core.hooksPath` names, and lanes writes nothing there, as before. Both scripts use it. One
+  case changes: `core.hooksPath` pointed at the repository's own hooks directory moves nothing,
+  so the shim is now written there instead of refused. Tests prove no `git config` read happens,
+  and `test_listing.py` holds the scripts to `git config user.name` as the only config read.
+- **`assets/icon.svg` and `assets/icon-alt.svg` are removed** (`LOCAL_CODE_FILE_TYPE`: the
+  directory will accept only Markdown, text, JSON, YAML and raster images from a publisher that
+  is not a Verified organization). Nothing read them. `icon.svg` duplicated
+  `backlog_index.LOGO_BODY`, which is now the mark's source, and `.claude-plugin/icon.png` is
+  rendered from it. `icon-alt.svg` was the variant 0.4.61 set aside. `test_listing.py` refuses an
+  SVG anywhere in the tree.
+
 ## 0.4.77 — /lanes:new and /lanes:split pre-approve edits to the backlog only; the served-view tests move to their own file (2026-11-06)
 
 Two findings from the plugin directory's validation of 0.4.76, the first version it scanned

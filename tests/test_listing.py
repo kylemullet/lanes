@@ -60,3 +60,21 @@ def test_new_and_split_pre_approve_edits_to_the_default_backlog_only():
     for name in ("new", "split"):
         grants = re.findall(WRITE_TOOLS, _allowed_tools(ROOT / "commands" / f"{name}.md"))
         assert ["".join(g) for g in grants] == [want], f"{name}.md: write grants {grants}"
+
+
+def test_the_only_git_config_the_scripts_read_is_user_name():
+    """The README's Privacy section says lanes reads `git config user.name`. A
+    `git config --get core.hooksPath` behind the run-time git wrapper read to the
+    directory as a credential-store command (MCP_FORWARDS_CREDENTIAL_ENV, LANES-85);
+    the hooks directory now comes from `rev-parse --git-path`, which applies it."""
+    for f in sorted((ROOT / "scripts").glob("*.py")):
+        for m in re.finditer(r'\[\s*(?:"git"\s*,\s*)?"config"\s*,([^\]]*)\]', f.read_text(encoding="utf-8")):
+            assert m.group(1).strip() == '"user.name"', f"{f.name}: git config{m.group(1)}"
+
+
+def test_no_svg_ships():
+    """The directory will accept only Markdown, text, JSON, YAML and raster images from a
+    publisher that is not a Verified organization (LOCAL_CODE_FILE_TYPE, LANES-85). The
+    mark's source is `backlog_index.LOGO_BODY`; `.claude-plugin/icon.png` is rendered from it."""
+    shipped = [p for p in ROOT.rglob("*.svg") if ".git" not in p.relative_to(ROOT).parts]
+    assert not shipped, f"SVG files ship with the plugin: {shipped}"

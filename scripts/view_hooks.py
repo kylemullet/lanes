@@ -76,17 +76,16 @@ def block(name: str, launcher: Path = LAUNCHER) -> str:
 
 
 def hook_file(main_clone: str, name: str) -> tuple[Optional[Path], Optional[str]]:
-    """(the hook's path, None) -- or (None, why it is not ours to write)."""
-    hooks_path = gc._git(["config", "--get", "core.hooksPath"], main_clone)
-    if hooks_path:
-        return None, (f"core.hooksPath is set ({hooks_path}); lanes writes no hook there -- add "
-                      f"`sh {LAUNCHER.as_posix()} view_hooks.py --hook <name> \"$@\"` to its "
+    """(the hook's path, None) -- or (None, why it is not ours to write). The location
+    comes from rev-parse with core.hooksPath applied, never a config read (LANES-85)."""
+    hook, moved = gc.hooks_location(main_clone, name)
+    if moved is not None:
+        return None, (f"core.hooksPath is set ({moved.as_posix()}); lanes writes no hook there -- "
+                      f"add `sh {LAUNCHER.as_posix()} view_hooks.py --hook <name> \"$@\"` to its "
                       f"{', '.join(HOOKS)} by hand")
-    rel = gc._git(["rev-parse", "--git-path", f"hooks/{name}"], main_clone)
-    if not rel:
+    if hook is None:
         return None, "cannot resolve the hooks directory"
-    p = Path(rel)
-    return (p if p.is_absolute() else Path(main_clone) / p), None
+    return hook, None
 
 
 def _split(text: str) -> tuple[str, Optional[str]]:
