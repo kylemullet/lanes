@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.79 — no text file names the plugin's image (2026-11-10)
+
+- **0.4.78 added a policy hold of its own** (LANES-86). Its changelog entry and a
+  `tests/test_listing.py` docstring named the icon image by its path. The directory lets an image
+  through without reading it as code, and reads any text that names one as a way a shell or
+  interpreter could execute it (`UNREAD_ASSET_REFERENCED`), so both mentions were held for review.
+  Nothing named the image before 0.4.78. Both lines now say "the plugin's icon", and
+  `test_no_text_file_names_a_shipped_image` fails on any text file that names a shipped image. It
+  computes the names at run time, so it never spells one itself.
+- The credential hold 0.4.78 aimed at did not clear: removing the `git config` read was not what
+  that finding keys on. The change stays, because the scripts now read only the git configuration
+  the README lists.
+
 ## 0.4.78 — the hooks directory comes from `git rev-parse`, never a `git config` read; the SVG assets go (2026-11-10)
 
 Two findings from the plugin directory's validation of 0.4.77 (LANES-85; the submission's
@@ -19,7 +32,7 @@ history is readlines' LANES-30). That scan cleared both 0.4.77 fixes.
 - **`assets/icon.svg` and `assets/icon-alt.svg` are removed** (`LOCAL_CODE_FILE_TYPE`: the
   directory will accept only Markdown, text, JSON, YAML and raster images from a publisher that
   is not a Verified organization). Nothing read them. `icon.svg` duplicated
-  `backlog_index.LOGO_BODY`, which is now the mark's source, and `.claude-plugin/icon.png` is
+  `backlog_index.LOGO_BODY`, which is now the mark's source, and the plugin's icon is
   rendered from it. `icon-alt.svg` was the variant 0.4.61 set aside. `test_listing.py` refuses an
   SVG anywhere in the tree.
 

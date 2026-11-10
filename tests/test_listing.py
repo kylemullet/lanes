@@ -75,6 +75,28 @@ def test_the_only_git_config_the_scripts_read_is_user_name():
 def test_no_svg_ships():
     """The directory will accept only Markdown, text, JSON, YAML and raster images from a
     publisher that is not a Verified organization (LOCAL_CODE_FILE_TYPE, LANES-85). The
-    mark's source is `backlog_index.LOGO_BODY`; `.claude-plugin/icon.png` is rendered from it."""
+    mark's source is `backlog_index.LOGO_BODY`; the plugin's icon is rendered from it."""
     shipped = [p for p in ROOT.rglob("*.svg") if ".git" not in p.relative_to(ROOT).parts]
     assert not shipped, f"SVG files ship with the plugin: {shipped}"
+
+
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico")
+
+
+def _shipped(suffixes):
+    return [p for p in sorted(ROOT.rglob("*")) if p.is_file() and p.suffix.lower() in suffixes
+            and not {".git", "__pycache__"} & set(p.relative_to(ROOT).parts)]
+
+
+def test_no_text_file_names_a_shipped_image():
+    """The directory lets an image through unread, and reads any text that names one as a
+    way to execute it (UNREAD_ASSET_REFERENCED, LANES-86): 0.4.78's changelog and this file
+    named the icon by path, which added two policy holds. The names are computed here, so
+    this test never spells one either."""
+    images = {p.name for p in _shipped(IMAGE_SUFFIXES)}
+    assert images, "no image found: the icon should still ship"
+    for f in _shipped((".md", ".py", ".json", ".sh", ".toml", ".yml", ".yaml", ".txt")):
+        text = f.read_text(encoding="utf-8", errors="ignore")
+        named = sorted(n for n in images if n in text)
+        assert not named, f"{f.relative_to(ROOT)} names {named}"
+
